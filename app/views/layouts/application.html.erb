@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title><%= content_for(:title) || "Archmage New" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Garamond&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= yield :head %>
+
+    <%# Enable PWA manifest for installable apps (make sure to enable in config/routes.rb too!) %>
+    <%#= tag.link rel: "manifest", href: pwa_manifest_path(format: :json) %>
+
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icon.png">
+
+    <%# Includes all stylesheet files in app/assets/stylesheets %>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+  </head>
+
+  <body class="d-flex flex-column h-100 bg-dark text-light overflow-hidden">
+    <% if authenticated? %>
+      <header class="flex-shrink-0">
+        <nav class="navbar navbar-expand-lg navbar-dark bg-secondary border-bottom border-warning py-1 position-relative" style="z-index: 1040;">
+          <div class="container-fluid">
+            <a class="navbar-brand text-warning fw-bold fs-5" href="/">Archmage 2.0</a>
+            <button class="navbar-toggler btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+              <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+              <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <li class="nav-item"><%= link_to "Town", town_path, class: "nav-link active py-1" %></li>
+
+                <!-- Spells Dropdown -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle py-1" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Spells
+                  </a>
+                  <ul class="dropdown-menu dropdown-menu-dark border-secondary">
+                    <li><%= link_to "Grimoire", spells_path, class: "dropdown-item" %></li>
+                    <li><%= link_to "Casting", casting_spells_path, class: "dropdown-item" %></li>
+                  </ul>
+                </li>
+
+                <!-- Army Dropdown -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle py-1" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Army
+                  </a>
+                  <ul class="dropdown-menu dropdown-menu-dark border-secondary">
+                    <li><%= link_to "My Army", army_path, class: "dropdown-item" %></li>
+                    <li><%= link_to "Recruit", recruit_index_path, class: "dropdown-item" %></li>
+                    <li><hr class="dropdown-divider bg-secondary"></li>
+                    <li><%= link_to battles_path, class: "dropdown-item text-danger d-flex align-items-center justify-content-between" do %>
+                        <span><i class="bi bi-crosshair me-2"></i>Battle Arena</span>
+                    <% end %></li>
+                  </ul>
+                </li>
+                
+                <!-- Economy Dropdown -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle py-1" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Economy
+                  </a>
+                  <ul class="dropdown-menu dropdown-menu-dark border-secondary">
+                    <li><%= link_to "Collect Taxes", treasury_index_path, class: "dropdown-item" %></li>
+                    <li><%= link_to "Marketplace", marketplace_index_path, class: "dropdown-item" %></li>
+                    <li><%= link_to "Hire Heroes", heroes_index_path, class: "dropdown-item" %></li>
+                    <li><%= link_to "Exploration", explorations_path, class: "dropdown-item" %></li>
+                  </ul>
+                </li>
+
+                <!-- Kingdom/Rankings -->
+                <li class="nav-item">
+                  <%= link_to "Rankings", rankings_path, class: "nav-link py-1" %>
+                </li>
+              </ul>
+              <div class="d-flex align-items-center gap-3">
+                <span class="text-light small">Mage: <span class="text-info"><%= Current&.user&.email_address %></span></span>
+                <%= link_to notifications_path, class: "position-relative text-warning", title: "Notifications" do %>
+                   <i class="bi bi-bell-fill"></i>
+                   <% if authenticated? && Current.user.notifications.unread.exists? %>
+                      <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-dark p-1" style="font-size: 0.5rem;">
+                         <span class="visually-hidden">New alerts</span>
+                      </span>
+                   <% end %>
+                <% end %>
+                <%= button_to "Sign out", session_path, method: :delete, class: "btn btn-outline-warning btn-sm py-0" %>
+              </div>
+            </div>
+          </div>
+        </nav>
+        <%= render "shared/stats_bar" %>
+      </header>
+    <% end %>
+
+    <main class="flex-grow-1 d-flex flex-column position-relative overflow-hidden" style="min-height: 0;">
+      
+      <%# Flash messages rendered via shared/flash (Toasts) at end of body %>
+
+      <%# Remove container here to allow full-width/height views %>
+      <div class="flex-grow-1 w-100 d-flex flex-column overflow-hidden" style="min-height: 0;">
+        <%= yield %>
+      </div>
+    </main>
+    
+    <!-- Footer removed from layout flow to maximize game window space. 
+         Can be re-introduced as a small status bar if needed. -->
+    <%= render "shared/flash" %>
+  </body>
+</html>

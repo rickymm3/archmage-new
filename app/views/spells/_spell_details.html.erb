@@ -1,0 +1,150 @@
+<%# locals: (spell:, user_spell:) %>
+<% return unless spell %>
+
+<% 
+   active_instance = current_user.active_spells.find_by(spell: spell)
+   is_active = active_instance.present? && active_instance.expires_at > Time.current
+
+   # Calculate investment limits
+   max_invest = [current_user.mana, spell.mana_cost * 10].min 
+   min_invest = spell.mana_cost 
+   disabled = current_user.mana < min_invest 
+   
+   # Safely serialize scaling config for Stimulus
+   scaling_data = (spell.configuration&.dig('scaling') || {})
+%>
+
+<%# Removed X-data script injection and window.calculateSpellEffect %>
+
+<div class="card bg-dark border-secondary h-100 shadow-lg" 
+     data-controller="spell-casting"
+     data-spell-casting-config-value="<%= scaling_data.to_json %>"
+     data-spell-casting-min-invest-value="<%= min_invest %>"
+     data-spell-casting-base-value="<%= spell.mana_cost %>">
+     
+  <div class="card-header bg-black bg-opacity-50 border-secondary py-3 d-flex justify-content-between align-items-center">
+     <div>
+        <h2 class="card-title mb-0 font-cinzel text-warning"><%= spell.name %></h2>
+
+        <span class="badge bg-secondary mt-1"><%= spell.spell_type.titleize %></span>
+        <span class="badge bg-dark border border-secondary text-info"><%= spell.mana_cost %> Base MP</span>
+     </div>
+     <div class="text-end">
+        <div class="text-muted small">Rank <%= spell.rank %></div>
+        <% if is_active %>
+           <span class="badge bg-success bg-opacity-75 mt-1">Active</span>
+        <% end %>
+     </div>
+  </div>
+  
+  <div class="card-body d-flex flex-column p-4">
+    <div class="mb-4">
+      <h5 class="text-white-50 border-bottom border-secondary pb-2 mb-3">Description</h5>
+      <p class="lead text-light"><%= spell.description %></p>
+      
+      <%# Dynamic Effect Preview for 'Self' Spells %>
+      <% if true %>
+         <div class="alert alert-dark border-secondary d-flex align-items-center justify-content-between p-3">
+            <div class="d-flex align-items-center gap-3">
+               <i class="bi bi-magic fs-3 text-info"></i>
+               <div>
+                  <small class="text-white-50 d-block text-uppercase fw-bold" style="font-size: 0.7rem;">Projected Effect</small>
+                  <span data-spell-casting-target="output" class="fs-5 text-info fw-bold">...</span>
+               </div>
+            </div>
+            
+            <% 
+              scaling = spell.configuration&.dig('scaling') || {}
+              stat_target = spell.configuration&.dig('stat_target') || 'Effect'
+              attribute = scaling['attribute'] || 'magnitude'
+              base_value = scaling['base_value'] || scaling['base_magnitude'] || spell.mana_cost 
+            %>
+            
+            <% if scaling['function'] %>
+              <div class="text-end border-start border-secondary ps-3">
+                 <small class="text-warning d-block text-uppercase fw-bold" style="font-size: 0.65rem;">Scales With Mana</small>
+                 <span class="badge bg-warning text-dark">
+                   <i class="bi bi-graph-up-arrow me-1"></i>
+                   <%= attribute&.humanize %>
+                 </span>
+              </div>
+            <% end %>
+         </div>
+      <% end %>
+      
+      <% if is_active %>
+        <div class="alert alert-success bg-opacity-10 border-success d-flex flex-column">
+           <div class="d-flex justify-content-between align-items-center mb-1">
+             <strong><i class="bi bi-clock-history me-2"></i>Currenly Active</strong>
+             <small>Expires <%= time_ago_in_words(active_instance.expires_at) %> from now</small>
+           </div>
+           <% if active_instance.metadata['magnitude'] %>
+             <div class="small">
+               Power: <span class="text-white">+<%= active_instance.metadata['magnitude'] %></span>
+               (Invested: <%= active_instance.metadata['invested_mana'] %> MP)
+             </div>
+           <% end %>
+        </div>
+      <% end %>
+    </div>
+
+    <div class="mt-auto">
+      <h5 class="text-white-50 border-bottom border-secondary pb-2 mb-3">Cast Spell</h5>
+      
+      <% if ['attack', 'enemy', 'defense'].include?(spell.spell_type) %>
+         <button class="btn btn-lg btn-outline-secondary w-100" disabled>
+           <i class="bi bi-shield-exclamation me-2"></i>Combat Spell
+         </button>
+         <div class="form-text mt-2 text-muted">
+           This spell can only be cast during battle sequences.
+         </div>
+        
+      <% else %>
+        <%= form_with url: cast_spells_path(spell_id: spell.id), method: :post, class: "d-flex flex-column gap-3", data: { turbo: false } do |f| %>
+          
+          <div class="bg-black bg-opacity-25 p-3 rounded border border-secondary">
+             <label for="mana_investment" class="form-label d-flex justify-content-between text-muted small">
+                <span>Mana Investment</span>
+                <span data-spell-casting-target="amount" class="text-white fw-bold"><%= min_invest %></span>
+             </label>
+             
+             <input type="range" class="form-range" 
+                    id="mana_investment" 
+                    name="amount" 
+                    min="<%= min_invest %>" 
+                    max="<%= max_invest %>" 
+                    step="10"
+                    value="<%= min_invest %>"
+                    data-spell-casting-target="input"
+                    data-action="input->spell-casting#updateProjection"
+                    <%= 'disabled' if disabled %>>
+             
+             <div class="d-flex justify-content-between small text-muted">
+                <span><%= min_invest %></span>
+                <span><%= max_invest %></span>
+             </div>
+          </div>
+
+          <button type="submit" class="btn btn-lg btn-outline-info w-100" <%= 'disabled' if disabled %>>
+             <% if is_active %>
+               <i class="bi bi-arrow-repeat me-2"></i>Refresh / Overwrite
+             <% else %>
+               <i class="bi bi-magic me-2"></i>Cast Spell
+             <% end %>
+          </button>
+        <% end %>
+        
+        <% if current_user.mana < spell.mana_cost %>
+           <div class="text-danger small mt-2">
+             <i class="bi bi-exclamation-triangle me-1"></i>Insufficient Mana (Need <%= spell.mana_cost %>)
+           </div>
+        <% else %>
+           <div class="form-text mt-2 text-muted">
+              Higher investment yields stronger effects but with diminishing returns.
+           </div>
+        <% end %>
+
+      <% end %>
+   </div>
+  </div>
+</div>

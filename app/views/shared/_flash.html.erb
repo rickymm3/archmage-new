@@ -1,0 +1,64 @@
+<% if flash[:battle_log_key] && (battle_log = Rails.cache.read(flash[:battle_log_key])) %>
+  <div class="modal fade show" tabindex="-1" style="display: block; background-color: rgba(0,0,0,0.8); z-index: 2000;" role="dialog" aria-modal="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+      <div class="modal-content bg-dark border-danger shadow-lg">
+        <div class="modal-header border-secondary bg-black">
+          <h5 class="modal-title font-cinzel text-warning">
+            <i class="bi bi-shield-exclamation text-danger me-2"></i>Void Breach Report
+          </h5>
+          <button type="button" class="btn-close btn-close-white" aria-label="Close" onclick="this.closest('.modal').remove()"></button>
+        </div>
+        <div class="modal-body font-monospace small bg-black bg-opacity-75 p-3">
+          <% battle_log.each do |line| %>
+            <% color_class = if line.include?('VICTORY') 
+                               'text-success fw-bold' 
+                             elsif line.include?('DEFEAT') 
+                               'text-danger fw-bold' 
+                             elsif line.include?('Defender:') 
+                               'text-info' 
+                             elsif line.include?('Attacker:') 
+                               'text-danger' 
+                             else 
+                               'text-secondary' 
+                             end %>
+            <div class="<%= color_class %> mb-1"><%= line %></div>
+          <% end %>
+        </div>
+        <div class="modal-footer border-secondary bg-black">
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="this.closest('.modal').remove()">Dismiss Report</button>
+        </div>
+      </div>
+    </div>
+  </div>
+<% end %>
+
+<% if flash.any? %>
+  <div data-controller="toast" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1100;">
+    <% flash.each do |key, value| %>
+      <% next if key.to_s.start_with?('battle_log') %>
+      <% 
+         # Map rails flash keys to bootstrap colors
+         bg_class = case key.to_s
+           when 'notice' then 'text-bg-success'
+           when 'alert' then 'text-bg-danger'
+           else 'text-bg-primary'
+         end
+         
+         icon_class = case key.to_s
+            when 'notice' then 'bi-check-circle-fill'
+            when 'alert' then 'bi-exclamation-triangle-fill'
+            else 'bi-info-circle-fill'
+         end
+      %>
+      <div class="toast align-items-center <%= bg_class %> border-0 mb-2 shadow-lg fade" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+          <div class="toast-body d-flex align-items-center gap-2">
+            <i class="bi <%= icon_class %> fs-5"></i>
+            <div><%= value %></div>
+          </div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+      </div>
+    <% end %>
+  </div>
+<% end %>

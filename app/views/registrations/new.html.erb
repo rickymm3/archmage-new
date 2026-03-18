@@ -1,0 +1,65 @@
+<div class="row justify-content-center">
+  <div class="col-md-6 col-lg-5">
+    <div class="card bg-dark border-secondary shadow-lg mt-5">
+      <div class="card-header bg-secondary text-white text-center">
+        <h3 class="card-title mb-0">Join the Circle of Mages</h3>
+      </div>
+      <div class="card-body p-4">
+        <% if @user.errors.any? %>
+          <div class="alert alert-danger">
+            <h5 class="alert-heading">Inscription Failed</h5>
+            <ul class="mb-0 ps-3">
+              <% @user.errors.full_messages.each do |message| %>
+                <li><%= message %></li>
+              <% end %>
+            </ul>
+          </div>
+        <% end %>
+
+        <%= form_with model: @user, url: registration_path, class: "needs-validation" do |form| %>
+          <div class="mb-3">
+            <%= form.label :username, "Mage Name", class: "form-label text-warning" %>
+            <%= form.text_field :username, required: true, autofocus: true, autocomplete: "username", placeholder: "Archmage", class: "form-control bg-dark text-light border-secondary" %>
+            <div class="form-text text-muted">Your public name in the realms (3-20 characters).</div>
+          </div>
+
+          <div class="mb-3">
+            <%= form.label :email_address, "Email Address", class: "form-label text-warning" %>
+            <%= form.email_field :email_address, required: true, autocomplete: "email", placeholder: "mage@example.com", class: "form-control bg-dark text-light border-secondary" %>
+            <div class="form-text text-muted">A unique identifier for your magical essence.</div>
+          </div>
+
+          <div class="mb-3">
+            <%= form.label :password, "Secret Incantation", class: "form-label text-warning" %>
+            <%= form.password_field :password, required: true, autocomplete: "new-password", placeholder: "Min. 6 runes", minlength: 6, class: "form-control bg-dark text-light border-secondary" %>
+          </div>
+
+          <div class="mb-3">
+            <%= form.label :password_confirmation, "Repeat Incantation", class: "form-label text-warning" %>
+            <%= form.password_field :password_confirmation, required: true, autocomplete: "new-password", placeholder: "Repeat strictly", minlength: 6, class: "form-control bg-dark text-light border-secondary" %>
+          </div>
+
+          <div class="mb-3">
+            <%= form.label :color, "Magic Affinity", class: "form-label text-warning" %>
+            <%= form.select :color, 
+                options_for_select(
+                  Affinity.all.map { |a| ["#{a.name} - #{a.description}", a.id] }
+                ), 
+                { prompt: "Select your path..." }, 
+                required: true, 
+                class: "form-select bg-dark text-light border-secondary" 
+            %>
+            <div class="form-text text-muted">Afinity grants unique spells and units.</div>
+          </div>
+
+          <div class="d-grid gap-2 mt-4">
+            <%= form.submit "Begin Your Journey", class: "btn btn-outline-info btn-lg fw-bold" %>
+          </div>
+        <% end %>
+      </div>
+      <div class="card-footer text-center bg-dark border-top border-secondary py-3">
+        <span class="text-light">Already inscribed?</span> <%= link_to "Login here", new_session_path, class: "text-warning fw-bold text-decoration-none ms-1" %>
+      </div>
+    </div>
+  </div>
+</div>

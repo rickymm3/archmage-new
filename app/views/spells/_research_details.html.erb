@@ -1,0 +1,93 @@
+<%# locals: (spell:, user_spell:) %>
+<% return unless spell %>
+
+<% progress = user_spell&.research_progress || 0 %>
+<% learned = user_spell&.learned? %>
+<% research_cost = spell.research_cost.to_i %>
+<% percent = research_cost > 0 ? (progress.to_f / research_cost * 100).round : (learned ? 100 : 0) %>
+
+<div class="card bg-dark border-secondary h-100 shadow-lg">
+  <div class="card-header bg-black bg-opacity-50 border-secondary py-3 d-flex justify-content-between align-items-center">
+     <div>
+        <h2 class="card-title mb-0 font-cinzel <%= learned ? 'text-warning' : 'text-white' %>">
+          <%= spell.name %>
+          <% if learned %>
+            <i class="bi bi-check-circle-fill text-warning ms-2 fs-5" title="Mastered"></i>
+          <% end %>
+        </h2>
+        <span class="badge bg-secondary mt-1"><%= spell.spell_type.titleize %></span>
+        <span class="badge bg-dark border border-secondary text-info"><%= spell.mana_cost %> MPC</span>
+     </div>
+     <div class="text-end">
+        <div class="text-muted small">Rank <%= spell.rank %></div>
+        <div class="text-white-50 small">Research Cost: <%= number_with_delimiter(spell.research_cost) %></div>
+     </div>
+  </div>
+  
+  <div class="card-body d-flex flex-column p-4">
+    <div class="mb-4">
+      <h5 class="text-white-50 border-bottom border-secondary pb-2 mb-3">Description</h5>
+      <p class="lead text-light"><%= spell.description %></p>
+    </div>
+
+    <!-- Research Logic -->
+    <div class="mt-auto">
+      <h5 class="text-white-50 border-bottom border-secondary pb-2 mb-3">Status</h5>
+      
+      <% if learned %>
+        <div class="alert alert-success d-flex align-items-center bg-success bg-opacity-10 border-success text-success">
+           <i class="bi bi-check-circle-fill fs-3 me-3"></i>
+           <div>
+             <strong>Mastered</strong>
+             <p class="mb-0 small">You have fully researched this spell and can cast it from the spellbook.</p>
+           </div>
+        </div>
+        <%= link_to casting_spells_path(spell_id: spell.id), class: "btn btn-outline-warning w-100 mt-2" do %>
+          Go to Spellbook <i class="bi bi-arrow-right ms-1"></i>
+        <% end %>
+
+      <% else %>
+         <div class="mb-4">
+           <div class="d-flex justify-content-between small text-muted mb-1">
+              <span>Research Progress</span>
+              <span><%= number_with_delimiter(progress) %> / <%= number_with_delimiter(spell.research_cost) %> Mana</span>
+           </div>
+           <div class="progress bg-secondary bg-opacity-25" style="height: 10px;">
+              <div class="progress-bar bg-info progress-bar-striped progress-bar-animated" role="progressbar" style="width: <%= percent %>%;"></div>
+           </div>
+           <div class="text-end mt-1 small text-info"><%= percent %>% Complete</div>
+         </div>
+
+         <div class="card bg-black bg-opacity-25 border-secondary p-3">
+           <h6 class="text-white mb-2">Invest Mana</h6>
+           <%= form_with url: research_spells_path, method: :post, class: "d-flex flex-column gap-2" do |f| %>
+              <%= hidden_field_tag :spell_id, spell.id %>
+              <% need = spell.research_cost - progress %>
+              <% max_invest = [current_user.mana, need].min %>
+              
+              <div class="input-group">
+                <span class="input-group-text bg-dark border-secondary text-info">
+                  <i class="bi bi-droplet-half"></i>
+                </span>
+                <%= f.number_field :amount, 
+                    class: "form-control bg-dark text-white border-secondary", 
+                    value: [100, max_invest].min, 
+                    min: 1, 
+                    max: max_invest,
+                    disabled: max_invest <= 0 %>
+                <%= f.submit "Research", class: "btn btn-info", disabled: max_invest <= 0 %>
+              </div>
+              
+              <% if current_user.mana <= 0 %>
+                 <small class="text-danger"><i class="bi bi-exclamation-circle me-1"></i>Not enough mana to research.</small>
+              <% elsif max_invest <= 0 && !learned %>
+                 <small class="text-muted">Research complete.</small> <!-- Should be handled by 'learned' block above, but just in case -->
+              <% else %>
+                 <small class="text-muted">Available Mana: <%= number_with_delimiter(current_user.mana) %></small>
+              <% end %>
+           <% end %>
+         </div>
+      <% end %>
+   </div>
+  </div>
+</div>

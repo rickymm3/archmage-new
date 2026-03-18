@@ -1,0 +1,134 @@
+<div class="container-fluid h-100 d-flex flex-column p-0 overflow-hidden">
+  <div class="bg-dark border-bottom border-secondary p-3 d-flex align-items-center justify-content-between">
+    <div class="d-flex align-items-center gap-3">
+      <%= link_to battles_path, class: "btn btn-outline-secondary btn-sm" do %>
+        <i class="bi bi-arrow-left"></i> Back
+      <% end %>
+      <div class="d-flex align-items-center gap-2">
+         <span class="text-danger font-cinzel fw-bold border-end border-danger pe-3 h5 mb-0">
+           <i class="bi bi-crosshair me-2"></i>Prepare Assault
+         </span>
+         <span class="text-white small">Target: <strong class="text-danger"><%= @target.username %></strong></span>
+      </div>
+    </div>
+    
+    <div class="d-flex gap-3 text-muted small">
+       <span>Land: <strong class="text-white"><%= number_with_delimiter(@target.land) %></strong></span>
+       <span>Power: <strong class="text-warning"><%= number_with_delimiter(@target.net_power) %></strong></span>
+    </div>
+  </div>
+
+  <%= form_with url: battles_path, method: :post, class: "d-flex flex-column h-100 overflow-hidden", data: { turbo: false } do |f| %>
+    <%= hidden_field_tag :target_id, @target.id %>
+    
+    <div class="flex-grow-1 overflow-y-auto custom-scrollbar p-4">
+      <div class="row g-4 justify-content-center">
+        <% @user_units.each do |uu| %>
+          <% next if uu.available_quantity <= 0 %>
+          <div class="col-md-6 col-lg-4 col-xl-3">
+            <div class="card bg-black border-secondary h-100 shadow-sm unit-card">
+              <div class="card-body p-3 d-flex flex-column">
+                <div class="d-flex justify-content-between mb-2">
+                   <h6 class="card-title text-white font-cinzel mb-0"><%= uu.unit.name %></h6>
+                   <span class="badge bg-secondary text-white"><%= uu.available_quantity %> Avail</span>
+                </div>
+                
+                <div class="flex-grow-1 d-flex flex-column justify-content-center align-items-center my-3">
+                   <i class="bi bi-shield-shaded display-6 text-muted mb-2"></i>
+                   <small class="text-muted text-center" style="font-size: 0.7rem;">
+                     ATK: <%= uu.unit.attack %> | DEF: <%= uu.unit.defense %>
+                   </small>
+                </div>
+
+                <div class="mt-auto">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <label class="form-label text-muted small mb-0">Quantity</label>
+                      <% if @available_heroes.any? %>
+                          <button type="button" class="btn btn-sm btn-link text-warning p-0 text-decoration-none" 
+                                  onclick="const el = document.getElementById('hero-select-<%= uu.unit.id %>'); el.classList.toggle('d-none'); if(!el.classList.contains('d-none')) el.querySelector('select').focus();">
+                             <i class="bi bi-plus-circle-fill"></i> Hero
+                          </button>
+                      <% else %>
+                          <span class="text-muted small fst-italic py-0" title="Recruit heroes to lead units" style="font-size: 0.7rem; opacity: 0.5; cursor: help;">
+                             <i class="bi bi-x-circle"></i> No Heroes
+                          </span>
+                      <% end %>
+                    </div>
+                  
+                  <% if @available_heroes.any? %>
+                    <div id="hero-select-<%= uu.unit.id %>" class="d-none mb-2">
+                       <select name="heroes[<%= uu.unit.id %>]" class="form-select form-select-sm bg-dark text-light border-secondary shadow-sm hero-select" onchange="updatePower()">
+                          <option value="" data-power="0">-- Assign Hero --</option>
+                          <% @available_heroes.each do |hero_uu| %>
+                             <option value="<%= hero_uu.unit.id %>" data-power="<%= hero_uu.unit.power %>"><%= hero_uu.unit.name %> (Power: <%= hero_uu.unit.power %>)</option>
+                          <% end %>
+                       </select>
+                    </div>
+                  <% end %>
+
+                  <div class="input-group input-group-sm">
+                    <button class="btn btn-outline-secondary" type="button" onclick="document.getElementById('unit_<%= uu.unit.id %>').stepDown(); updatePower();">-</button>
+                    <%= number_field_tag "units[#{uu.unit.id}]", 0, min: 0, max: uu.available_quantity, class: "form-control bg-dark text-white text-center border-secondary unit-input", id: "unit_#{uu.unit.id}", data: { power: (uu.unit.attack + uu.unit.defense) }, oninput: "updatePower()" %>
+                    <button class="btn btn-outline-secondary" type="button" onclick="document.getElementById('unit_<%= uu.unit.id %>').stepUp(); updatePower();">+</button>
+                    <button class="btn btn-outline-warning" type="button" onclick="const el = document.getElementById('unit_<%= uu.unit.id %>'); el.value = <%= uu.available_quantity %>; updatePower();">
+                       All
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% end %>
+        
+        <% if @user_units.all? { |uu| uu.available_quantity <= 0 } %>
+           <div class="col-12 text-center py-5">
+              <i class="bi bi-shield-x display-1 text-muted opacity-25"></i>
+              <h4 class="text-white mt-3 font-cinzel">No Available Units</h4>
+              <p class="text-muted">You have no units available to attack. Check your garrisons or recruit more troops.</p>
+              <%= link_to "Recruit Troops", recruit_index_path, class: "btn btn-outline-primary mt-2" %>
+           </div>
+        <% end %>
+      </div>
+    </div>
+
+    <div class="bg-dark border-top border-secondary p-3 d-flex justify-content-between align-items-center mt-auto">
+        <div class="text-muted small">
+           Estimated Power: <span class="text-warning fw-bold" id="total_power">0</span>
+        </div>
+        
+        <%= button_tag type: 'submit', class: "btn btn-danger btn-lg font-cinzel d-flex align-items-center gap-2", disabled: @user_units.all? { |uu| uu.available_quantity <= 0 } do %>
+           <i class="bi bi-swords"></i> Launch Attack
+        <% end %>
+    </div>
+  <% end %>
+</div>
+
+<script>
+  function updatePower() {
+    let totalPower = 0;
+    
+    // Calculate Unit Power
+    const unitInputs = document.querySelectorAll('.unit-input');
+    unitInputs.forEach(input => {
+      const quantity = parseInt(input.value) || 0;
+      const unitPower = parseInt(input.dataset.power) || 0;
+      totalPower += (quantity * unitPower);
+    });
+
+    // Calculate Hero Power
+    const heroSelects = document.querySelectorAll('.hero-select');
+    heroSelects.forEach(select => {
+       const selectedOption = select.options[select.selectedIndex];
+       if (selectedOption) {
+          const heroPower = parseInt(selectedOption.dataset.power) || 0;
+          totalPower += heroPower;
+       }
+    });
+
+    document.getElementById('total_power').textContent = totalPower.toLocaleString();
+  }
+  
+  // Initialize on load
+  document.addEventListener("turbo:load", updatePower);
+  updatePower(); 
+</script>

@@ -1,0 +1,2 @@
+module Treasury::ManaHelper
+end

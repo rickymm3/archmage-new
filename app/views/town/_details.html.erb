@@ -1,0 +1,261 @@
+<%= turbo_frame_tag "structure_details" do %>
+  <% if structure %>
+    <% user_structure = user_structures[structure.id] %>
+    
+    <%# Logic branching %>
+    <% is_level_based = structure.level_based? %>
+    <% current_level = user_structure&.level || 0 %>
+    <% current_quantity = user_structure&.quantity || 0 %>
+    
+    <%# Cost Calculations %>
+    <% if is_level_based %>
+        <% next_level = current_level + 1 %>
+        <% cost_map = structure.requirements.transform_values { |v| (v.to_i * next_level).to_i } %>
+    <% else %>
+        <% cost_map = structure.requirements %>
+    <% end %>
+    <% land_required = structure.land_cost %>
+
+    <div id="details-frame" class="card bg-dark border-secondary shadow-lg h-auto mb-5 overflow-hidden">
+      <!-- Responsive Layout: Stack on mobile, side-by-side on large -->
+      <div class="row g-0">
+        
+        <!-- HEADER / VISUAL (Left/Top) -->
+        <div class="col-lg-5 bg-darker border-lg-end border-bottom border-lg-bottom-0 border-secondary position-relative d-flex flex-column">
+          <div class="p-4 d-flex flex-column align-items-center justify-content-center flex-grow-1">
+            
+            <!-- Icon/Visual -->
+            <div class="mb-3 position-relative">
+              <div class="ratio ratio-1x1 rounded-circle bg-black bg-opacity-50 border border-secondary border-opacity-50 d-flex align-items-center justify-content-center shadow-lg" style="width: 120px;">
+                <i class="bi bi-bank display-4 text-secondary opacity-50"></i>
+              </div>
+              <% if is_level_based %>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark border border-dark shadow-sm fs-6">
+                  Lvl <%= current_level %>
+                </span>
+              <% else %>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-info text-dark border border-dark shadow-sm fs-6">
+                  x<%= number_with_javascript_delimiter(current_quantity) rescue current_quantity %>
+                </span>
+              <% end %>
+            </div>
+
+            <h2 class="h3 font-cinzel text-warning mb-2 text-center"><%= structure.name %></h2>
+            <div class="text-muted small text-center px-3 mb-3 fst-italic"><%= structure.description %></div>
+
+          </div>
+
+          <!-- Current Usage Summary (Bottom of Left Column) -->
+          <div class="bg-black bg-opacity-50 border-top border-secondary p-3">
+             <div class="d-flex justify-content-center gap-4">
+               <div class="d-flex flex-column align-items-center">
+                 <span class="text-success small fw-bold text-uppercase" style="font-size: 0.65rem;">Total Land</span>
+                 <span class="text-light font-monospace">
+                    <% used_land = is_level_based ? ((current_level - 1) * structure.land_cost) : (current_quantity * structure.land_cost) %>
+                    <%= number_with_delimiter([used_land, 0].max) %> <small class="text-muted">acres</small>
+                 </span>
+               </div>
+               
+               <%# Production / Effect Stats %>
+               <% 
+                  prod = structure.production || {} 
+                  # Merge legacy/base income if not in production hash
+                  prod['gold'] ||= structure.base_income_gold if structure.base_income_gold.to_i > 0
+                  prod['mana'] ||= structure.base_income_mana if structure.base_income_mana.to_i > 0
+               %>
+               
+               <% if prod['gold'].to_i > 0 %>
+                 <div class="vr bg-secondary opacity-50"></div>
+                 <div class="d-flex flex-column align-items-center">
+                   <span class="text-warning small fw-bold text-uppercase" style="font-size: 0.65rem;">Tax Income</span>
+                   <span class="text-light font-monospace">+<%= number_with_delimiter(prod['gold'].to_i * (is_level_based ? current_level : current_quantity)) %></span>
+                 </div>
+               <% end %>
+
+               <% if prod['mana'].to_i > 0 %>
+                 <div class="vr bg-secondary opacity-50"></div>
+                 <div class="d-flex flex-column align-items-center">
+                   <span class="text-info small fw-bold text-uppercase" style="font-size: 0.65rem;">Mana Gen</span>
+                   <span class="text-light font-monospace">+<%= number_with_delimiter(prod['mana'].to_i * (is_level_based ? current_level : current_quantity)) %></span>
+                 </div>
+               <% end %>
+
+               <% if prod['army_capacity'].to_i > 0 || (structure.slug == 'barracks' && current_level > 0) %>
+                 <% cap_gain = prod['army_capacity'].to_i > 0 ? (prod['army_capacity'].to_i * (is_level_based ? current_level : current_quantity)) : (50 * current_level) %>
+                 <div class="vr bg-secondary opacity-50"></div>
+                 <div class="d-flex flex-column align-items-center">
+                   <span class="text-danger small fw-bold text-uppercase" style="font-size: 0.65rem;">Army Cap</span>
+                   <span class="text-light font-monospace">+<%= number_with_delimiter(cap_gain) %></span>
+                 </div>
+               <% end %>
+             </div>
+          </div>
+        </div>
+
+        <!-- CONTROLS (Right/Bottom) -->
+        <div class="col-lg-7">
+          <div class="p-3 p-md-4 h-100 d-flex flex-column">
+            
+            <!-- Upgrade/Build Cost Header -->
+            <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom border-secondary">
+               <h6 class="text-light mb-0 font-cinzel small text-uppercase letter-spacing-1">
+                 <i class="bi bi-hammer text-warning me-2"></i>
+                 <%= is_level_based ? "Upgrade Requirements" : "Construction Costs" %>
+               </h6>
+               <% if is_level_based && current_level >= structure.max_level %>
+                 <span class="badge bg-danger">MAX LEVEL</span>
+               <% end %>
+            </div>
+
+            <!-- Cost Grid -->
+            <div class="row g-2 mb-4">
+              <!-- Resource Costs -->
+              <% cost_map.each do |res, amount| %>
+                <div class="col-6 col-md-4">
+                  <div class="d-flex align-items-center justify-content-between px-2 py-2 bg-black bg-opacity-25 border border-secondary rounded h-100">
+                    <div class="d-flex align-items-center gap-2 overflow-hidden">
+                        <i class="bi bi-<%= res == 'gold' ? 'coin' : 'circle-fill' %> text-<%= res == 'gold' ? 'warning' : 'info' %> flex-shrink-0"></i>
+                        <span class="small text-muted text-capitalize text-truncate" style="font-size: 0.75rem;"><%= res %></span>
+                    </div>
+                    <span class="font-monospace text-light small"><%= number_with_delimiter(amount) %></span>
+                  </div>
+                </div>
+              <% end %>
+              
+              <!-- Land Cost -->
+              <div class="col-6 col-md-4">
+                  <div class="d-flex align-items-center justify-content-between px-2 py-2 bg-black bg-opacity-25 border border-secondary rounded h-100">
+                    <div class="d-flex align-items-center gap-2 overflow-hidden">
+                        <i class="bi bi-bounding-box text-success flex-shrink-0"></i>
+                        <span class="small text-muted text-truncate" style="font-size: 0.75rem;">Required Land</span>
+                    </div>
+                    <span class="font-monospace text-light small"><%= land_required %></span>
+                  </div>
+              </div>
+            </div>
+
+            <!-- Tabs Navigation -->
+            <ul class="nav nav-tabs nav-fill nav-justified border-secondary mb-3 small" id="action-tabs" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active text-success link-light bg-transparent py-1" id="build-tab" data-bs-toggle="tab" data-bs-target="#build-panel" type="button" role="tab">
+                   <i class="bi bi-tools me-1"></i> <%= is_level_based ? "Upgrade" : "Build" %>
+                </button>
+              </li>
+              <% if structure.slug == 'barracks' %>
+                 <li class="nav-item" role="presentation">
+                    <button class="nav-link text-warning link-light bg-transparent py-1" id="recruit-tab" data-bs-toggle="tab" data-bs-target="#recruit-panel" type="button" role="tab">
+                        <i class="bi bi-person-plus-fill me-1"></i> Recruit
+                    </button>
+                 </li>
+              <% end %>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link text-danger link-light bg-transparent py-1" id="demolish-tab" data-bs-toggle="tab" data-bs-target="#demolish-panel" type="button" role="tab">
+                   <i class="bi bi-x-circle me-1"></i> Demolish
+                </button>
+              </li>
+            </ul>
+
+            <!-- Tab Content -->
+            <div class="tab-content flex-grow-1" id="action-tabs-content">
+              
+              <!-- Build/Upgrade Panel -->
+              <div class="tab-pane fade show active" id="build-panel" role="tabpanel">
+                <%= form_with url: build_town_path, method: :post, class: "d-flex flex-column gap-3 h-100", data: { turbo_frame: "_top" } do |f| %>
+                   <%= hidden_field_tag :structure_id, structure.id %>
+                   
+                   <% if is_level_based %>
+                      <!-- Level Based Actions -->
+                       <%= hidden_field_tag :quantity, 1 %>
+                       <% if current_level >= structure.max_level %>
+                          <div class="alert alert-soft-warning d-flex align-items-center mt-2 p-2">
+                            <i class="bi bi-lock-fill fs-4 me-3 text-warning"></i>
+                            <div>
+                                <strong class="text-warning">Max Level</strong><br>
+                                <span class="small text-muted">Structure cannot be upgraded further.</span>
+                            </div>
+                          </div>
+                       <% else %>
+                           <button type="submit" class="btn btn-success w-100 py-2 d-flex align-items-center justify-content-between px-4 shadow-lg">
+                             <div class="d-flex flex-column text-start">
+                               <span class="fw-bold text-uppercase">Upgrade</span>
+                               <small class="opacity-75" style="font-size: 0.7rem;">To Level <%= current_level + 1 %></small>
+                             </div>
+                             <i class="bi bi-arrow-up-circle fs-4"></i>
+                           </button>
+                       <% end %>
+                   <% else %>
+                      <!-- Quantity Based Actions -->
+                      <div class="d-flex gap-2 align-items-stretch">
+                        <div class="form-floating w-50">
+                            <%= number_field_tag :quantity, 1, min: 1, class: "form-control bg-dark border-secondary text-light font-monospace fs-5", placeholder: "Qty" %>
+                            <label for="quantity" class="text-secondary">Quantity</label>
+                        </div>
+                        <button type="submit" class="btn btn-success flex-grow-1 d-flex flex-column align-items-center justify-content-center py-1">
+                            <span class="fw-bold text-uppercase"><i class="bi bi-hammer me-1"></i> Construct</span>
+                        </button>
+                      </div>
+                      <div class="text-muted small fst-italic mt-1">
+                        <% 
+                           p_stats = (structure.production || {}).dup
+                           p_stats['gold'] ||= structure.base_income_gold if structure.base_income_gold.to_i > 0
+                        %>
+                        <% if p_stats['gold'].to_i > 0 %>
+                            <i class="bi bi-coin me-1 text-warning"></i> +<%= p_stats['gold'] %> Gold/turn per unit.
+                        <% elsif p_stats['army_capacity'].to_i > 0 %>
+                            <i class="bi bi-people-fill me-1 text-danger"></i> +<%= p_stats['army_capacity'] %> Army Capacity per unit.
+                        <% else %>
+                            <i class="bi bi-info-circle me-1"></i> Expand your specialized capacity.
+                        <% end %>
+                      </div>
+                   <% end %>
+                <% end %>
+              </div>
+
+              <!-- Recruit Panel -->
+              <% if structure.slug == 'barracks' %>
+                <div class="tab-pane fade" id="recruit-panel" role="tabpanel">
+                   <%= render "town/recruit", structure: structure, current_level: current_level %>
+                </div>
+              <% end %>
+
+              <!-- Demolish Panel -->
+              <div class="tab-pane fade" id="demolish-panel" role="tabpanel">
+                 <div class="alert alert-dark border-danger bg-danger bg-opacity-10 d-flex gap-3 align-items-center p-2 mb-3">
+                    <i class="bi bi-exclamation-triangle-fill text-danger fs-4"></i>
+                    <div class="lh-1">
+                        <h6 class="text-danger mb-1 fw-bold small text-uppercase">Warning</h6>
+                        <small class="text-light-50" style="font-size: 0.7rem;">
+                            <%= is_level_based ? "Downgrading reduces effectiveness." : "Destroying units is permanent." %>
+                        </small>
+                    </div>
+                 </div>
+
+                 <%= form_with url: demolish_town_path, method: :post, class: "mt-auto", data: { turbo_frame: "_top" } do |f| %>
+                    <%= hidden_field_tag :structure_id, structure.id %>
+                    
+                    <% if is_level_based %>
+                        <%= hidden_field_tag :quantity, 1 %>
+                        <button type="submit" class="btn btn-outline-danger w-100 py-2" <%= 'disabled' if current_level <= 0 %> data-turbo-confirm="Are you sure?">
+                            <i class="bi bi-arrow-down-circle me-2"></i>Downgrade Level
+                        </button>
+                    <% else %>
+                         <div class="input-group">
+                            <%= number_field_tag :quantity, 1, min: 1, max: current_quantity, class: "form-control bg-dark border-secondary text-light", placeholder: "Qty" %>
+                            <button type="submit" class="btn btn-danger px-4" data-turbo-confirm="Are you sure?">
+                                <i class="bi bi-trash-fill me-2"></i>Demolish
+                            </button>
+                         </div>
+                    <% end %>
+                 <% end %>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  <% else %>
+    <!-- Empty State is handled by parent, so this frame can be empty if nothing selected -->
+     <div class="d-none"></div>
+  <% end %>
+<% end %>

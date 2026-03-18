@@ -1,0 +1,19 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  name: MyString
+  description: MyText
+  rank: 1
+  affinity: MyString
+  mana_cost: 1
+  research_cost: 1
+  spell_type: MyString
+
+two:
+  name: MyString
+  description: MyText
+  rank: 1
+  affinity: MyString
+  mana_cost: 1
+  research_cost: 1
+  spell_type: MyString

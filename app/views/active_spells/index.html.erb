@@ -1,0 +1,123 @@
+<div class="flex-grow-1 overflow-y-scroll w-100" style="min-height: 0;">
+  <div class="container py-4">
+    <div class="row mb-5 text-center">
+      <div class="col-12 col-lg-8 mx-auto">
+        <h1 class="display-5 text-white font-cinzel text-uppercase">Active Enchantments</h1>
+        <p class="lead text-white-50">Mystical forces currently affecting your kingdom.</p>
+      </div>
+    </div>
+    
+    <!-- TIMED SECTION -->
+    <div class="row mb-5">
+      <div class="col-12">
+        <h4 class="text-info font-cinzel mb-3 border-bottom border-info pb-2">
+            <i class="bi bi-hourglass-split me-2"></i>Temporary Enchantments
+        </h4>
+        
+        <% if @active_spells.any? %>
+          <div class="row g-4">
+            <% @active_spells.each do |enchantment| %>
+              <div class="col-12 col-md-6 col-lg-4 mb-4">
+                <div class="card bg-dark border-info h-100 shadow-lg position-relative overflow-hidden">
+                   <!-- Glow effect -->
+                   <div class="position-absolute top-0 start-0 w-100 h-100 border border-info opacity-10 rounded pointer-events-none" style="box-shadow: 0 0 15px var(--bs-info);"></div>
+                   
+                   <div class="card-header bg-info bg-opacity-10 border-info d-flex justify-content-between align-items-center">
+                     <span class="font-cinzel text-uppercase fw-bold text-info"><%= enchantment.spell.name %></span>
+                     <span class="badge bg-dark text-info border border-info" title="Expires at <%= enchantment.expires_at.strftime('%H:%M') %>">
+                        <i class="bi bi-clock me-1"></i> <%= distance_of_time_in_words(Time.current, enchantment.expires_at) %>
+                     </span>
+                   </div>
+                   <div class="card-body position-relative z-1">
+                      <p class="opacity-75 small mb-2"><%= enchantment.spell.description %></p>
+                      
+                      <% if enchantment.metadata && enchantment.metadata['magnitude'] %>
+                         <div class="alert alert-dark border border-secondary p-2 mb-0 mt-3 d-flex align-items-center">
+                            <i class="bi bi-magic fs-4 me-3 text-info"></i>
+                            <div>
+                               <small class="text-uppercase text-muted d-block" style="font-size: 0.65rem;">
+                                 Buff Strength (<%= enchantment.metadata['invested_mana'] %> MP)
+                               </small>
+                               <span class="text-info fw-bold fs-5">+<%= enchantment.metadata['magnitude'] %></span>
+                               <span class="text-muted small ms-1"><%= (enchantment.metadata['stat_target'] || 'Effect').humanize %></span>
+                            </div>
+                         </div>
+                      <% elsif enchantment.spell.configuration && enchantment.spell.configuration["effect"] %>
+                         <div class="alert alert-dark border border-secondary p-2 mb-0 mt-3 d-flex align-items-center">
+                            <i class="bi bi-magic fs-4 me-3 text-info"></i>
+                            <div>
+                               <small class="text-uppercase text-muted d-block" style="font-size: 0.65rem;">Active Effect</small>
+                               <span class="text-light fw-bold"><%= enchantment.spell.configuration["effect"] %></span>
+                            </div>
+                         </div>
+                      <% end %>
+                   </div>
+                   <div class="card-footer bg-transparent border-top border-secondary border-opacity-25 position-relative z-1">
+                      <%= button_to active_spell_path(enchantment), method: :delete, class: "btn btn-outline-light btn-sm w-100 opacity-50 hover-opacity-100", data: { turbo_confirm: "Remove this enchantment early?" } do %>
+                          <i class="bi bi-x-circle me-1"></i>Dismiss
+                      <% end %>
+                   </div>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        <% else %>
+           <div class="text-center py-4 border border-secondary border-dashed rounded opacity-50">
+               <i class="bi bi-stars fs-1 mb-2 d-block"></i>
+               <span class="text-muted fst-italic">No temporary enchantments active.</span>
+           </div>
+        <% end %>
+      </div>
+    </div>
+
+    <!-- SUSTAINED SECTION -->
+    <div class="row">
+      <div class="col-12">
+        <h4 class="text-warning font-cinzel mb-3 border-bottom border-warning pb-2">
+            <i class="bi bi-infinity me-2"></i>Sustained Spells
+        </h4>
+        
+        <% if @sustained_spells.any? %>
+          <div class="row g-4">
+            <% @sustained_spells.each do |user_spell| %>
+              <div class="col-12 col-md-6 col-lg-4 mb-4">
+                <div class="card bg-dark border-warning h-100 shadow-lg position-relative overflow-hidden">
+                   <!-- Glow effect -->
+                   <div class="position-absolute top-0 start-0 w-100 h-100 border border-warning opacity-10 rounded pointer-events-none" style="box-shadow: 0 0 15px var(--bs-warning);"></div>
+                   
+                   <div class="card-header bg-warning bg-opacity-10 border-warning d-flex justify-content-between align-items-center">
+                     <span class="font-cinzel text-uppercase fw-bold text-warning"><%= user_spell.spell.name %></span>
+                     <span class="badge bg-dark text-warning border border-warning">
+                        <i class="bi bi-lightning-charge me-1"></i> <%= user_spell.spell.mana_cost %> Reserved
+                     </span>
+                   </div>
+                   <div class="card-body position-relative z-1">
+                      <p class="opacity-75 small mb-2"><%= user_spell.spell.description %></p>
+                      <div class="alert alert-dark border border-secondary p-2 mb-0 mt-3 d-flex align-items-center">
+                             <i class="bi bi-arrow-repeat fs-4 me-3 text-warning"></i>
+                             <div>
+                                <small class="text-uppercase text-muted d-block" style="font-size: 0.65rem;">Status</small>
+                                <span class="text-light fw-bold">Active Sustain</span>
+                             </div>
+                      </div>
+                   </div>
+                   <div class="card-footer bg-transparent border-top border-secondary border-opacity-25 position-relative z-1">
+                      <%= button_to active_spell_path(user_spell, type: 'sustained'), method: :delete, class: "btn btn-outline-warning btn-sm w-100 opacity-75 hover-opacity-100" do %>
+                          <i class="bi bi-power me-1"></i>Deactivate
+                      <% end %>
+                   </div>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        <% else %>
+           <div class="text-center py-4 border border-secondary border-dashed rounded opacity-50">
+               <i class="bi bi-circle fs-1 mb-2 d-block"></i>
+               <span class="text-muted fst-italic">No sustained spells active.</span>
+           </div>
+        <% end %>
+      </div>
+    </div>
+
+  </div>
+</div>

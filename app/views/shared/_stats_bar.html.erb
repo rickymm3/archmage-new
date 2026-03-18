@@ -1,0 +1,49 @@
+<div class="stats-header sticky-top py-2">
+  <div class="container d-flex justify-content-between align-items-center text-center">
+    <!-- Explore Widget Integrated with Land -->
+    <div class="stat-item d-flex flex-column align-items-center position-relative">
+      <small class="stat-label">Land</small>
+      <div class="d-flex align-items-center gap-2">
+        <span class="stat-value"><%= number_with_delimiter(Current.user.land) %></span>
+      </div>
+    </div>
+    
+    <div class="vr bg-secondary mx-2 opacity-25"></div>
+
+    <div class="stat-item d-flex flex-column">
+      <small class="stat-label">Gold</small>
+      <span class="stat-value gold"><%= number_with_delimiter(Current.user.gold) %></span>
+    </div>
+
+    <div class="vr bg-secondary mx-2 opacity-25"></div>
+
+    <div class="stat-item d-flex flex-column">
+      <small class="stat-label">Mana</small>
+      <span class="stat-value mana">
+        <%= number_with_delimiter(Current.user.mana) %> <small class="text-secondary opacity-75">/ <%= number_with_delimiter(Current.user.max_mana) %></small>
+      </span>
+    </div>
+    
+    <div class="vr bg-secondary mx-2 opacity-25"></div>
+
+    <div class="stat-item d-flex flex-column" data-bs-toggle="tooltip" title="Active Enchantments">
+      <small class="stat-label">Spells</small>
+      <a href="<%= active_spells_path %>" class="stat-value text-info text-decoration-none">
+        <%= Current.user.active_spells.active.count + (Current.user.user_spells.where(active: true).count) %> <i class="bi bi-stars"></i>
+      </a>
+    </div>
+  </div>
+</div>
+
+<style>
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .animate-spin-slow {
+    animation: spin-slow 3s linear infinite;
+  }
+  .pulse-animation {
+    animation: pulse 2s infinite;
+  }
+</style>

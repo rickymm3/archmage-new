@@ -1,0 +1,125 @@
+
+<!-- Hero Assignment Modal -->
+<div class="modal fade" id="heroAssignmentModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border-secondary">
+      <div class="modal-header border-secondary bg-black bg-opacity-50">
+        <h5 class="modal-title font-cinzel text-warning">Assign Hero</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <%= form_with url: assign_hero_army_path, method: :patch do |f| %>
+        <%= hidden_field_tag :unit_id, "" %>
+        <div class="modal-body">
+            <p class="text-white-50 small mb-3">
+               Select a hero to command this unit. A hero boosts the combat effectiveness of the unit they lead.
+            </p>
+            
+            <div class="list-group list-group-flush gap-2">
+                <!-- Option: No Hero -->
+                <label class="list-group-item list-group-item-action bg-black bg-opacity-25 border border-secondary rounded d-flex align-items-center cursor-pointer">
+                    <input class="form-check-input me-3 bg-dark border-secondary" type="radio" name="hero_id" value="" checked>
+                    <div class="flex-grow-1">
+                        <span class="text-white-50">No Commander</span>
+                        <div class="small text-muted fst-italic">Unit operates at base efficiency.</div>
+                    </div>
+                </label>
+            
+                <% @heroes.each do |hero| %>
+                   <% 
+                      existing_assignment = @hero_assignments[hero.id]
+                      assigned_unit_id = existing_assignment&.unit_id
+                      assigned_unit_name = existing_assignment&.unit&.name
+                   %>
+                   <label class="list-group-item list-group-item-action bg-black bg-opacity-25 border border-secondary rounded d-flex align-items-center cursor-pointer position-relative">
+                        <input class="form-check-input me-3 bg-dark border-secondary" 
+                               type="radio" 
+                               name="hero_id" 
+                               value="<%= hero.id %>"
+                               data-assigned-unit-id="<%= assigned_unit_id %>"
+                               data-assigned-unit-name="<%= assigned_unit_name %>">
+                        
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="fw-bold text-warning"><%= hero.name %></span>
+                                <span class="badge bg-dark border border-secondary text-info"><%= hero.power %> PWR</span>
+                            </div>
+                            <div class="small text-muted fst-italic"><%= hero.description&.truncate(50) %></div>
+                            
+                            <% if assigned_unit_id %>
+                               <div class="assigned-badge small text-danger mt-1">
+                                  <i class="bi bi-lock-fill me-1"></i>Leading <%= assigned_unit_name %>
+                               </div>
+                            <% end %>
+                        </div>
+                   </label>
+                <% end %>
+                
+                <% if @heroes.empty? %>
+                    <div class="text-center py-4 text-muted border border-dashed rounded border-secondary">
+                         <i class="bi bi-person-x fs-1 mb-2"></i>
+                         <div>No Heroes Recruited</div>
+                         <%= link_to "Recruit Heroes", marketplace_index_path, class: "btn btn-sm btn-outline-info mt-2" %>
+                    </div>
+                <% end %>
+            </div>
+        </div>
+        <div class="modal-footer border-secondary bg-black bg-opacity-25">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning">Confirm Assignment</button>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('turbo:load', function() {
+    const exampleModal = document.getElementById('heroAssignmentModal')
+    if (exampleModal) {
+      exampleModal.addEventListener('show.bs.modal', event => {
+        const button = event.relatedTarget
+        const unitId = button.getAttribute('data-bs-unit-id')
+        const unitName = button.getAttribute('data-bs-unit-name')
+        const currentHeroId = button.getAttribute('data-bs-current-hero-id')
+        
+        const modalTitle = exampleModal.querySelector('.modal-title')
+        const form = exampleModal.querySelector('form')
+        
+        modalTitle.textContent = `Assign Commander to ${unitName}`
+        form.querySelector('input[name="unit_id"]').value = unitId
+        
+        // Handle Radios
+        const radios = exampleModal.querySelectorAll('input[type="radio"]')
+        radios.forEach(r => {
+            const assignedUnitId = r.getAttribute('data-assigned-unit-id')
+            const label = r.closest('label')
+            const badge = label.querySelector('.assigned-badge')
+            
+            // Logic:
+            // If hero is free (no assignedUnitId), enable.
+            // If hero is assigned to THIS unit (assignedUnitId == unitId), enable and check.
+            // If hero is assigned to OTHER unit, disable.
+            
+            if (!assignedUnitId || assignedUnitId === unitId) {
+                r.disabled = false
+                label.classList.remove('opacity-50', 'pe-none')
+                if (badge) badge.classList.add('d-none')
+            } else {
+                r.disabled = true
+                label.classList.add('opacity-50', 'pe-none')
+                if (badge) badge.classList.remove('d-none')
+            }
+            
+            // Check current hero
+            if (r.value === currentHeroId) {
+                r.checked = true
+            } else if (r.value === "" && !currentHeroId) {
+                r.checked = true
+            } else if (r.value !== currentHeroId) {
+                r.checked = false
+            }
+        })
+      })
+    }
+});
+</script>

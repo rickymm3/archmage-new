@@ -1,0 +1,9 @@
+{
+  "chat.tools.terminal.autoApprove": {
+    "mkdir": true,
+    "npx create-expo-app@latest": true,
+    "npx expo": true,
+    "printf": true,
+    "uniq": true
+  }
+}

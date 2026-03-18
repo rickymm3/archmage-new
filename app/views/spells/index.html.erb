@@ -1,0 +1,219 @@
+<div class="h-100 d-flex flex-column overflow-hidden">
+  <!-- Mobile Header (Visible < md) -->
+  <div class="d-md-none bg-dark border-bottom border-secondary p-2 d-flex justify-content-between align-items-center">
+    <button class="btn btn-outline-info" type="button" data-bs-toggle="offcanvas" data-bs-target="#researchSidebar" aria-controls="researchSidebar">
+      <i class="bi bi-list me-1"></i>Spells
+    </button>
+    <span class="text-info font-cinzel fw-bold">Grimoire</span>
+    <%= link_to "Close", root_path, class: "btn btn-sm btn-link text-muted text-decoration-none" %>
+  </div>
+
+  <div class="d-flex flex-grow-1 overflow-hidden position-relative">
+    
+    <!-- Sidebar / Offcanvas -->
+    <div class="offcanvas-md offcanvas-start bg-dark text-white border-end border-secondary d-flex flex-column flex-shrink-0" 
+         tabindex="-1" 
+         id="researchSidebar" 
+         aria-labelledby="researchSidebarLabel" 
+         style="width: 320px; max-width: 85vw;">
+       
+       <!-- Offcanvas Header (Mobile only) -->
+       <div class="offcanvas-header border-bottom border-secondary">
+         <h5 class="offcanvas-title font-cinzel text-info" id="researchSidebarLabel">Library</h5>
+         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" data-bs-target="#researchSidebar" aria-label="Close"></button>
+       </div>
+       
+       <!-- Usage Stats / Filters -->
+       <div class="p-3 border-bottom border-secondary bg-black bg-opacity-25">
+          <div class="d-flex align-items-center justify-content-between mb-2 small text-muted">
+             <span>Available Mana:</span>
+             <span class="text-info fw-bold"><%= number_with_delimiter(current_user.mana) %></span>
+          </div>
+          
+         <div class="d-flex gap-2 mb-2">
+            <input type="text" id="spellSearch" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Search library...">
+         </div>
+         <select id="spellFilter" class="form-select form-select-sm bg-dark text-white border-secondary">
+           <option value="all">All Types</option>
+           <option value="learned">Learned Only</option>
+           <option value="unlearned">Detailed Research Needed</option>
+           <option value="general">General Spells</option>
+           <option value="class">Class Spells</option>
+         </select>
+       </div>
+       
+       <!-- Spell List -->
+       <div class="flex-grow-1 overflow-y-auto custom-scrollbar" id="spellList">
+         <% if @spells.empty? %>
+            <div class="p-4 text-center text-muted small">
+              <i class="bi bi-book fs-2 mb-2 d-block"></i>
+              No spells available for research.
+            </div>
+         <% else %>
+           <div class="list-group list-group-flush">
+             <% @spells.each do |spell| %>
+               <% is_active = @selected_spell&.id == spell.id %>
+               <% user_spell = @user_spells[spell.id] %>
+               <% is_learned = user_spell&.learned? %>
+               <% progress = user_spell&.research_progress || 0 %>
+               <% research_cost = spell.research_cost.to_i %>
+               <% percent = research_cost > 0 ? (progress.to_f / research_cost * 100).round : 0 %>
+               
+               <%= link_to spells_path(spell_id: spell.id), 
+                   class: "list-group-item list-group-item-action bg-transparent text-white border-secondary py-3 d-flex align-items-center justify-content-between #{'active bg-info bg-opacity-10 border-info text-info' if is_active}",
+                   data: { 
+                     spell_name: spell.name.downcase, 
+                     spell_type: spell.spell_type,
+                     learned: is_learned,
+                     affinity: spell.affinity,
+                     turbo_frame: "_top" 
+                   } do %>
+                  <div class="overflow-hidden w-100">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <div class="fw-bold fs-6 text-truncate <%= is_active ? 'text-info' : (is_learned ? 'text-white' : 'text-white-50') %>">
+                        <%= spell.name %>
+                      </div>
+                      <% if is_learned %>
+                        <i class="bi bi-check-circle-fill text-success small flex-shrink-0" title="Learned"></i>
+                      <% end %>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between small text-white-50">
+                       <span>Rank <%= spell.rank %></span>
+                       <% unless is_learned %>
+                         <span class="<%= percent > 0 ? 'text-info' : '' %>"><%= percent %>%</span>
+                       <% end %>
+                    </div>
+                    
+                    <% unless is_learned %>
+                      <div class="progress mt-1 bg-secondary bg-opacity-25" style="height: 2px;">
+                        <div class="progress-bar bg-info" style="width: <%= percent %>%;"></div>
+                      </div>
+                    <% end %>
+
+                  </div>
+                  <% if is_active %>
+                    <i class="bi bi-caret-right-fill text-info flex-shrink-0 ms-2"></i>
+                  <% end %>
+               <% end %>
+             <% end %>
+           </div>
+         <% end %>
+       </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-grow-1 overflow-y-auto bg-darker position-relative custom-scrollbar w-100">
+      <div class="container-fluid py-3 h-100 d-flex flex-column">
+         <!-- Magic Power Widget pinned to top -->
+         <div class="row mb-3">
+           <div class="col-12 col-xxl-10 mx-auto">
+              <%= render "shared/magic_power_widget" %>
+           </div>
+         </div>
+         
+         <!-- Detail View -->
+         <div class="row flex-grow-1">
+            <div class="col-12 col-xxl-10 mx-auto">
+               <% if @selected_spell %>
+                 <%= render "research_details", spell: @selected_spell, user_spell: @user_spells[@selected_spell.id] %>
+               <% else %>
+                 <div class="d-flex align-items-center justify-content-center h-100 text-muted p-5 border border-secondary border-dashed rounded bg-dark bg-opacity-25">
+                    <div class="text-center">
+                      <i class="bi bi-book fs-1 mb-3 text-secondary opacity-50"></i>
+                      <p class="mb-0">Select a spell from the Library to research.</p>
+                    </div>
+                 </div>
+               <% end %>
+            </div>
+         </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  function setupResearchFilters() {
+    const searchInput = document.getElementById('spellSearch');
+    const filterSelect = document.getElementById('spellFilter');
+    const listItems = document.querySelectorAll('#spellList .list-group-item');
+
+    if (!searchInput || !filterSelect) return;
+
+    // Restore state from sessionStorage
+    const savedSearch = sessionStorage.getItem('grimoire_search');
+    const savedFilter = sessionStorage.getItem('grimoire_filter');
+
+    if (savedSearch !== null) searchInput.value = savedSearch;
+    if (savedFilter !== null) filterSelect.value = savedFilter;
+
+    function filterSpells() {
+      const searchTerm = searchInput.value.toLowerCase();
+      const filterValue = filterSelect.value;
+      
+      // Save state
+      sessionStorage.setItem('grimoire_search', searchInput.value);
+      sessionStorage.setItem('grimoire_filter', filterValue);
+      
+      listItems.forEach(item => {
+        const name = item.dataset.spellName || "";
+        const isLearned = item.dataset.learned === "true";
+        const affinity = item.dataset.affinity;
+        
+        let matchesFilter = true;
+        if (filterValue === 'learned') matchesFilter = isLearned;
+        if (filterValue === 'unlearned') matchesFilter = !isLearned;
+        if (filterValue === 'general') matchesFilter = affinity === 'general';
+        if (filterValue === 'class') matchesFilter = affinity !== 'general';
+        
+        const matchesSearch = name.includes(searchTerm);
+        
+        if (matchesSearch && matchesFilter) {
+          item.classList.remove('d-none');
+        } else {
+          item.classList.add('d-none');
+        }
+      });
+    }
+
+    // Apply initial filter if state was restored
+    if (savedSearch || savedFilter) {
+      filterSpells();
+    }
+
+    searchInput.addEventListener('input', filterSpells);
+    filterSelect.addEventListener('change', filterSpells);
+  }
+
+  document.addEventListener('turbo:load', setupResearchFilters);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupResearchFilters);
+  } else {
+    setupResearchFilters();
+  }
+</script>
+
+<style>
+  @media (min-width: 768px) {
+    .offcanvas-md {
+      position: relative !important;
+      transform: none !important;
+      visibility: visible !important;
+    }
+  }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+</style>

@@ -1,0 +1,55 @@
+<% notifications = current_user.notifications.recent.limit(5) %>
+<% unread_count = current_user.notifications.unread.count %>
+
+<div class="arch-card mb-4">
+  <div class="card-header bg-transparent border-bottom border-secondary d-flex justify-content-between align-items-center">
+    <h6 class="mb-0 font-cinzel text-warning"><i class="bi bi-bell-fill me-2"></i>Recent Events</h6>
+    <% if unread_count > 0 %>
+      <span class="badge bg-danger rounded-pill" style="font-size: 0.6rem;"><%= unread_count %> New</span>
+    <% end %>
+  </div>
+  <div class="card-body p-2">
+    <% if notifications.any? %>
+      <% notifications.each do |notification| %>
+        <% 
+           css_class = case notification.category
+             when 'attack', 'danger' then 'notification-item danger'
+             when 'success', 'construction' then 'notification-item success'
+             when 'exploration' then notification.data['success'] ? 'notification-item success' : 'notification-item danger'
+             else 'notification-item info'
+             end
+           
+           icon = case notification.category
+             when 'attack', 'danger' then 'bi-exclamation-triangle-fill'
+             when 'exploration' then 'bi-compass'
+             else 'bi-info-circle-fill'
+             end
+           
+           target_link = "#"
+           if notification.category == 'exploration' && notification.data['exploration_id']
+             target_link = explorations_path(anchor: "exploration_#{notification.data['exploration_id']}")
+           elsif notification.category == 'construction'
+             target_link = town_path
+           end
+        %>
+        <a href="<%= target_link %>" class="text-decoration-none text-reset d-block notification-link">
+            <div class="notification-item mb-2 p-2 border-bottom border-secondary border-opacity-25 rounded <%= css_class.split.last %> hover-highlight">
+              <div class="d-flex w-100 justify-content-between">
+                 <div class="<%= notification.data['success'] ? 'text-success' : 'text-danger' %>">
+                    <i class="bi <%= icon %> me-1"></i>
+                    <strong class="small"><%= notification.category.humanize %></strong>
+                 </div>
+                 <small class="text-muted" style="font-size: 0.7rem;"><%= time_ago_in_words(notification.created_at) %> ago</small>
+              </div>
+              <p class="mb-0 small text-light ps-3"><%= notification.content %></p>
+            </div>
+        </a>
+      <% end %>
+    <% else %>
+      <div class="text-center text-muted small py-3">No recent notifications.</div>
+    <% end %>
+  </div>
+  <div class="card-footer text-center bg-transparent border-top border-secondary p-1">
+    <a href="#" class="text-muted small text-decoration-none" style="font-size: 0.7rem;">View All Notifications</a>
+  </div>
+</div>

@@ -1,0 +1,110 @@
+<div class="h-100 d-flex flex-column overflow-hidden">
+  <!-- Mobile Header (Visible < md) -->
+  <div class="d-md-none bg-dark border-bottom border-secondary p-2 d-flex justify-content-between align-items-center">
+    <span class="text-info font-cinzel fw-bold">Rankings</span>
+    <%= link_to "Close", root_path, class: "btn btn-sm btn-link text-muted text-decoration-none" %>
+  </div>
+
+  <div class="d-flex flex-grow-1 overflow-hidden position-relative">
+     
+     <!-- Ranking Table -->
+     <div class="flex-grow-1 overflow-y-auto custom-scrollbar p-3 p-md-4">
+        
+        <div class="d-flex justify-content-between align-items-center mb-4">
+           <div>
+             <h4 class="font-cinzel text-white mb-0">Kingdom Rankings</h4>
+             <p class="small text-muted mb-0">Top 100 Most Powerful Mages</p>
+           </div>
+        </div>
+
+        <div class="card bg-dark border-secondary">
+           <div class="card-header border-secondary bg-black bg-opacity-25">
+             <div class="row align-items-center fw-bold text-uppercase small text-muted">
+               <div class="col-1 text-center">#</div>
+               <div class="col-5 col-md-4">Mage</div>
+               <div class="col-3 col-md-2 text-center">Power</div>
+               <div class="col-3 col-md-2 text-center">Land</div>
+               <div class="d-none d-md-block col-md-3 text-end">Army Size</div>
+             </div>
+           </div>
+           
+           <div class="list-group list-group-flush">
+             <% @rankings.each do |rank_data| %>
+               <% user = rank_data[:user] %>
+               <% is_me = user.id == current_user.id %>
+               
+               <div class="list-group-item bg-transparent border-secondary py-3 <%= is_me ? 'bg-info bg-opacity-10 border-start border-info border-3' : '' %>">
+                 <div class="row align-items-center">
+                   
+                   <!-- Rank -->
+                   <div class="col-1 text-center">
+                     <span class="badge bg-secondary bg-opacity-25 text-white fw-light rounded-pill">
+                       <%= rank_data[:rank] %>
+                     </span>
+                   </div>
+                   
+                   <!-- Mage Name / Affinity -->
+                   <div class="col-5 col-md-4">
+                     <div class="d-flex align-items-center gap-2">
+                       <span class="circle-sm" style="background-color: var(--affinity-<%= user.color %>);"></span>
+                       <div>
+                         <div class="text-white fw-bold text-truncate" style="max-width: 150px;">
+                           <% if is_me %>
+                             <span class="text-info">You</span>
+                           <% else %>
+                             Mage #<%= user.id %>
+                           <% end %>
+                         </div>
+                         <div class="small text-white-50 d-none d-sm-block">
+                           <%= user.affinity.name %> Affinity
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+                   
+                   <!-- Power Score -->
+                   <div class="col-3 col-md-2 text-center">
+                     <span class="font-cinzel text-warning fw-bold">
+                       <%= number_with_delimiter(rank_data[:power]) %>
+                     </span>
+                   </div>
+                   
+                   <!-- Land Count -->
+                   <div class="col-3 col-md-2 text-center text-white-50">
+                     <i class="bi bi-map me-1"></i>
+                     <%= number_with_delimiter(rank_data[:land]) %>
+                   </div>
+                   
+                   <!-- Army Size (Hidden on mobile) -->
+                   <div class="d-none d-md-block col-md-3 text-end text-white-50">
+                     <i class="bi bi-shield-shaded me-1"></i>
+                     <% if rank_data[:has_fog] %>
+                        <span class="text-secondary cursor-help" 
+                              data-controller="popover" 
+                              data-bs-toggle="popover" 
+                              data-bs-placement="top" 
+                              data-bs-trigger="hover focus click"
+                              title="Shrouded in Mystery"
+                              data-bs-content="This kingdom is clouded by the Fog spell, hiding its true army size.">
+                          ???
+                        </span>
+                     <% else %>
+                        <%= number_with_delimiter(rank_data[:army_size]) %> Units
+                     <% end %>
+                   </div>
+                   
+                 </div>
+               </div>
+             <% end %>
+           </div>
+           
+           <% if @rankings.empty? %>
+             <div class="p-5 text-center text-muted">
+               <i class="bi bi-trophy display-6 mb-3 d-block text-white-25"></i>
+               No rankings available yet.
+             </div>
+           <% end %>
+        </div>
+     </div>
+  </div>
+</div>

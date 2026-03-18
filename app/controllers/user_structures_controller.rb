@@ -1,0 +1,2 @@
+class UserStructuresController < ApplicationController
+end

@@ -1,0 +1,102 @@
+<div class="col-12 col-md-6 col-lg-4 col-xl-3 mb-4">
+  <div class="card bg-dark border-<%= listing.item.rarity_color %> h-100 shadow-lg position-relative arch-card listing-card" 
+       id="<%= dom_id(listing) %>"
+       data-listing-expires-at="<%= listing.expires_at.iso8601 %>">
+    
+    <!-- Rarity Glow -->
+    <div class="position-absolute top-0 start-0 w-100 h-100 border border-<%= listing.item.rarity_color %> opacity-25 rounded pointer-events-none" style="box-shadow: 0 0 15px var(--bs-<%= listing.item.rarity_color %>);"></div>
+    
+    <!-- Header -->
+    <div class="card-header bg-black bg-opacity-50 border-<%= listing.item.rarity_color %> py-2 d-flex justify-content-between align-items-center">
+      <span class="badge bg-<%= listing.item.rarity_color %> text-dark fw-bold text-uppercase" style="font-size: 0.65rem;">
+        <%= listing.item.rarity %>
+      </span>
+      <span class="text-white-50 small" data-controller="timer" data-timer-end-value="<%= (listing.expires_at.to_f * 1000).to_i %>">
+        <i class="bi bi-clock me-1"></i><span data-timer-target="output">Loading...</span>
+      </span>
+    </div>
+
+    <!-- Body -->
+    <div class="card-body d-flex flex-column text-center position-relative z-1">
+      <div class="mb-3">
+        <% icon = listing.item.is_a?(Unit) ? 'shield-shaded' : 'stars' %>
+        <i class="bi bi-<%= icon %> display-4 text-<%= listing.item.rarity_color %> mb-2"></i>
+        <h5 class="card-title text-white font-cinzel mb-1 text-truncate" title="<%= listing.item.name %>">
+          <%= listing.item.name %>
+        </h5>
+        <div class="small text-muted mb-2">
+          <% if listing.item.is_a?(Unit) %>
+            <span class="badge bg-secondary mb-1"><%= listing.quantity %> Units</span>
+          <% else %>
+             <span class="badge bg-secondary mb-1">Spell Tome</span>
+          <% end %>
+        </div>
+        
+        <p class="card-text text-white-50 small text-truncate-2" style="min-height: 2.5em;">
+          <%= listing.item.description %>
+        </p>
+      </div>
+      
+      <!-- Price Info -->
+      <div class="mt-auto bg-black bg-opacity-25 rounded p-2 border border-secondary mb-3">
+         <div class="d-flex justify-content-between align-items-center mb-1">
+           <small class="text-white-50">Current Bid</small>
+           <span class="text-warning fw-bold"><%= number_with_delimiter(listing.current_price) %>g</span> 
+         </div>
+         <% if listing.bidder %>
+           <div class="d-flex justify-content-between align-items-center small">
+             <span class="text-white-50">Bidder</span>
+             <span class="text-info text-truncate" style="max-width: 100px;">
+               <%= listing.bidder_id == current_user.id ? "You" : listing.bidder.email_address %>
+             </span>
+           </div>
+         <% else %>
+           <div class="text-center small text-muted fst-italic">No bids yet</div>
+         <% end %>
+      </div>
+
+      <% if listing.bids.any? %>
+        <div class="mb-3 text-start small border-top border-white border-opacity-10 pt-2">
+          <a class="text-white-50 text-decoration-none dropdown-toggle" data-bs-toggle="collapse" href="#history-<%= dom_id(listing) %>" role="button" aria-expanded="false" aria-controls="history-<%= dom_id(listing) %>">
+            <i class="bi bi-clock-history me-1"></i>Bids (<%= listing.bids.count %>)
+          </a>
+          <div class="collapse mt-1" id="history-<%= dom_id(listing) %>">
+            <ul class="list-unstyled mb-0 ps-2 border-start border-secondary">
+              <% listing.bids.order(created_at: :desc).limit(3).each do |bid| %>
+                <li class="text-white-50" style="font-size: 0.7rem;">
+                  <span class="<%= bid.user_id == current_user.id ? 'text-warning' : 'text-white' %>">
+                    <%= bid.user_id == current_user.id ? 'You' : bid.user.email_address.split('@').first %>
+                  </span>: <%= bid.amount %>g
+                  <span class="opacity-50 ms-1"><%= time_ago_in_words(bid.created_at, include_seconds: true) %> ago</span>
+                </li>
+              <% end %>
+            </ul>
+          </div>
+        </div>
+      <% end %>
+
+      <!-- Actions -->
+      <% min_bid = listing.min_next_bid %>
+      <% can_bid = current_user.gold >= min_bid && listing.bidder_id != current_user.id %>
+      
+      <%= form_with url: bid_marketplace_path(listing), method: :post, local: true do |f| %>
+        <div class="input-group input-group-sm">
+           <%= f.number_field :amount, value: min_bid, min: min_bid, class: "form-control bg-dark text-white border-secondary text-center", disabled: !can_bid %>
+           <%= f.button type: "submit", class: "btn btn-outline-warning", disabled: !can_bid do %>
+             Bid
+           <% end %>
+        </div>
+        <% unless can_bid %>
+          <div class="form-text text-danger mt-1 small" style="font-size: 0.65rem;">
+             <% if listing.bidder_id == current_user.id %>
+               You are the highest bidder.
+             <% elsif current_user.gold < min_bid %>
+               Insufficient gold (<%= min_bid %>g required).
+             <% end %>
+          </div>
+        <% end %>
+      <% end %>
+
+    </div>
+  </div>
+</div>

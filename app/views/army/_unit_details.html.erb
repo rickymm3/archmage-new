@@ -1,0 +1,245 @@
+<%# Details Partial for Army %>
+<% if unit %>
+<div class="card bg-dark border-secondary h-100">
+  <div class="card-header border-secondary d-flex justify-content-between align-items-center">
+    <div>
+      <h5 class="card-title mb-0 text-warning"><%= unit.name %></h5>
+      <div class="d-flex gap-1 mt-1">
+        <% 
+           type_icon = case unit.unit_type
+             when 'infantry' then 'bi-shield-fill'
+             when 'ranged' then 'bi-crosshair' 
+             when 'cavalry' then 'bi-wind'
+             when 'flying' then 'bi-cloud-fill'
+             when 'magic' then 'bi-stars'
+             else 'bi-circle'
+           end
+           
+           element_color = case unit.element
+             when 'fire' then 'text-danger'
+             when 'water' then 'text-info'
+             when 'nature' then 'text-success'
+             when 'holy' then 'text-warning'
+             when 'void' then 'text-secondary'
+             else 'text-white'
+           end
+           
+           element_icon = case unit.element
+             when 'fire' then 'bi-fire'
+             when 'water' then 'bi-droplet-fill'
+             when 'nature' then 'bi-tree-fill'
+             when 'holy' then 'bi-sun-fill'
+             when 'void' then 'bi-moon-stars-fill'
+             else 'bi-circle-fill'
+           end
+        %>
+        <span class="badge bg-black border border-secondary text-uppercase" style="font-size: 0.65rem;">
+          <i class="bi <%= type_icon %> me-1"></i><%= unit.unit_type %>
+        </span>
+        <span class="badge bg-black border border-secondary text-uppercase <%= element_color %>" style="font-size: 0.65rem;">
+          <i class="bi <%= element_icon %> me-1"></i><%= unit.element %>
+        </span>
+      </div>
+    </div>
+    <span class="badge bg-secondary">Owned: <%= number_with_delimiter(user_units[unit.id]&.quantity || 0) %></span>
+  </div>
+  
+  <div class="card-body overflow-y-auto">
+    <div class="text-center mb-4">
+        <div class="ratio ratio-1x1 d-inline-block" style="width: 120px;">
+             <div class="d-flex align-items-center justify-content-center bg-black bg-opacity-25 border border-secondary rounded h-100 w-100 position-relative">
+                 <i class="bi bi-person-fill fs-1 text-secondary opacity-50"></i>
+                 <div class="position-absolute top-0 end-0 m-2">
+                    <i class="bi <%= element_icon %> <%= element_color %> fs-4"></i>
+                 </div>
+             </div>
+        </div>
+        <p class="mt-2 text-white-50 small"><%= unit.description %></p>
+        
+        <% if unit.abilities.present? %>
+          <div class="d-flex flex-wrap justify-content-center gap-1 mt-2">
+            <% unit.abilities.each do |key, val| %>
+              <span class="badge bg-info bg-opacity-25 text-info border border-info-subtle" title="<%= val %>">
+                <i class="bi bi-lightning-charge-fill me-1"></i>
+                <%= key.to_s.humanize %> <%= val.is_a?(Numeric) ? "(#{val})" : "" %>
+              </span>
+            <% end %>
+          </div>
+        <% end %>
+    </div>
+    
+    <div class="row g-2 mb-3">
+        <!-- Stats -->
+        <div class="col-4">
+            <div class="p-2 border border-secondary bg-darker rounded text-center h-100">
+                <div class="text-danger small text-uppercase" style="font-size: 0.7rem;">Attack</div>
+                <div class="fs-5 fw-bold"><%= unit.attack %></div>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="p-2 border border-secondary bg-darker rounded text-center h-100">
+                <div class="text-info small text-uppercase" style="font-size: 0.7rem;">Defense</div>
+                <div class="fs-5 fw-bold"><%= unit.defense %></div>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="p-2 border border-secondary bg-darker rounded text-center h-100">
+                <div class="text-white small text-uppercase" style="font-size: 0.7rem;">Speed</div>
+                <div class="fs-5 fw-bold"><%= unit.speed || 5 %></div>
+                <i class="bi bi-fast-forward-fill text-muted" style="font-size: 0.7rem;"></i>
+            </div>
+        </div>
+        
+        <div class="col-6">
+            <div class="p-2 border border-secondary bg-darker rounded text-center">
+                <div class="text-warning small text-uppercase">Cost</div>
+                <% if (unit.mana_upkeep || 0) > 0 %>
+                    <div class="fs-5 fw-bold lh-1">
+                        <%= unit.upkeep_cost %><small class="text-muted text-warning" style="font-size: 0.7rem;">g</small>
+                    </div>
+                    <div class="small fw-bold lh-sm mt-1 text-info">
+                        +<%= unit.mana_upkeep %> <small>mana</small>
+                    </div>
+                <% else %>
+                    <div class="fs-5 fw-bold"><%= unit.upkeep_cost %><small class="text-muted text-warning ms-1">g</small></div>
+                <% end %>
+            </div>
+        </div>
+        <div class="col-6">
+            <div class="p-2 border border-secondary bg-darker rounded text-center">
+                <div class="text-success small text-uppercase">Power</div>
+                <div class="fs-5 fw-bold"><%= unit.attack + unit.defense %></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Total contributions from this unit type -->
+    <div class="mt-4 pt-3 border-top border-secondary">
+        <h6 class="text-white-50 text-uppercase small mb-3">Unit Contribution</h6>
+        <% qty = user_units[unit.id]&.quantity || 0 %>
+        <div class="d-flex justify-content-between mb-2">
+            <span>Total Attack:</span>
+            <span class="text-danger"><%= number_with_delimiter(qty * unit.attack) %></span>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+            <span>Total Defense:</span>
+            <span class="text-info"><%= number_with_delimiter(qty * unit.defense) %></span>
+        </div>
+        <div class="d-flex justify-content-between">
+            <span>Daily Cost:</span>
+            <div class="text-end">
+                <div class="text-warning"><%= number_with_delimiter(qty * unit.upkeep_cost) %> Gold</div>
+                <% if (unit.mana_upkeep || 0) > 0 %>
+                    <div class="text-info"><%= number_with_delimiter(qty * (unit.mana_upkeep || 0)) %> Mana</div>
+                <% end %>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="mt-4 pt-3 border-top border-secondary">
+      <% 
+         uu = user_units[unit.id]
+         current_qty = uu&.quantity || 0
+         garrison_qty = uu&.garrison || 0
+         available_qty = current_qty - garrison_qty
+      %>
+      
+      <% if current_qty > 0 %>
+        <h6 class="text-white-50 text-uppercase small mb-3">Unit Management</h6>
+        
+        <% if available_qty > 0 %>
+          <%= form_with url: disband_army_path, method: :post, class: "row g-2 align-items-end" do |f| %>
+            <%= f.hidden_field :unit_id, value: unit.id %>
+            <div class="col-8">
+                <label class="form-label small text-muted text-uppercase mb-1" style="font-size: 0.65rem;">Quantity to Disband (Available: <%= available_qty %>)</label>
+                <%= f.number_field :quantity, 
+                    min: 1, 
+                    max: available_qty, 
+                    value: 1, 
+                    class: "form-control form-control-sm bg-dark text-white border-secondary", 
+                    required: true,
+                    id: "disband-qty-#{unit.id}",
+                    oninput: "updateDisbandStats_#{unit.id}(this)"
+                %>
+            </div>
+            <div class="col-4">
+                <%= f.submit "Disband", class: "btn btn-sm btn-outline-danger w-100", data: { turbo_confirm: "Are you sure you want to disband these units? This action cannot be undone." } %>
+            </div>
+          <% end %>
+          
+          <!-- Impact Preview -->
+          <div id="disband-impact-<%= unit.id %>" class="mt-2 p-2 border border-danger border-opacity-25 bg-danger bg-opacity-10 rounded">
+            <h6 class="text-danger small fw-bold mb-2 text-uppercase" style="font-size: 0.65rem;"> Projected Impact</h6>
+            <div class="d-flex justify-content-between small text-white-50 mb-1">
+              <span>Gold Saved:</span>
+              <span class="text-warning fw-bold">+<span id="impact-gold-<%= unit.id %>"><%= number_with_delimiter(unit.upkeep_cost) %></span>/turn</span>
+            </div>
+            <% if (unit.respond_to?(:mana_upkeep) && (unit.mana_upkeep || 0) > 0) %>
+            <div class="d-flex justify-content-between small text-white-50 mb-1">
+              <span>Mana Saved:</span>
+              <span class="text-info fw-bold">+<span id="impact-mana-<%= unit.id %>"><%= number_with_delimiter(unit.mana_upkeep) %></span>/turn</span>
+            </div>
+            <% end %>
+            <div class="d-flex justify-content-between small text-white-50">
+              <span>Army Power:</span>
+              <span class="text-danger fw-bold">-<span id="impact-power-<%= unit.id %>"><%= number_with_delimiter(unit.attack + unit.defense) %></span></span>
+            </div>
+          </div>
+  
+          <script>
+            window.updateDisbandStats_<%= unit.id %> = function(input) {
+              const qty = parseInt(input.value) || 0;
+              const goldCost = <%= unit.upkeep_cost %>;
+              const manaCost = <%= unit.respond_to?(:mana_upkeep) ? (unit.mana_upkeep || 0) : 0 %>;
+              const power = <%= unit.attack + unit.defense %>;
+              
+              document.getElementById('impact-gold-<%= unit.id %>').textContent = (qty * goldCost).toLocaleString();
+              
+              const manaEl = document.getElementById('impact-mana-<%= unit.id %>');
+              if (manaEl) {
+                  manaEl.textContent = (qty * manaCost).toLocaleString();
+              }
+              
+              document.getElementById('impact-power-<%= unit.id %>').textContent = (qty * power).toLocaleString();
+            }
+            
+            // Initial run to ensure correct values on load (if value != 1)
+            document.addEventListener("turbo:render", function() {
+                const input = document.getElementById('disband-qty-<%= unit.id %>');
+                if(input) window.updateDisbandStats_<%= unit.id %>(input);
+            });
+          </script>
+  
+          <div class="form-text text-white-50 small mt-1" style="font-size: 0.7rem;">
+            Releases <strong>active</strong> units from service. Does not affect garrisoned troops.
+          </div>
+        <% else %>
+           <p class="text-muted small fst-italic mt-2">No active units available to disband (All garrisoned).</p>
+        <% end %>
+
+      <% else %>
+        <!-- RECRUIT / SUMMON PROMPT for 0 Qty -->
+         <h6 class="text-white-50 text-uppercase small mb-3">Recruitment</h6>
+        <div class="d-grid gap-2">
+            <% if unit.recruitable? %>
+                <%= link_to recruit_index_path, class: "btn btn-outline-warning" do %>
+                    <i class="bi bi-person-plus-fill me-2"></i>Recruit <%= unit.name.pluralize %>
+                <% end %>
+            <% else %>
+                <%= link_to spells_path, class: "btn btn-outline-info" do %>
+                    <i class="bi bi-stars me-2"></i>Summon <%= unit.name.pluralize %>
+                <% end %>
+            <% end %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>
+<% else %>
+  <div class="alert alert-info bg-transparent border-secondary text-center p-5">
+    <i class="bi bi-shield-slash fs-1 text-muted mb-3 d-block"></i>
+    <p>No units selected or you have no army yet.</p>
+    <%= link_to "Recruit Units", recruit_index_path, class: "btn btn-outline-warning mt-3" %>
+  </div>
+<% end %>

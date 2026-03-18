@@ -1,0 +1,55 @@
+<div class="card bg-dark text-white border-info mb-3 arch-card magic-power-widget h-100">
+  <div class="card-header border-info d-flex justify-content-between align-items-center py-2">
+    <h6 class="card-title mb-0 small text-uppercase text-info">
+      <i class="bi bi-stars me-1"></i>Magic Power
+    </h6>
+    <span class="badge bg-info text-dark fw-bold"><%= current_user.magic_power %> MP</span>
+  </div>
+  <div class="card-body py-2">
+     <!-- Mana Pool -->
+     <div class="mb-2">
+       <div class="d-flex justify-content-between align-items-end mb-1">
+         <span class="text-white-50 small">Mana Pool</span>
+         <span class="text-info fw-bold small">
+           <%= number_with_delimiter(current_user.mana) %> / <%= number_with_delimiter(current_user.max_mana) %>
+         </span>
+       </div>
+       <div class="progress bg-secondary bg-opacity-25" style="height: 6px;">
+         <div class="progress-bar bg-info" 
+              role="progressbar" 
+              style="width: <%= [(current_user.mana.to_f / [current_user.max_mana, 1].max * 100), 100].min %>%;" 
+              aria-valuenow="<%= current_user.mana %>" 
+              aria-valuemin="0" 
+              aria-valuemax="<%= current_user.max_mana %>">
+         </div>
+       </div>
+       
+       <% if current_user.reserved_mana > 0 %>
+         <div class="d-flex justify-content-end mt-1">
+           <small class="text-warning" style="font-size: 0.7rem;">
+             <i class="bi bi-lock-fill me-1"></i><%= number_with_delimiter(current_user.reserved_mana) %> Reserved
+           </small>
+         </div>
+       <% end %>
+     </div>
+
+     <!-- Mana Charge/Regen Status -->
+     <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top border-secondary">
+        <%= link_to treasury_mana_status_path, class: "text-white-50 small text-decoration-none", title: "Manage Mana Recharge" do %>
+          <i class="bi bi-lightning-charge-fill text-warning me-1"></i>Charge
+        <% end %>
+        <div class="d-flex align-items-center">
+            <% charge_percent = (current_user.current_mana_charge * 100).to_i %>
+            <div class="progress bg-secondary bg-opacity-25 me-2" style="height: 4px; width: 60px;">
+                <div class="progress-bar <%= charge_percent >= 100 ? 'bg-warning' : 'bg-primary' %>" 
+                     role="progressbar" 
+                     style="width: <%= charge_percent %>%;">
+                </div>
+            </div>
+            <span class="badge <%= charge_percent >= 100 ? 'bg-warning text-dark' : 'bg-primary text-white' %> rounded-pill" style="font-size: 0.6rem;">
+                <%= charge_percent %>%
+            </span>
+        </div>
+     </div>
+  </div>
+</div>

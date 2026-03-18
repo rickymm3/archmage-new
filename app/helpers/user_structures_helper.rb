@@ -1,0 +1,2 @@
+module UserStructuresHelper
+end

@@ -1,0 +1,71 @@
+<div class="flex-grow-1 overflow-y-scroll w-100" style="min-height: 0;">
+  <div class="container py-4">
+    <div class="row mb-4">
+    <div class="col">
+      <h1 class="display-5 text-white">Taxation Office</h1>
+      <p class="lead text-white-50">Collect taxes from your citizens.</p>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Taxation Panel -->
+    <div class="col-lg-6 mb-4">
+      <div class="card h-100 bg-dark text-white border-secondary"
+           data-controller="treasury--taxation"
+           data-treasury--taxation-cooldown-end-value="<%= current_user.tax_cooldown&.future? ? current_user.tax_cooldown.iso8601 : '' %>">
+        <div class="card-header border-secondary d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-cash-coin me-2 text-warning"></i>Taxation
+          </h5>
+          <% if current_user.tax_cooldown&.future? %>
+            <span class="badge bg-secondary" data-treasury--taxation-target="timer">
+               <%= time_ago_in_words(current_user.tax_cooldown) %>
+            </span>
+          <% end %>
+        </div>
+        <div class="card-body">
+          <div class="text-center mb-4">
+            <h6 class="text-white-50">Base Taxable Value</h6>
+            <h2 class="display-4 text-warning"><%= @taxable_amount %> <small class="fs-6">Gold</small></h2>
+          </div>
+
+          <p class="text-white-50 mb-4">
+            Select a tax rate. Higher rates yield more gold immediately but require a longer cooling off period before you can tax again.
+          </p>
+
+          <div class="d-grid gap-3">
+            <% Treasury::TaxationService::TAX_RATES.each do |tier, config| %>
+              <% disabled = current_user.tax_cooldown&.future? %>
+              <%= button_to tax_treasury_index_path(tier: tier), 
+                  method: :post, 
+                  class: "btn btn-outline-#{config[:color]} p-3 d-flex justify-content-between align-items-center #{'disabled' if disabled}",
+                  disabled: disabled do %>
+                
+                <div class="text-start">
+                  <div class="fw-bold"><%= config[:label] %></div>
+                  <small class="text-white-50">Yield: <%= (@taxable_amount * config[:multiplier]).to_i %> Gold</small>
+                </div>
+                <div class="text-end">
+                  <div class="badge bg-dark border border-secondary"><%= distance_of_time_in_words(config[:cooldown]) %></div>
+                </div>
+              <% end %>
+            <% end %>
+          </div>
+          
+          <% if current_user.tax_cooldown&.future? %>
+            <div class="mt-3 text-center text-danger small" data-treasury--taxation-target="message">
+              <i class="bi bi-lock-fill"></i> Tax collectors are resting. Available in <%= time_ago_in_words(current_user.tax_cooldown) %>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mana Battery Panel -->
+    <div class="col-lg-6 mb-4">
+        <%= render "treasury/mana_battery" %>
+    </div>
+  </div>
+</div>
+
+

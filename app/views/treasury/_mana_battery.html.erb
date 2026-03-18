@@ -1,0 +1,94 @@
+<div id="mana-battery" class="card h-100 bg-dark text-white border-secondary"
+     data-controller="mana-battery"
+     data-mana-battery-updated-value="<%= (current_user.last_mana_recharge_at&.to_time || Time.current).iso8601 %>"
+     data-mana-battery-duration-value="<%= current_user.mana_drain_duration.to_i %>"
+     data-mana-battery-net-potential-value="<%= current_user.net_mana_potential %>">
+     
+  <div class="card-header border-secondary d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0">
+      <i class="bi bi-lightning-charge-fill me-2 text-info"></i>Mana Capacitor
+    </h5>
+    
+    <% 
+       breakdown = current_user.mana_breakdown
+       breakdown_html = capture do 
+         if breakdown[:income].any?
+           concat tag.div("INCOME", class: "small fw-bold text-success border-bottom border-success border-opacity-25 mb-1")
+           breakdown[:income].each do |item|
+             concat tag.div(class: "d-flex justify-content-between small gap-3") {
+               concat span = tag.span(item[:name])
+               concat span = tag.span("+#{item[:amount]}", class: "text-success font-monospace")
+             }
+           end
+         end
+         
+         if breakdown[:expenses].any?
+           concat tag.div("EXPENSES", class: "small fw-bold text-danger border-bottom border-danger border-opacity-25 mt-2 mb-1")
+           breakdown[:expenses].each do |item|
+             concat tag.div(class: "d-flex justify-content-between small gap-3") {
+               concat span = tag.span(item[:name])
+               concat span = tag.span("-#{item[:amount]}", class: "text-danger font-monospace")
+             }
+           end
+         end
+         
+         if breakdown[:income].empty? && breakdown[:expenses].empty?
+           concat tag.div("No active mana sources.", class: "small text-muted fst-italic")
+         end
+       end
+    %>
+    
+    <%= tag.div class: "badge bg-secondary cursor-help",
+                title: "Mana Flow Assessment",
+                data: {
+                  controller: "popover",
+                  bs_html: "true",
+                  bs_content: breakdown_html,
+                  bs_trigger: "hover focus click"
+                },
+                role: "button",
+                tabindex: "0" do %>
+       <% net = current_user.net_mana_potential %>
+       Cycle: <span class="<%= net < 0 ? 'text-danger fw-bold' : 'text-success' %>"><%= net > 0 ? '+' : '' %><%= net %></span>
+    <% end %>
+  </div>
+
+  <div class="card-body text-center d-flex flex-column justify-content-center">
+    
+    <!-- Battery Visual -->
+    <div class="mb-4 position-relative mx-auto" style="width: 60px; height: 100px;">
+        <div class="border border-2 border-secondary rounded position-absolute top-0 start-0 w-100 h-100 overflow-hidden bg-darker">
+            <!-- Liquid Level -->
+            <div class="bg-info position-absolute bottom-0 start-0 w-100 transition-height" 
+                 data-mana-battery-target="liquid"
+                 style="height: 100%; transition: height 0.5s;"></div>
+                 
+             <!-- Bubbles / Effect Overlay -->
+             <div class="position-absolute top-0 start-0 w-100 h-100 bg-gradient-to-b from-transparent to-black opacity-25"></div>
+        </div>
+        <!-- Battery Nipple -->
+        <div class="position-absolute start-50 translate-middle-x bg-secondary" style="top: -8px; width: 20px; height: 8px; border-radius: 2px 2px 0 0;"></div>
+        
+        <!-- Percentage Text -->
+        <small class="position-absolute top-50 start-50 translate-middle fw-bold text-white text-shadow" data-mana-battery-target="percent">100%</small>
+    </div>
+    
+    <div class="mb-3">
+        <div class="small text-muted mb-1 text-uppercase fw-bold" style="font-size: 0.7rem;">Expected Result</div>
+        <div class="fs-2 fw-bold" data-mana-battery-target="yield">0</div>
+        <div class="small fw-bold text-uppercase" data-mana-battery-target="status">Stable</div>
+    </div>
+
+    <%= button_to treasury_mana_recharge_path, 
+        method: :post, 
+        class: "btn btn-outline-info w-100 pulse-glow",
+        data: { 
+            disable_with: "Channeling...",
+            controller: "tooltip",
+            bs_title: "Drain the capacitor to reconcile Mana flow."
+        } do %>
+      <i class="bi bi-arrow-repeat me-1"></i> Channel
+    <% end %>
+    
+  </div>
+</div>

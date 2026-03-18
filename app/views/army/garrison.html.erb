@@ -1,0 +1,260 @@
+<div class="h-100 d-flex flex-column overflow-hidden" data-controller="garrison">
+  <!-- Mobile Header (Visible < md) -->
+  <div class="d-md-none bg-dark border-bottom border-secondary p-2 d-flex justify-content-between align-items-center flex-shrink-0">
+    <button class="btn btn-outline-info" type="button" data-bs-toggle="offcanvas" data-bs-target="#unitsSidebar" aria-controls="unitsSidebar">
+      <i class="bi bi-list me-1"></i>Troops
+    </button>
+    <div class="d-flex align-items-center gap-2">
+       <span class="text-info font-cinzel fw-bold"><i class="bi bi-shield-lock-fill me-1"></i>Defenses</span>
+    </div>
+    <div class="badge bg-dark border border-secondary text-end">
+       <span class="text-info fw-bold" id="total_defense_power_mobile"><%= number_with_delimiter(current_user.garrison_strength) %></span>
+       <small class="text-muted ms-1" style="font-size: 0.6rem;">DEF</small>
+    </div>
+  </div>
+
+  <div class="d-flex flex-grow-1 overflow-hidden position-relative">
+     <%= form_with model: current_user, url: update_garrison_army_path, method: :patch, class: "d-flex flex-grow-1 w-100 overflow-hidden", html: { style: "height: 100%;" }, data: { turbo: false } do |f| %>
+    
+        <!-- Sidebar / List of all units -->
+        <div class="offcanvas-md offcanvas-start bg-dark text-white border-end border-secondary d-flex flex-column flex-shrink-0" 
+             tabindex="-1" 
+             id="unitsSidebar" 
+             aria-labelledby="unitsSidebarLabel" 
+             style="width: 280px;">
+           
+           <div class="p-3 border-bottom border-secondary bg-black bg-opacity-25">
+             <div class="d-flex justify-content-between align-items-center mb-3 d-md-none">
+                <h5 class="offcanvas-title font-cinzel text-info" id="unitsSidebarLabel">Garrison</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" data-bs-target="#unitsSidebar" aria-label="Close"></button>
+             </div>
+             
+             <div class="d-flex justify-content-between align-items-center mb-0 d-none d-md-flex">
+               <h5 class="font-cinzel text-info mb-0">Available Units</h5>
+               <%= link_to army_path, class: "btn btn-sm btn-outline-secondary", title: "Back to Army" do %>
+                 <i class="bi bi-arrow-left"></i>
+               <% end %>
+             </div>
+             <p class="small text-muted mb-0 mt-1 fst-italic">Click to assign to defense.</p>
+           </div>
+           
+           <div class="flex-grow-1 overflow-y-auto custom-scrollbar p-2">
+             <div class="list-group list-group-flush gap-1">
+                <% @user_units.each do |user_unit| %>
+                  <% unit = user_unit.unit %>
+                  <% is_active = (user_unit.garrison || 0) > 0 %>
+                  
+                  <button type="button" 
+                          class="list-group-item list-group-item-action bg-dark text-white border-0 rounded p-2 d-flex align-items-center gap-2 mb-1 unit-sidebar-item <%= is_active ? 'active-garrison-item' : '' %>"
+                          data-action="click->garrison#activate"
+                          data-unit-id="<%= unit.id %>"
+                          data-garrison-target="sidebarItem">
+                     
+                     <div class="d-flex align-items-center justify-content-center bg-black bg-opacity-50 rounded border border-secondary p-1 flex-shrink-0" style="width: 32px; height: 32px;">
+                        <i class="bi bi-shield-shaded text-muted small"></i>
+                     </div>
+                     
+                     <div class="flex-grow-1 overflow-hidden lh-1">
+                        <div class="fw-bold text-truncate mb-1"><%= unit.name %></div>
+                        <div class="d-flex justify-content-between align-items-center small">
+                           <span class="badge bg-black border border-secondary text-muted" style="font-size: 0.65rem;">Total: <%= number_with_delimiter(user_unit.quantity) %></span>
+                        </div>
+                     </div>
+
+                     <!-- Status Indicator if Active -->
+                     <i class="bi bi-check-circle-fill text-info <%= is_active ? '' : 'd-none' %>" data-garrison-target="checkIcon"></i>
+                  </button>
+                <% end %>
+             </div>
+           </div>
+        </div>
+
+        <!-- Main Content (Strategy + Active Assignments) -->
+        <div class="flex-grow-1 overflow-y-auto bg-black position-relative custom-scrollbar d-flex flex-column w-100">
+           
+           <!-- Sticky Header with Total Defense -->
+           <div class="sticky-top bg-black border-bottom border-secondary p-3 d-flex justify-content-between align-items-center shadow-lg" style="z-index: 1000;">
+              <div>
+                 <h1 class="h5 font-cinzel text-warning mb-0 text-uppercase d-none d-md-block">
+                    <i class="bi bi-shield-lock-fill me-2"></i>City Defenses
+                 </h1>
+              </div>
+              <div class="d-flex align-items-center gap-3">
+                 <div class="badge bg-dark border border-secondary p-2 text-end d-none d-sm-block">
+                    <span class="text-muted small text-uppercase me-2">Total Defense</span>
+                    <span class="h5 fw-bold text-info mb-0" id="total_defense_power"><%= number_with_delimiter(current_user.garrison_strength) %></span>
+                 </div>
+                 
+                 <button type="submit" class="btn btn-primary btn-sm px-3 fw-bold font-cinzel d-flex align-items-center gap-2 shadow-sm">
+                    <i class="bi bi-save"></i> <span>Save</span>
+                 </button>
+              </div>
+           </div>
+
+           <div class="container-fluid p-3 p-md-4" style="max-width: 900px;">
+              
+              <!-- Strategy Section (Collapsible?) -->
+              <div class="card bg-dark text-white border-secondary shadow-sm mb-4">
+                 <div class="card-header bg-black bg-opacity-25 border-secondary small text-uppercase text-muted fw-bold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-magic me-2"></i>Wards & Automation</span>
+                 </div>
+                 <div class="card-body py-3 d-md-flex justify-content-between align-items-center gap-4">
+                    <div class="flex-grow-1 mb-3 mb-md-0">
+                       <label class="form-label small text-info fw-bold mb-1">Active Defense Spell</label>
+                       <%= f.collection_select :active_defense_spell_id, @available_spells, :id, :name, { include_blank: "No Active Spell" }, { class: "form-select form-select-sm bg-black text-white border-secondary focus-ring-info" } %>
+                    </div>
+                    
+                    <div class="vr bg-secondary mx-3 d-none d-md-block opacity-25"></div>
+                    
+                    <div>
+                       <div class="form-check form-switch ps-0 d-flex align-items-center bg-black bg-opacity-25 rounded p-2 border border-secondary border-opacity-25">
+                          <label class="form-check-label text-warning small fw-bold cursor-pointer me-3 mb-0" for="user_auto_reinforce">
+                            Auto-Reinforce
+                          </label>
+                          <%= f.check_box :auto_reinforce, class: "form-check-input ms-0", role: "switch" %>
+                       </div>
+                    </div>
+                 </div>
+              </div>
+
+              <!-- Empty State -->
+              <% has_active = @user_units.any? { |u| (u.garrison || 0) > 0 } %>
+              <div id="empty-state" class="<%= has_active ? 'd-none' : '' %> py-5 text-center text-muted border border-secondary border-dashed rounded bg-dark bg-opacity-10">
+                 <i class="bi bi-shield-plus fs-1 opacity-25 mb-3 d-block"></i>
+                 <p class="mb-0 small text-uppercase fw-bold">No Defenders Assigned</p>
+                 <p class="small opacity-75">Select units from the sidebar to assign them to the garrison.</p>
+              </div>
+
+              <!-- Active Garrison Rows -->
+              <div class="d-flex flex-column gap-2" id="garrison-rows">
+                 <%= f.fields_for :user_units, @user_units do |uu_f| %>
+                    <% unit = uu_f.object.unit %>
+                    <% total = uu_f.object.quantity %>
+                    <% current_garrison = uu_f.object.garrison || 0 %>
+                    <% is_row_active = current_garrison > 0 %>
+
+                    <div class="card bg-dark border-secondary overflow-hidden <%= is_row_active ? '' : 'd-none' %>" 
+                         data-garrison-target="row" 
+                         data-unit-id="<%= unit.id %>"
+                         data-unit-defense="<%= unit.defense || 0 %>">
+                         
+                         <div class="card-body p-2 d-flex align-items-center">
+                            
+                            <!-- Hero Assignment -->
+                            <div class="position-relative me-3">
+                              <% if uu_f.object.assigned_hero %>
+                                 <button type="button" class="btn btn-outline-warning p-0 rounded-circle d-flex align-items-center justify-content-center border-2 border-warning shadow-lg bg-black box-shadow-xl overflow-hidden" 
+                                         style="width: 42px; height: 42px;"
+                                         title="Commanded by <%= uu_f.object.assigned_hero.name %>"
+                                         data-bs-toggle="modal" 
+                                         data-bs-target="#heroAssignmentModal"
+                                         data-bs-unit-id="<%= unit.id %>"
+                                         data-bs-unit-name="<%= unit.name %>"
+                                         data-bs-current-hero-id="<%= uu_f.object.assigned_hero.id %>">
+                                     
+                                     <% if false # Placeholder for when we have images %>
+                                        <%= image_tag "heroes/#{uu_f.object.assigned_hero.slug}.png", class: "w-100 h-100 object-fit-cover" %>
+                                     <% else %>
+                                        <div class="w-100 h-100 d-flex align-items-center justify-content-center bg-warning bg-opacity-25 text-warning fw-bold fs-5 font-cinzel">
+                                            <%= uu_f.object.assigned_hero.name.first %>
+                                        </div>
+                                     <% end %>
+                                     
+                                 </button>
+                                 <div class="position-absolute bottom-0 end-0 me-n1 mb-n1 badge rounded-circle bg-warning border border-dark p-1 d-flex align-items-center justify-content-center" style="width: 16px; height: 16px;">
+                                     <i class="bi bi-star-fill text-black" style="font-size: 8px;"></i>
+                                 </div>
+                              <% else %>
+                                 <button type="button" class="btn btn-outline-secondary p-0 rounded-circle d-flex align-items-center justify-content-center bg-black bg-opacity-25 border-dashed" 
+                                         style="width: 42px; height: 42px; border-style: dashed !important; border-width: 2px;"
+                                         title="Assign Hero"
+                                         data-bs-toggle="modal" 
+                                         data-bs-target="#heroAssignmentModal"
+                                         data-bs-unit-id="<%= unit.id %>"
+                                         data-bs-unit-name="<%= unit.name %>">
+                                    <i class="bi bi-plus-lg fs-5 text-white-50"></i>
+                                 </button>
+                              <% end %>
+                            </div>
+
+                            <!-- Unit Info (Minimal) -->
+                            <div style="width: 140px;" class="d-none d-sm-block ps-2">
+                               <div class="fw-bold text-truncate text-info"><%= unit.name %></div>
+                               <small class="text-muted" style="font-size: 0.7rem;">Def: <%= unit.defense %> | Total: <%= total %></small>
+                            </div>
+
+                            <!-- Mobile Info Icon -->
+                             <div class="d-sm-none d-flex flex-column align-items-center justify-content-center bg-black bg-opacity-50 rounded border border-secondary p-1 flex-shrink-0" style="width: 32px; height: 32px;">
+                                <i class="bi bi-shield-shaded text-info small"></i>
+                             </div>
+                            
+                            <!-- Slider Control (Condensed) -->
+                            <div class="flex-grow-1 d-flex flex-column justify-content-center">
+                               <div class="d-flex justify-content-between align-items-end mb-1 small lh-1">
+                                  <span class="text-muted" style="font-size: 0.65rem;">ATTACK: <span class="text-white fw-bold" data-garrison-target="fieldCount"><%= total - current_garrison %></span></span>
+                                  <span class="text-info fw-bold" style="font-size: 0.8rem;">DEFENSE: <span data-garrison-target="garrisonCount"><%= current_garrison %></span></span>
+                               </div>
+                               <div class="position-relative">
+                                  <input type="range" 
+                                         class="form-range custom-range-defense w-100 mb-0" 
+                                         min="0" 
+                                         max="<%= total %>" 
+                                         step="1" 
+                                         value="<%= current_garrison %>"
+                                         name="<%= uu_f.object_name %>[garrison]"
+                                         data-action="input->garrison#update"
+                                         data-garrison-target="input"
+                                         data-total="<%= total %>">
+                               </div>
+                            </div>
+
+                             <!-- Remove Button -->
+                            <button type="button" class="btn btn-sm btn-outline-danger border-0 p-1 px-2 ms-1" title="Remove from Garrison" data-action="click->garrison#remove" data-unit-id="<%= unit.id %>">
+                               <i class="bi bi-x-lg"></i>
+                            </button>
+                         </div>
+                    </div>
+                 <% end %>
+              </div>
+              
+              <!-- Footer Space -->
+              <div class="py-5 my-5"></div>
+
+           </div>
+        </div>
+     
+     <% end %>
+  </div>
+</div>
+
+<style>
+  .unit-sidebar-item {
+      transition: all 0.2s ease;
+  }
+  .unit-sidebar-item:hover {
+      background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+  .active-garrison-item {
+    background-color: rgba(13, 202, 240, 0.1) !important; /* Info color tint */
+    border-left: 3px solid #0dcaf0 !important;
+  }
+  
+  .custom-range-defense::-webkit-slider-thumb {
+    background: #0dcaf0; 
+    border: 2px solid #212529;
+    cursor: grab;
+    appearance: none;
+    width: 1rem;
+    height: 1rem;
+    margin-top: -0.35rem; /* Center vertically on track */
+    border-radius: 50%;
+  }
+  
+  .custom-range-defense::-webkit-slider-runnable-track {
+    background: #343a40;
+    height: 0.3rem;
+    border-radius: 0.15rem;
+  }
+</style>
+
+<%= render 'army/hero_modal' %>

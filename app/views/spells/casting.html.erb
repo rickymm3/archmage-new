@@ -1,0 +1,161 @@
+<div class="h-100 d-flex flex-column overflow-hidden">
+  <!-- Mobile Header (Visible < md) -->
+  <div class="d-md-none bg-dark border-bottom border-warning p-2 d-flex justify-content-between align-items-center">
+    <button class="btn btn-outline-warning" type="button" data-bs-toggle="offcanvas" data-bs-target="#spellSidebar" aria-controls="spellSidebar">
+      <i class="bi bi-list me-1"></i>Spells
+    </button>
+    <span class="text-warning font-cinzel fw-bold">Grimoire</span>
+    <%= link_to "Close", spells_path, class: "btn btn-sm btn-link text-muted text-decoration-none" %>
+  </div>
+
+  <div class="d-flex flex-grow-1 overflow-hidden position-relative">
+    
+    <!-- Sidebar / Offcanvas -->
+    <!-- Note: responsive offcanvas classes (offcanvas-md) behave as block on larger screens -->
+    <div class="offcanvas-md offcanvas-start bg-dark text-white border-end border-secondary d-flex flex-column flex-shrink-0" 
+         tabindex="-1" 
+         id="spellSidebar" 
+         aria-labelledby="spellSidebarLabel" 
+         style="width: 320px; max-width: 85vw;">
+       
+       <!-- Offcanvas Header (Mobile only) -->
+       <div class="offcanvas-header border-bottom border-secondary">
+         <h5 class="offcanvas-title font-cinzel text-warning" id="spellSidebarLabel">Spellbook</h5>
+         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" data-bs-target="#spellSidebar" aria-label="Close"></button>
+       </div>
+       
+       <!-- Filters -->
+       <div class="p-3 border-bottom border-secondary bg-black bg-opacity-25">
+         <div class="d-flex gap-2 mb-2">
+            <input type="text" id="spellSearch" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Search spells...">
+         </div>
+         <select id="spellFilter" class="form-select form-select-sm bg-dark text-white border-secondary">
+           <option value="all">All Types</option>
+           <option value="self">Self (Buffs)</option>
+           <option value="attack">Attack</option>
+           <option value="defense">Defense</option>
+           <option value="summon">Summon</option>
+           <option value="enemy">Enemy</option>
+           <option value="other">Other</option>
+         </select>
+       </div>
+       
+       <!-- Spell List -->
+       <div class="flex-grow-1 overflow-y-auto custom-scrollbar" id="spellList">
+         <% if @spells.empty? %>
+            <div class="p-4 text-center text-muted small">
+              <i class="bi bi-journal-x fs-2 mb-2 d-block"></i>
+              No spells learned yet.<br>
+              <%= link_to "Go Research", spells_path, class: "text-warning" %>
+            </div>
+         <% else %>
+           <div class="list-group list-group-flush">
+             <% @spells.each do |spell| %>
+               <% is_active = @selected_spell&.id == spell.id %>
+               <%= link_to casting_spells_path(spell_id: spell.id), 
+                   class: "list-group-item list-group-item-action bg-transparent text-white border-secondary py-3 d-flex align-items-center justify-content-between #{'active bg-warning bg-opacity-10 border-warning text-warning' if is_active}",
+                   data: { 
+                     spell_name: spell.name.downcase, 
+                     spell_type: spell.spell_type,
+                     turbo_frame: "_top" 
+                   } do %>
+                  <div class="overflow-hidden">
+                    <div class="fw-bold fs-6 text-truncate <%= is_active ? 'text-warning' : 'text-light' %>"><%= spell.name %></div>
+                    <small class="text-white-50"><%= spell.spell_type.titleize %> • Rank <%= spell.rank %></small>
+                  </div>
+                  <% if is_active %>
+                    <i class="bi bi-caret-right-fill text-warning flex-shrink-0 ms-2"></i>
+                  <% end %>
+               <% end %>
+             <% end %>
+           </div>
+         <% end %>
+       </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-grow-1 overflow-y-auto bg-darker position-relative custom-scrollbar w-100">
+      <div class="container-fluid py-3 h-100 d-flex flex-column">
+         <!-- Magic Power Widget pinned to top -->
+         <div class="row mb-3">
+           <div class="col-12 col-xxl-10 mx-auto">
+              <%= render "shared/magic_power_widget" %>
+           </div>
+         </div>
+         
+         <!-- Detail View -->
+         <div class="row flex-grow-1">
+            <div class="col-12 col-xxl-10 mx-auto">
+               <% if @selected_spell %>
+                 <%= render "spell_details", spell: @selected_spell, user_spell: @user_spells[@selected_spell.id] %>
+               <% else %>
+                 <div class="d-flex align-items-center justify-content-center h-100 text-muted p-5 border border-secondary border-dashed rounded bg-dark bg-opacity-25">
+                    <div class="text-center">
+                      <i class="bi bi-book fs-1 mb-3 text-secondary opacity-50"></i>
+                      <p class="mb-0">Select a spell from the Grimoire to view details.</p>
+                    </div>
+                 </div>
+               <% end %>
+            </div>
+         </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  function setupSpellFilters() {
+    const searchInput = document.getElementById('spellSearch');
+    const filterSelect = document.getElementById('spellFilter');
+    const listItems = document.querySelectorAll('#spellList .list-group-item');
+
+    if (!searchInput || !filterSelect) return;
+
+    function filterSpells() {
+      const searchTerm = searchInput.value.toLowerCase();
+      const filterType = filterSelect.value;
+      
+      listItems.forEach(item => {
+        const name = item.dataset.spellName || "";
+        const type = item.dataset.spellType || "other";
+        
+        const matchesSearch = name.includes(searchTerm);
+        const matchesType = filterType === 'all' || type === filterType;
+        
+        if (matchesSearch && matchesType) {
+          item.classList.remove('d-none');
+        } else {
+          item.classList.add('d-none');
+        }
+      });
+    }
+
+    searchInput.addEventListener('input', filterSpells);
+    filterSelect.addEventListener('change', filterSpells);
+  }
+
+  document.addEventListener('turbo:load', setupSpellFilters);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupSpellFilters);
+  } else {
+    setupSpellFilters();
+  }
+</script>
+
+<style>
+  @media (min-width: 768px) {
+    .offcanvas-md {
+      position: relative !important;
+      transform: none !important;
+      visibility: visible !important;
+      height: 100% !important;
+      border-right: 1px solid var(--arch-panel-border) !important;
+      background-color: var(--arch-panel-bg) !important;
+    }
+    
+    .offcanvas-header {
+      display: none;
+    }
+  }
+</style>

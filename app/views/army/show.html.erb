@@ -1,0 +1,153 @@
+<div class="h-100 d-flex flex-column overflow-hidden">
+  <!-- Mobile Header (Visible < md) -->
+  <div class="d-md-none bg-dark border-bottom border-warning p-2 d-flex justify-content-between align-items-center flex-shrink-0">
+    <button class="btn btn-outline-warning" type="button" data-bs-toggle="offcanvas" data-bs-target="#armySidebar" aria-controls="armySidebar">
+      <i class="bi bi-list me-1"></i>Units
+    </button>
+    <span class="text-warning font-cinzel fw-bold">My Army</span>
+    <div class="d-flex align-items-center gap-2">
+      <div class="badge bg-dark border border-secondary text-end">
+        <span class="text-warning"><%= number_with_delimiter(@total_upkeep) %></span>
+        <small class="text-muted ms-1" style="font-size: 0.6rem;">gp/turn</small>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex flex-grow-1 overflow-hidden position-relative">
+    
+    <!-- Sidebar / Offcanvas -->
+    <div class="offcanvas-md offcanvas-start bg-dark text-white border-end border-secondary d-flex flex-column flex-shrink-0" 
+         tabindex="-1" 
+         id="armySidebar" 
+         aria-labelledby="armySidebarLabel" 
+         style="width: 280px;">
+       
+       <!-- Sidebar Header -->
+       <div class="p-3 border-bottom border-secondary bg-black bg-opacity-25 opacity-100">
+         <div class="d-flex justify-content-between align-items-center mb-3 d-md-none">
+            <h5 class="offcanvas-title font-cinzel text-warning" id="armySidebarLabel">Army</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" data-bs-target="#armySidebar" aria-label="Close"></button>
+         </div>
+         
+         <div class="d-flex justify-content-between align-items-center mb-3 d-none d-md-flex">
+           <h5 class="font-cinzel text-warning mb-0">My Army</h5>
+           <div class="btn-group btn-group-sm">
+             <%= link_to recruit_index_path, class: "btn btn-outline-warning", title: "Recruit New Units" do %>
+               <i class="bi bi-person-plus"></i>
+             <% end %>
+             <%= link_to garrison_army_path, class: "btn btn-outline-info", title: "Defense Strategy" do %>
+               <i class="bi bi-shield-lock"></i>
+             <% end %>
+           </div>
+         </div>
+         
+         <!-- Stats Block -->
+         <div class="d-flex justify-content-between gap-1 mb-2">
+            <div class="d-flex flex-column align-items-center bg-darker border border-secondary p-1 w-100 rounded" title="Total Attack">
+              <span class="text-danger fw-bold"><%= number_with_delimiter(@total_attack) %></span>
+              <small class="text-muted text-uppercase" style="font-size: 0.6rem;">ATK</small>
+            </div>
+            <div class="d-flex flex-column align-items-center bg-darker border border-secondary p-1 w-100 rounded" title="Total Def">
+              <span class="text-info fw-bold"><%= number_with_delimiter(@total_defense) %></span>
+              <small class="text-muted text-uppercase" style="font-size: 0.6rem;">DEF</small>
+            </div>
+            <div class="d-flex flex-column align-items-center bg-darker border border-secondary p-1 w-100 rounded" title="Total Upkeep">
+              <span class="text-warning fw-bold"><%= number_with_delimiter(@total_upkeep) %></span>
+              <small class="text-muted text-uppercase" style="font-size: 0.6rem;">Gold</small>
+            </div>
+            <% if @total_mana_upkeep > 0 %>
+              <div class="d-flex flex-column align-items-center bg-darker border border-secondary p-1 w-100 rounded" title="Mana Upkeep">
+                <span class="text-info fw-bold"><%= number_with_delimiter(@total_mana_upkeep) %></span>
+                <small class="text-muted text-uppercase" style="font-size: 0.6rem;">Mana</small>
+              </div>
+            <% end %>
+         </div>
+       </div>
+       
+       <!-- Unit List -->
+       <div class="flex-grow-1 overflow-y-auto custom-scrollbar p-2">
+         <div class="d-grid gap-1">
+            <% if @active_units.empty? && @other_units.empty? %>
+                <div class="text-muted small text-center p-3 fst-italic">
+                    <i class="bi bi-shield-slash mb-2 d-block fs-3 opacity-50"></i>
+                    No units found in the game.
+                </div>
+            <% else %>
+                
+                <!-- Active Units -->
+                <% if @active_units.any? %>
+                  <div class="px-2 py-1 small text-white-50 text-uppercase fw-bold mt-2 mb-1" style="font-size: 0.65rem;">Active Forces</div>
+                  <% @active_units.each do |unit| %>
+                    <% 
+                       holding = @user_holdings[unit.id] 
+                       is_active = @selected_unit&.id == unit.id 
+                    %>
+                    
+                    <%= link_to army_path(unit_id: unit.id), 
+                        class: "btn btn-sm d-flex align-items-center justify-content-between text-start #{is_active ? 'btn-secondary border-warning text-warning' : 'btn-dark border-transparent text-muted'} position-relative mb-1",
+                        data: { turbo_action: "replace" } do %>
+                      
+                      <div class="d-flex align-items-center gap-2 overflow-hidden w-100">
+                        <i class="bi bi-shield-shaded fs-6 <%= is_active ? 'text-warning' : 'opacity-50' %> user-select-none"></i>
+                        <span class="text-truncate fw-bold <%= is_active ? '' : 'fw-normal' %> flex-grow-1"><%= unit.name %></span>
+                        
+                        <span class="badge bg-black bg-opacity-50 text-white border border-secondary rounded-pill ms-2" style="font-size: 0.7rem;">
+                          <%= number_with_delimiter(holding.quantity) %>
+                        </span>
+                      </div>
+                    <% end %>
+                  <% end %>
+                <% end %>
+
+                <!-- Other / Potential Units -->
+                <% if @other_units.any? %>
+                  <div class="px-2 py-1 small text-white-50 text-uppercase fw-bold mt-3 mb-1" style="font-size: 0.65rem;">Known Units</div>
+                  <% @other_units.each do |unit| %>
+                    <% 
+                       is_active = @selected_unit&.id == unit.id 
+                       can_recruit = unit.recruitable? 
+                    %>
+                    
+                    <%= link_to army_path(unit_id: unit.id), 
+                        class: "btn btn-sm d-flex align-items-center justify-content-between text-start #{is_active ? 'btn-dark border-secondary text-white' : 'btn-black border-transparent text-muted opacity-75'} position-relative mb-1" do %>
+                      
+                      <div class="d-flex align-items-center gap-2 overflow-hidden w-100">
+                        <i class="bi <%= can_recruit ? 'bi-person-plus' : 'bi-question-circle' %> fs-6 opacity-25 user-select-none"></i>
+                        <span class="text-truncate flex-grow-1 small"><%= unit.name %></span>
+                      </div>
+                    <% end %>
+                  <% end %>
+                <% end %>
+
+            <% end %>
+         </div>
+       </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="flex-grow-1 overflow-y-auto bg-black p-0 position-relative custom-scrollbar">
+      <div class="container-fluid p-3 p-md-4" style="max-width: 1000px;">
+        
+        <!-- Morale Panel (Always Visible at Top) -->
+        <%= render "morale_panel" %>
+
+        <!-- Unit Details -->
+        <div class="mt-4">
+            <% if @selected_unit %>
+              
+              <!-- Reuse existing partial which has its own card structure -->
+              <%= render "army/unit_details", unit: @selected_unit, user_units: @user_holdings %>
+
+            <% else %>
+              <div class="d-flex flex-column align-items-center justify-content-center py-5 text-muted opacity-50" style="min-height: 40vh;">
+                <i class="bi bi-shield-slash display-1 mb-3"></i>
+                <h4 class="font-cinzel">No Unit Selected</h4>
+                <p>Select a unit from the sidebar to view details.</p>
+              </div>
+            <% end %>
+        </div>
+        
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,268 @@
+<div class="flex-grow-1 overflow-y-scroll w-100" style="min-height: 0;">
+  <div class="container py-4">
+    <div class="row mb-4">
+    <div class="col">
+      <h1 class="display-5 text-white">Military Command</h1>
+      <p class="lead text-white-50">Train your armies and prepare for war.</p>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-8 mb-4">
+
+      <%# ═══ Active Recruitment Orders ═══ %>
+      <% if @active_orders.any? %>
+        <div class="card bg-dark text-white border-secondary mb-4">
+          <div class="card-header border-secondary d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0"><i class="bi bi-hourglass-split me-2 text-info"></i>Active Orders</h5>
+            <span class="badge bg-info text-dark">Slots: <%= @used_slots %>/<%= @max_slots %></span>
+          </div>
+          <div class="card-body d-flex flex-column gap-3">
+            <% @active_orders.each do |order| %>
+              <div class="card bg-black bg-opacity-25 border-secondary"
+                   data-controller="recruitment-order"
+                   data-recruitment-order-started-value="<%= order.started_at.to_i * 1000 %>"
+                   data-recruitment-order-duration-value="<%= order.duration_seconds * 1000 %>"
+                   data-recruitment-order-total-value="<%= order.total_quantity %>"
+                   data-recruitment-order-accepted-value="<%= order.accepted_quantity %>">
+                <div class="card-body p-3">
+                  <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                      <h6 class="mb-0 fw-bold text-light"><%= order.unit.name %></h6>
+                      <div class="d-flex gap-1 mt-1">
+                        <span class="badge bg-dark border border-secondary text-capitalize" style="font-size: 0.65rem;"><%= order.tier %></span>
+                        <span class="badge bg-dark border border-secondary text-warning" style="font-size: 0.65rem;"><%= order.gold_invested %>g invested</span>
+                        <span class="badge bg-dark border border-secondary text-<%= order.luck == 'Good' ? 'success' : order.luck == 'Poor' ? 'danger' : 'muted' %>" style="font-size: 0.65rem;">Luck: <%= order.luck %></span>
+                      </div>
+                    </div>
+                    <div class="text-end">
+                      <div class="text-info fw-bold" data-recruitment-order-target="arrivedDisplay">
+                        <%= order.arrived_quantity %>/<%= order.total_quantity %>
+                      </div>
+                      <small class="text-muted">units arrived</small>
+                    </div>
+                  </div>
+
+                  <%# Progress bar %>
+                  <div class="progress mb-2" style="height: 8px;">
+                    <div class="progress-bar bg-info" role="progressbar"
+                         data-recruitment-order-target="progressBar"
+                         style="width: <%= order.progress_percent %>%"></div>
+                  </div>
+
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                      <% if order.fully_arrived? %>
+                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>All arrived</span>
+                      <% else %>
+                        <small class="text-muted" data-controller="timer"
+                               data-timer-end-value="<%= order.estimated_completion.iso8601 %>">
+                          <i class="bi bi-clock me-1"></i>Completes in <span data-timer-target="output">...</span>
+                        </small>
+                      <% end %>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                      <%= form_with url: accept_recruit_order_path(order), method: :post, data: { turbo: false } do %>
+                        <button type="submit" class="btn btn-sm btn-info"
+                                data-recruitment-order-target="acceptBtn"
+                                <%= 'disabled' if order.available_to_accept <= 0 %>>
+                          <i class="bi bi-check2 me-1"></i>Accept
+                          <span data-recruitment-order-target="availableDisplay"><%= order.available_to_accept %></span>
+                        </button>
+                      <% end %>
+
+                      <%= form_with url: cancel_recruit_order_path(order), method: :post, data: { turbo: false } do %>
+                        <button type="submit" class="btn btn-sm btn-outline-danger"
+                                onclick="return confirm('Cancel this order? 50% of undelivered gold will be refunded.')">
+                          <i class="bi bi-x-lg"></i>
+                        </button>
+                      <% end %>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <%# ═══ Barracks Recruitment ═══ %>
+      <div class="card bg-dark text-white border-secondary h-100">
+        <div class="card-header border-secondary d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0"><i class="bi bi-person-plus-fill me-2 text-warning"></i>Barracks Recruitment</h5>
+            <div class="d-flex gap-2">
+              <span class="badge bg-info text-dark">Slots: <%= @used_slots %>/<%= @max_slots %></span>
+              <span class="badge bg-secondary">Barracks Lvl <%= @current_level %></span>
+            </div>
+        </div>
+        <div class="card-body">
+            <% if @current_level > 0 %>
+                <% slots_full = @used_slots >= @max_slots %>
+                <% if slots_full %>
+                  <div class="alert alert-warning bg-opacity-10 border-warning mb-3">
+                    <i class="bi bi-exclamation-triangle me-1"></i>All recruitment slots are in use. Accept or cancel an order to start a new one.
+                  </div>
+                <% end %>
+
+                <div class="d-flex flex-column gap-3">
+                  <% @units.each do |unit| %>
+                    <% unlocked = @current_level >= unit.requirements["barracks_level"].to_i %>
+                    <% if @user_units && @user_units[unit.id] %>
+                      <% quantity = @user_units[unit.id].quantity %>
+                    <% else %>
+                      <% quantity = 0 %>
+                    <% end %>
+                    
+                    <div class="card bg-black bg-opacity-25 border-secondary">
+                      <div class="card-body p-2 d-flex gap-3 align-items-center">
+                        <!-- Icon / Visual -->
+                        <div class="flex-shrink-0 text-center" style="width: 60px;">
+                          <div class="ratio ratio-1x1 bg-dark rounded border border-secondary mb-1 d-flex align-items-center justify-content-center">
+                             <i class="bi bi-person-fill fs-3 text-secondary"></i>
+                          </div>
+                          <% if unlocked %>
+                             <span class="badge bg-secondary" style="font-size: 0.6rem;">Cost: <%= unit.requirements["gold"] %>g</span>
+                             <div class="mt-1 badge bg-dark border border-secondary text-info w-100"><%= number_with_delimiter(quantity) %></div>
+                          <% else %>
+                             <i class="bi bi-lock-fill text-danger"></i>
+                          <% end %>
+                        </div>
+
+                        <!-- Info & Controls -->
+                        <div class="flex-grow-1">
+                          <div class="d-flex justify-content-between align-items-start mb-1">
+                             <div>
+                                <h6 class="mb-0 fw-bold <%= unlocked ? 'text-light' : 'text-muted' %>"><%= unit.name %></h6>
+                                <% 
+                                   element_bg = case unit.element 
+                                     when 'fire' then 'bg-danger'
+                                     when 'water' then 'bg-info'
+                                     when 'nature' then 'bg-success'
+                                     when 'holy' then 'bg-warning text-dark'
+                                     when 'void' then 'bg-secondary'
+                                     else 'bg-dark border border-secondary'
+                                   end
+                                %>
+                                <div class="d-flex gap-1 mb-1">
+                                  <span class="badge bg-black border border-secondary text-uppercase" style="font-size: 0.6rem;"><%= unit.unit_type %></span>
+                                  <span class="badge <%= element_bg %> text-uppercase" style="font-size: 0.6rem;"><%= unit.element %></span>
+                                  <span class="badge bg-transparent border border-secondary text-light" style="font-size: 0.6rem;" title="Initiative"><i class="bi bi-fast-forward me-1"></i><%= unit.speed %></span>
+                                </div>
+                                <small class="text-white-50" style="font-size: 0.7rem;"><%= unit.description %></small>
+                             </div>
+                             <% unless unlocked %>
+                                <span class="badge bg-danger">Requires Lvl <%= unit.requirements["barracks_level"] %></span>
+                             <% end %>
+                          </div>
+
+                          <% if unlocked %>
+                            <% disabled = slots_full %>
+                            <%= form_with url: recruit_create_path, method: :post, data: { turbo: false } do |f| %>
+                              <%= hidden_field_tag :unit_id, unit.id %>
+
+                              <div class="mb-2">
+                                <label class="form-label small text-muted mb-1">Recruitment Tier</label>
+                                <div class="d-flex gap-1">
+                                  <% { "cautious" => ["Cautious", "secondary"], "standard" => ["Standard", "primary"], "aggressive" => ["Aggressive", "warning"], "conscription" => ["Conscription", "danger"] }.each do |tier_key, (tier_label, tier_color)| %>
+                                    <% tier_cost = (unit.requirements["gold"].to_i * { "cautious" => 0.5, "standard" => 1.0, "aggressive" => 2.0, "conscription" => 4.0 }[tier_key] * 10).to_i %>
+                                    <% can_afford = current_user.gold >= tier_cost %>
+                                    <label class="btn btn-sm btn-outline-<%= tier_color %> flex-fill text-center <%= 'disabled' if disabled || !can_afford %>" style="font-size: 0.65rem;">
+                                      <input type="radio" name="tier" value="<%= tier_key %>" class="d-none" <%= 'disabled' if disabled || !can_afford %>>
+                                      <div class="fw-bold"><%= tier_label %></div>
+                                      <div><%= tier_cost %>g</div>
+                                    </label>
+                                  <% end %>
+                                </div>
+                              </div>
+
+                              <div class="d-flex justify-content-between align-items-center">
+                                  <div class="d-flex gap-2 small text-muted">
+                                      <span title="Attack"><i class="bi bi-sword text-danger"></i> <%= unit.attack %></span>
+                                      <span title="Defense"><i class="bi bi-shield-shaded text-info"></i> <%= unit.defense %></span>
+                                      <span title="Gold Upkeep"><i class="bi bi-coin text-warning"></i> <%= unit.upkeep_cost %></span>
+                                      <% if (unit.mana_upkeep || 0) > 0 %>
+                                          <span title="Mana Upkeep"><i class="bi bi-lightning-fill text-info"></i> <%= unit.mana_upkeep %></span>
+                                      <% end %>
+                                  </div>
+                                  <button type="submit" class="btn btn-sm btn-warning py-0 px-3" <%= 'disabled' if disabled %>>
+                                      <i class="bi bi-hourglass-split me-1"></i>Place Order
+                                  </button>
+                              </div>
+                            <% end %>
+                          <% else %>
+                             <div class="d-flex gap-2 small text-muted opacity-50">
+                                <span><i class="bi bi-sword"></i> ?</span>
+                                <span><i class="bi bi-shield-shaded"></i> ?</span>
+                             </div>
+                          <% end %>
+                        </div>
+                      </div>
+                    </div>
+                  <% end %>
+                </div>            
+            <% else %>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    You have not built a Barracks yet. Go to the <a href="<%= town_path(structure_id: @barracks_structure&.id) %>" class="alert-link">Town</a> to construct one.
+                </div>
+            <% end %>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <!-- Sidebar -->
+        <div class="card bg-dark border-secondary mb-4">
+            <div class="card-header border-secondary">
+                <h6 class="card-title mb-0 text-uppercase small text-muted">Army Overview</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Total Units:</span>
+                    <span class="text-light"><%= @user_units.values.sum(&:quantity) %></span>
+                </div>
+                 <div class="d-flex justify-content-between mb-2">
+                    <span>Daily Upkeep:</span>
+                    <span class="text-warning"><%= @user_units.values.sum { |u| u.quantity * u.unit.upkeep_cost } %> Gold</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Recruit Slots:</span>
+                    <span class="text-info"><%= @used_slots %>/<%= @max_slots %></span>
+                </div>
+            </div>
+        </div>
+
+        <%# ═══ Order History ═══ %>
+        <% if @completed_orders.any? %>
+          <div class="card bg-dark border-secondary mb-4">
+            <div class="card-header border-secondary">
+              <h6 class="card-title mb-0 text-uppercase small text-muted">Recent Orders</h6>
+            </div>
+            <div class="card-body p-0">
+              <% @completed_orders.each do |order| %>
+                <div class="border-bottom border-secondary p-2 d-flex justify-content-between align-items-center">
+                  <div>
+                    <small class="text-light fw-bold"><%= order.unit.name %></small>
+                    <div class="d-flex gap-1">
+                      <span class="badge bg-dark border border-secondary text-capitalize" style="font-size: 0.55rem;"><%= order.tier %></span>
+                      <% if order.cancelled_at.present? %>
+                        <span class="badge bg-danger bg-opacity-25 text-danger" style="font-size: 0.55rem;">Cancelled</span>
+                      <% else %>
+                        <span class="badge bg-success bg-opacity-25 text-success" style="font-size: 0.55rem;">Complete</span>
+                      <% end %>
+                    </div>
+                  </div>
+                  <div class="text-end">
+                    <small class="text-info fw-bold"><%= order.accepted_quantity %>/<%= order.total_quantity %></small>
+                    <div><small class="text-muted" style="font-size: 0.6rem;"><%= time_ago_in_words(order.completed_at) %> ago</small></div>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+    </div>
+  </div>
+</div>
+</div>

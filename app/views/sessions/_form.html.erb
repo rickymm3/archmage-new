@@ -1,0 +1,15 @@
+<%= form_with url: session_path, class: "needs-validation" do |form| %>
+  <div class="mb-3">
+    <%= form.label :email_address, "Email Address", class: "form-label text-warning" %>
+    <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "email", placeholder: "mage@example.com", value: params[:email_address], class: "form-control bg-dark text-light border-secondary" %>
+  </div>
+
+  <div class="mb-3">
+    <%= form.label :password, "Password", class: "form-label text-warning" %>
+    <%= form.password_field :password, required: true, autocomplete: "current-password", placeholder: "********", maxlength: 72, class: "form-control bg-dark text-light border-secondary" %>
+  </div>
+
+  <div class="d-grid gap-2 mt-4">
+    <%= form.submit "Access Grimoire", class: "btn btn-outline-warning btn-lg" %>
+  </div>
+<% end %>

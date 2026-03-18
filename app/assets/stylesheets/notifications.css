@@ -1,0 +1,25 @@
+
+/* Highlight target for notification links */
+:target {
+  border-color: #ffc107 !important;
+  box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
+  animation: highlight 2s ease-out;
+}
+
+@keyframes highlight {
+  0% { transform: scale(1.02); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+/* Hover effect for clickable notifications */
+.notification-link {
+  transition: transform 0.1s ease-in-out;
+}
+.notification-link:hover {
+  transform: translateX(4px);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+.notification-link:hover .notification-item {
+  border-color: rgba(255, 193, 7, 0.5) !important;
+}

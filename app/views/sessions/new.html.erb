@@ -1,0 +1,23 @@
+<div class="row justify-content-center">
+  <div class="col-md-6 col-lg-4">
+    <div class="card mt-5 bg-dark border-secondary shadow-lg">
+      <div class="card-header bg-secondary text-white text-center">
+        <h3 class="card-title mb-0">Archmage Login</h3>
+      </div>
+      <div class="card-body p-4">
+        <% if flash[:alert] %>
+          <div class="alert alert-danger" role="alert"><%= flash[:alert] %></div>
+        <% end %>
+        <% if flash[:notice] %>
+          <div class="alert alert-info" role="alert"><%= flash[:notice] %></div>
+        <% end %>
+
+        <%= render "sessions/form" %>
+      </div>
+      <div class="card-footer text-center bg-dark border-top border-secondary py-3">
+        <%= link_to "Forgot password?", new_password_path, class: "d-block text-muted small mb-2 text-decoration-none" %>
+        <span class="text-light">New to the realm?</span> <%= link_to "Sign up", new_registration_path, class: "text-warning fw-bold text-decoration-none ms-1" %>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,199 @@
+<div class="flex-grow-1 overflow-y-scroll w-100" style="min-height: 0;">
+  <div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h1 class="h3 mb-0 text-warning"><i class="bi bi-compass me-2"></i>Exploration</h1>
+      <div class="text-end">
+        <div class="small text-white-50">Current Land</div>
+        <div class="fs-5 text-white"><%= number_with_delimiter(current_user.land) %></div>
+      </div>
+    </div>
+  
+    <% if @active_exploration %>
+    <!-- ACTIVE MISSION -->
+    <div class="card bg-dark border-secondary mb-4 shadow-lg">
+      <div class="card-header border-secondary d-flex justify-content-between align-items-center bg-darker">
+        <div>
+          <span class="badge bg-info bg-opacity-10 text-info border border-info me-2">IN PROGRESS</span>
+          <span class="fw-bold text-white"><%= @active_exploration.unit&.name || 'Unescorted' %> Party</span>
+        </div>
+        <div class="text-white-50 small">Started <%= time_ago_in_words(@active_exploration.started_at) %> ago</div>
+      </div>
+      <div class="card-body text-center p-5">
+        
+        <div class="position-relative d-inline-block mb-4">
+           <div class="spinner-border text-info" style="width: 5rem; height: 5rem;" role="status"></div>
+           <i class="bi bi-compass fs-1 text-white position-absolute top-50 start-50 translate-middle"></i>
+        </div>
+
+        <h3 class="text-white mb-2" 
+            data-controller="timer" 
+            data-timer-end-value="<%= @active_exploration.finishes_at.iso8601 %>"
+            data-timer-reload-value="true">
+            <span data-timer-target="output">Calculating...</span>
+        </h3>
+        <p class="text-white-50 mb-4">
+          <% if @active_exploration.unit %>
+             <i class="bi bi-people me-1"></i> <%= @active_exploration.quantity %> Units are scouting new lands.
+          <% else %>
+             <i class="bi bi-person-walking me-1"></i> An unescorted party is scouting new lands.
+          <% end %>
+        </p>
+
+        <div class="alert alert-dark border-secondary d-inline-block text-start" style="min-width: 300px;">
+           <div class="small text-uppercase text-muted mb-2">Likely Outcomes</div>
+           <div class="d-flex justify-content-between small mb-1">
+             <span>Estimated Return:</span>
+             <span class="text-warning"><%= time_ago_in_words(@active_exploration.finishes_at) %></span>
+           </div>
+           <div class="d-flex justify-content-between small">
+             <span>Potential Land:</span>
+             <span class="text-success">~<%= @active_exploration.resources_found['potential_land'] %></span>
+           </div>
+        </div>
+        
+        <div class="mt-4">
+            <%= button_to "Check Status", explorations_path, method: :get, class: "btn btn-outline-light btn-sm" %>
+        </div>
+      </div>
+    </div>
+
+  <% else %>
+    <!-- NEW MISSION FORM -->
+    <div class="card bg-dark border-secondary mb-5">
+      <div class="card-header border-secondary bg-darker">
+        <h5 class="card-title mb-0 text-white">Outfit Expedition</h5>
+      </div>
+      <div class="card-body">
+        <%= form_with scope: :exploration, url: explorations_path, method: :post, class: "row g-3", data: { controller: "exploration-form", exploration_form_user_land_value: current_user.land } do |f| %>
+          
+          <div class="col-md-6">
+            <label class="form-label text-white-50">Select Escort (Optional)</label>
+            <select name="exploration[unit_id]" class="form-select bg-dark text-white border-secondary" id="unit_select" 
+                    data-exploration-form-target="unitSelect"
+                    data-action="change->exploration-form#update">
+              <option value="" data-speed="20" data-available="0" data-name="None">-- No Escort --</option>
+              <% @available_units.each do |uu| %>
+                <option value="<%= uu.unit.id %>" 
+                        data-speed="<%= uu.unit.speed || 5 %>" 
+                        data-available="<%= uu.available_quantity %>"
+                        data-name="<%= uu.unit.name %>">
+                  <%= uu.unit.name %> (Available: <%= uu.available_quantity %>) - Speed: <%= uu.unit.speed || 5 %>
+                </option>
+              <% end %>
+            </select>
+          </div>
+
+          <div class="col-md-6">
+             <label class="form-label text-white-50">Escort Size</label>
+             <div class="input-group">
+               <input type="number" name="exploration[quantity]" 
+                      class="form-control bg-dark text-white border-secondary" 
+                      id="unit_quantity"
+                      data-exploration-form-target="quantityInput"
+                      data-action="input->exploration-form#update" 
+                      value="0" min="0">
+               <button class="btn btn-outline-secondary" type="button" 
+                       data-exploration-form-target="maxButton"
+                       data-action="exploration-form#setMax">Max</button>
+             </div>
+             <div class="form-text text-white-50">Larger escorts are safer but move slower.</div>
+          </div>
+
+          <!-- PREVIEW CALCULATION -->
+          <div class="col-12">
+            <div class="p-3 border border-secondary rounded bg-black bg-opacity-25 mt-2">
+                <div class="row text-center">
+                    <div class="col-md-4">
+                        <div class="small text-uppercase text-muted">Duration</div>
+                        <div class="fs-4 text-info fw-bold" id="preview_duration" data-exploration-form-target="durationOutput">--</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="small text-uppercase text-muted">Max Discovery</div>
+                        <div class="fs-4 text-success fw-bold" id="preview_land" data-exploration-form-target="landOutput">--</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="small text-uppercase text-muted">Survivability</div>
+                        <div class="fs-4 text-warning fw-bold" id="preview_danger" data-exploration-form-target="dangerOutput">Medium</div>
+                    </div>
+                </div>
+            </div>
+          </div>
+
+          <div class="col-12 text-end">
+             <%= f.submit "Dispatch Party", class: "btn btn-primary px-4" %>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+
+  <!-- COMPLETED / HISTORY -->
+  <% if @completed_explorations.any? || @claimed_explorations.any? %>
+    <h5 class="text-white-50 mb-3 border-bottom border-secondary pb-2">Mission Log</h5>
+    
+    <% @completed_explorations.each do |exp| %>
+       <div class="card bg-success bg-opacity-10 border-success mb-3" id="exploration_<%= exp.id %>">
+          <div class="card-body d-flex justify-content-between align-items-center">
+             <div>
+                <h5 class="text-success mb-1">Mission Completed: <%= exp.unit&.name || 'Unescorted' %> Party</h5>
+                <div class="small text-white-50">
+                    Survivors: <span class="text-white fw-bold"><%= exp.resources_found['survivors'] %> / <%= exp.quantity %></span> (Awaiting Recovery)
+                    • Land Found: <span class="text-warning fw-bold">+<%= exp.resources_found['land'] %></span>
+                </div>
+             </div>
+             <div>
+                <%= button_to claim_exploration_path(exp), method: :post, class: "btn btn-success" do %>
+                   <i class="bi bi-check-lg me-2"></i>Claim & Recover Units
+                <% end %>
+             </div>
+          </div>
+          <!-- Events Log (Collapsible?) -->
+          <div class="card-footer bg-transparent border-success border-opacity-25 p-2">
+             <details>
+                <summary class="small text-success cursor-pointer">View Expedition Log</summary>
+                <ul class="list-unstyled small mt-2 mb-0 text-white-50 ps-3 border-start border-success border-opacity-25">
+                   <% (exp.events || []).each do |event| %>
+                      <li class="mb-1 <%= event.include?('Battle') ? 'text-danger' : '' %>"><%= event %></li>
+                   <% end %>
+                </ul>
+             </details>
+          </div>
+       </div>
+    <% end %>
+
+    <% @claimed_explorations.each do |exp| %>
+        <div class="border border-secondary rounded bg-dark mb-2 opacity-75" id="exploration_<%= exp.id %>">
+            <div class="d-flex justify-content-between align-items-center p-3">
+                 <div class="small text-muted">
+                    <% if exp.updated_at %>
+                       <%= time_ago_in_words(exp.updated_at) %> ago
+                    <% else %>
+                       Unknown Time
+                    <% end %>
+                 </div>
+                 <div class="text-white-50">
+                    <%= exp.unit ? "#{exp.quantity} #{exp.unit.name.pluralize}" : "Unescorted Expedition" %>
+                    <span class="ms-2 badge bg-secondary text-white-50">Claimed</span>
+                 </div>
+                 <div class="text-end">
+                    <small class="text-success">+<%= exp.resources_found['land'] %> Land</small>
+                 </div>
+            </div>
+            
+            <div class="px-3 pb-2">
+                 <details>
+                    <summary class="small text-muted cursor-pointer">View Expedition Log</summary>
+                    <ul class="list-unstyled small mt-2 mb-0 text-white-50 ps-3 border-start border-secondary border-opacity-25">
+                       <% (exp.events || []).each do |event| %>
+                          <li class="mb-1 <%= event.include?('Battle') ? 'text-danger' : '' %>"><%= event %></li>
+                       <% end %>
+                    </ul>
+                 </details>
+            </div>
+        </div>
+    <% end %>
+
+  <% end %>
+</div>
+
+</div>

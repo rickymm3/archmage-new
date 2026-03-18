@@ -1,0 +1,159 @@
+<div class="container-fluid h-100 p-0 d-flex flex-column overflow-hidden">
+  <div class="bg-dark border-bottom border-secondary p-3 d-flex align-items-center justify-content-between">
+    <div class="d-flex align-items-center gap-3">
+      <%= link_to battles_path, class: "btn btn-outline-secondary btn-sm" do %>
+        <i class="bi bi-arrow-left"></i> Return to Map
+      <% end %>
+      <div class="h5 mb-0 font-cinzel text-white">
+        Battle Report
+      </div>
+    </div>
+  </div>
+
+  <div class="flex-grow-1 overflow-y-auto custom-scrollbar p-4">
+    <div class="row justify-content-center">
+      <div class="col-lg-10 col-xl-8">
+        
+        <!-- Header / Outcome -->
+        <div class="card bg-black border-<%= @battle_result.winner == :attacker ? 'success' : 'danger' %> mb-4 shadow rounded-0">
+          <div class="card-body text-center py-5">
+             <% if @battle_result.winner == :attacker %>
+                <i class="bi bi-trophy display-1 text-success mb-3"></i>
+                <h1 class="font-cinzel text-success display-4 fw-bold">VICTORY</h1>
+                <p class="lead text-white">
+                   You have defeated the forces of <strong class="text-danger"><%= @battle_result.defender.username %></strong>!
+                </p>
+                <% if @battle_result.land_seized.to_i > 0 %>
+                   <div class="mt-4">
+                      <span class="badge bg-success fs-5 p-3 rounded-0 border border-success-subtle">
+                         <i class="bi bi-globe me-2"></i> +<%= number_with_delimiter(@battle_result.land_seized) %> Acres Seized
+                      </span>
+                   </div>
+                <% end %>
+             <% else %>
+                <i class="bi bi-shield-x display-1 text-danger mb-3"></i>
+                <h1 class="font-cinzel text-danger display-4 fw-bold">DEFEAT</h1>
+                <p class="lead text-white">
+                   Your forces were repelled by <strong class="text-danger"><%= @battle_result.defender.username %></strong>.
+                </p>
+             <% end %>
+          </div>
+        </div>
+
+        <!-- Forces Summary -->
+        <div class="row g-4 mb-4">
+           <!-- Attacker (User) -->
+           <div class="col-md-6">
+              <div class="card bg-dark border-secondary h-100">
+                 <div class="card-header bg-black border-bottom border-secondary">
+                    <h5 class="mb-0 text-white font-cinzel text-center">Your Forces</h5>
+                 </div>
+                 <div class="card-body p-0">
+                    <table class="table table-dark table-striped mb-0 small">
+                       <thead>
+                          <tr>
+                             <th class="ps-3">Unit</th>
+                             <th class="text-center">Sent</th>
+                             <th class="text-center">Lost</th>
+                             <th class="text-center pe-3">Remaining</th>
+                          </tr>
+                       </thead>
+                       <tbody>
+                          <% @battle_result.attacker_army.stacks.each do |stack| %>
+                             <% lost = stack.initial_quantity - stack.quantity %>
+                             <tr>
+                                <td class="ps-3">
+                                   <div class="fw-bold"><%= stack.name %></div>
+                                   <% if stack.hero %>
+                                      <span class="text-warning tiny"><i class="bi bi-star-fill"></i> <%= stack.hero[:name] %></span>
+                                   <% end %>
+                                </td>
+                                <td class="text-center text-muted"><%= number_with_delimiter(stack.initial_quantity) %></td>
+                                <td class="text-center text-danger"><%= lost > 0 ? "-#{number_with_delimiter(lost)}" : "-" %></td>
+                                <td class="text-center text-white fw-bold pe-3"><%= number_with_delimiter(stack.quantity) %></td>
+                             </tr>
+                          <% end %>
+                          <% if @battle_result.attacker_army.stacks.empty? %>
+                             <tr><td colspan="4" class="text-center py-3 text-muted">No units deployed</td></tr>
+                          <% end %>
+                       </tbody>
+                    </table>
+                 </div>
+              </div>
+           </div>
+
+           <!-- Defender (Enemy) -->
+           <div class="col-md-6">
+              <div class="card bg-dark border-secondary h-100">
+                 <div class="card-header bg-black border-bottom border-secondary">
+                    <h5 class="mb-0 text-white font-cinzel text-center"><%= @battle_result.defender.username %>'s Forces</h5>
+                 </div>
+                 <div class="card-body p-0">
+                    <table class="table table-dark table-striped mb-0 small">
+                       <thead>
+                          <tr>
+                             <th class="ps-3">Unit</th>
+                             <th class="text-center">Initial</th>
+                             <th class="text-center">Lost</th>
+                             <th class="text-center pe-3">Remaining</th>
+                          </tr>
+                       </thead>
+                       <tbody>
+                          <% @battle_result.defender_army.stacks.each do |stack| %>
+                             <% lost = stack.initial_quantity - stack.quantity %>
+                             <tr>
+                                <td class="ps-3">
+                                   <div class="fw-bold"><%= stack.name %></div>
+                                   <% if stack.hero %>
+                                      <span class="text-warning tiny"><i class="bi bi-star-fill"></i> <%= stack.hero[:name] %></span>
+                                   <% end %>
+                                </td>
+                                <td class="text-center text-muted"><%= number_with_delimiter(stack.initial_quantity) %></td>
+                                <td class="text-center text-danger"><%= lost > 0 ? "-#{number_with_delimiter(lost)}" : "-" %></td>
+                                <td class="text-center text-white fw-bold pe-3"><%= number_with_delimiter(stack.quantity) %></td>
+                             </tr>
+                          <% end %>
+                          <% if @battle_result.defender_army.stacks.empty? %>
+                             <tr><td colspan="4" class="text-center py-3 text-muted">Defenses breached or no units present</td></tr>
+                          <% end %>
+                       </tbody>
+                    </table>
+                 </div>
+              </div>
+           </div>
+        </div>
+
+        <!-- Battle Log -->
+        <div class="card bg-black border-secondary">
+           <div class="card-header border-bottom border-secondary d-flex justify-content-between align-items-center">
+              <h5 class="mb-0 text-white font-cinzel">Combat Log</h5>
+              <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#logCollapse" aria-expanded="false" aria-controls="logCollapse">
+                 Toggle Details
+              </button>
+           </div>
+           <div class="collapse show" id="logCollapse">
+              <div class="card-body font-monospace small p-0" style="max-height: 400px; overflow-y: auto;">
+                 <ul class="list-group list-group-flush">
+                    <% @battle_result.log.each do |entry| %>
+                       <% 
+                          klass = "list-group-item bg-black text-secondary border-secondary py-1"
+                          if entry.include?("ROUND")
+                             klass += " fw-bold text-white mt-2 border-top border-bottom border-secondary bg-dark"
+                          elsif entry.include?("Winner:")
+                             klass += " fw-bold text-warning border-top mt-2" 
+                          elsif entry.include?("kills") || entry.include?("slaying") || entry.include?("Unit WIPED OUT")
+                             klass += " text-danger"
+                          elsif entry.include?("Hero") || entry.include?("HERO")
+                             klass += " text-info"
+                          end
+                       %>
+                       <li class="<%= klass %>"><%= entry %></li>
+                    <% end %>
+                 </ul>
+              </div>
+           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

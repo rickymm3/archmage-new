@@ -1,0 +1,81 @@
+<div class="d-flex flex-column gap-3">
+  <% @units.each do |unit| %>
+    <% requirements = unit.requirements || {} %>
+    <% unlocked = current_level >= requirements["barracks_level"].to_i %>
+    <% quantity = @user_units && @user_units[unit.id] ? @user_units[unit.id].quantity : 0 %>
+    
+    <div class="card bg-black bg-opacity-25 border-secondary">
+      <div class="card-body p-2 d-flex gap-3 align-items-center">
+        <!-- Icon / Visual -->
+        <div class="flex-shrink-0 text-center" style="width: 60px;">
+          <div class="ratio ratio-1x1 bg-dark rounded border border-secondary mb-1 d-flex align-items-center justify-content-center">
+             <i class="bi bi-person-fill fs-3 text-secondary"></i>
+          </div>
+          <% if unlocked %>
+             <span class="badge bg-secondary" style="font-size: 0.6rem;">Cost: <%= requirements["gold"] %>g</span>
+             <div class="mt-1 badge bg-dark border border-secondary text-info w-100"><%= number_with_delimiter(quantity) %></div>
+          <% else %>
+             <i class="bi bi-lock-fill text-danger"></i>
+          <% end %>
+        </div>
+
+        <!-- Info & Controls -->
+        <div class="flex-grow-1">
+          <div class="d-flex justify-content-between align-items-start mb-1">
+             <div>
+                <h6 class="mb-0 fw-bold <%= unlocked ? 'text-light' : 'text-muted' %>"><%= unit.name %></h6>
+                <small class="text-white-50" style="font-size: 0.7rem;"><%= unit.description %></small>
+             </div>
+             <% unless unlocked %>
+                <span class="badge bg-danger">Requires Lvl <%= unit.requirements["barracks_level"] %></span>
+             <% end %>
+          </div>
+
+          <% if unlocked %>
+            <div data-controller="recruit" 
+                 data-recruit-unit-cost-value="<%= unit.requirements['gold'] %>"
+                 data-recruit-max-gold-value="<%= current_user.gold %>">
+                 
+              <%= form_with url: recruit_town_path, method: :post, data: { turbo_frame: "_top" } do |f| %>
+                <%= hidden_field_tag :structure_id, structure.id %>
+                <%= hidden_field_tag :unit_id, unit.id %>
+                
+                <div class="mb-2">
+                    <label class="form-label d-flex justify-content-between small text-muted mb-1">
+                        <span>Investment: <span class="text-warning fw-bold" data-recruit-target="goldDisplay">0</span> Gold</span>
+                        <span>Expected: <span class="text-info fw-bold" data-recruit-target="countDisplay">0</span> Units</span>
+                    </label>
+                    <input type="range" 
+                           name="gold_amount" 
+                           class="form-range" 
+                           min="0" 
+                           max="<%= current_user.gold %>" 
+                           step="<%= unit.requirements['gold'] %>" 
+                           value="0"
+                           data-recruit-target="slider"
+                           data-action="input->recruit#update">
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex gap-2 small text-muted">
+                        <span title="Attack"><i class="bi bi-sword text-danger"></i> <%= unit.attack %></span>
+                        <span title="Defense"><i class="bi bi-shield-shaded text-info"></i> <%= unit.defense %></span>
+                        <span title="Upkeep"><i class="bi bi-coin text-warning"></i> <%= unit.upkeep_cost %></span>
+                    </div>
+                    <%= button_tag type: "submit", class: "btn btn-sm btn-warning py-0 px-3", data: { recruit_target: "submitBtn" }, disabled: true do %>
+                        Recruit
+                    <% end %>
+                </div>
+              <% end %>
+            </div>
+          <% else %>
+             <div class="d-flex gap-2 small text-muted opacity-50">
+                <span><i class="bi bi-sword"></i> ?</span>
+                <span><i class="bi bi-shield-shaded"></i> ?</span>
+             </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  <% end %>
+</div>
