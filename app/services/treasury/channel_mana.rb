@@ -34,8 +34,10 @@ module Treasury
       net_potential = @user.net_mana_potential
       
       # Actual Mana Change
-      # If Net is -100, and we waited 2 hours (0.5), change is -50
-      mana_change = (net_potential * time_factor).to_i
+      # Yield uses base (60% linear) + bonus (40% quadratic) to reward waiting.
+      # Early release gets mostly base; full charge gets full bonus.
+      yield_factor = @user.mana_total_yield(time_factor)
+      mana_change = (net_potential * yield_factor).to_i
       
       # Calculate New Mana Total
       projected_mana = @user.mana + mana_change

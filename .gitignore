@@ -29,6 +29,11 @@
 !/tmp/storage/.keep
 
 /public/assets
+/public/mobile
 
 # Ignore master key for decrypting credentials and more.
 /config/master.key
+
+# Mobile app
+/mobile/node_modules
+.DS_Store

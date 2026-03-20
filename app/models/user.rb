@@ -251,6 +251,22 @@ class User < ApplicationRecord
     elapsed = Time.current - (last_mana_recharge_at || Time.current)
     [elapsed.to_f / mana_drain_duration, 1.0].min
   end
+
+  # Mana yield is split into base (linear) + bonus (quadratic).
+  # This incentivizes waiting: early release gets mostly base,
+  # while a full charge gets the full bonus on top.
+  # At t=1.0: 60% base + 40% bonus = 100% of net potential.
+  def mana_base_yield(charge = current_mana_charge)
+    0.60 * charge
+  end
+
+  def mana_bonus_yield(charge = current_mana_charge)
+    0.40 * charge * charge
+  end
+
+  def mana_total_yield(charge = current_mana_charge)
+    mana_base_yield(charge) + mana_bonus_yield(charge)
+  end
   
   # Total expenses that drain mana over time (per 4-hour cycle to match potential)
   def mana_upkeep_potential

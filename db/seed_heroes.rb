@@ -21,6 +21,7 @@ heroes = [
     description: "A battle-hardened tactician whose presence boosts army morale.",
     unit_type: "hero",
     rarity: :legendary,
+    recruitable: false,
     attack: 300,
     defense: 600,
     speed: 10,
@@ -34,6 +35,7 @@ heroes = [
     description: "The fastest scout in the realm, capable of striking from shadows.",
     unit_type: "hero",
     rarity: :legendary,
+    recruitable: false,
     attack: 400,
     defense: 150,
     speed: 30,
@@ -45,9 +47,8 @@ heroes = [
 ]
 
 heroes.each do |hero_attrs|
-  Unit.find_or_create_by!(name: hero_attrs[:name]) do |u|
-    u.assign_attributes(hero_attrs)
-  end
+  unit = Unit.find_or_initialize_by(name: hero_attrs[:name])
+  unit.update!(hero_attrs)
 end
 
 puts "Heroes seeded!"

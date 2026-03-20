@@ -7,10 +7,13 @@ import {
   Dimensions,
   SafeAreaView,
   ActivityIndicator,
+  ScrollView,
+  Platform,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
+import LoadingButton from "../components/LoadingButton";
 
 const { width: W } = Dimensions.get("window");
 
@@ -126,33 +129,50 @@ function StructureDetail({ s, gold, mana, freeLand, onClose, onBuild, onDemolish
             ))}
           </View>
         )}
+        {!atMaxLevel && (
+          <View style={styles.costRow}>
+            {costs.gold > 0 && (
+              <Text style={[styles.costItem, gold < costs.gold && styles.costShort]}>
+                💰 {Number(costs.gold).toLocaleString()}
+              </Text>
+            )}
+            {costs.mana > 0 && (
+              <Text style={[styles.costItem, mana < costs.mana && styles.costShort]}>
+                🔮 {Number(costs.mana).toLocaleString()}
+              </Text>
+            )}
+            {s.land_cost > 0 && (
+              <Text style={[styles.costItem, freeLand < s.land_cost && styles.costShort]}>
+                🏔️ {s.land_cost} land
+              </Text>
+            )}
+          </View>
+        )}
       </View>
 
       {/* Fixed bottom action bar */}
       <View style={styles.actionBar}>
         {owned && (
-          <TouchableOpacity
+          <LoadingButton
             style={styles.demolishBtn}
             onPress={() => onDemolish(s)}
-            activeOpacity={0.6}
           >
             <Text style={styles.demolishBtnTxt}>
               {s.level_based ? "\u2B07 Downgrade" : "\u{1F5D1} Demolish"}
             </Text>
-          </TouchableOpacity>
+          </LoadingButton>
         )}
 
         {!atMaxLevel ? (
           canBuild ? (
-            <TouchableOpacity
+            <LoadingButton
               style={[styles.actionBtn, { backgroundColor: v.color, flex: 1 }]}
               onPress={() => onBuild(s)}
-              activeOpacity={0.8}
             >
               <Text style={styles.actionBtnTxt}>
                 {s.level_based ? (lvl > 0 ? "\u2B06 Upgrade" : "\u{1F528} Build") : "\u{1F528} Build"}
               </Text>
-            </TouchableOpacity>
+            </LoadingButton>
           ) : (
             <View style={[styles.actionBtn, { backgroundColor: "#444", flex: 1 }]}>
               <Text style={[styles.actionBtnTxt, { opacity: 0.4 }]}>
@@ -312,7 +332,7 @@ export default function TownScreen() {
       </View>
 
       {/* ── BOTTOM GRID ── */}
-      <View style={styles.bottomGrid}>
+      <ScrollView style={styles.bottomGrid} contentContainerStyle={styles.gridContainer}>
         <View style={styles.gridRow}>
           {structures.map((s) => (
             <BuildingCard
@@ -322,7 +342,7 @@ export default function TownScreen() {
             />
           ))}
         </View>
-      </View>
+      </ScrollView>
 
 
     </SafeAreaView>
@@ -332,14 +352,18 @@ export default function TownScreen() {
 /* ================================================================
    STYLES
    ================================================================ */
-const CARD_SIZE = (W - 48) / 4;
+const CARD_SIZE = Platform.OS === "web" ? Math.min((W - 48) / 4, 80) : (W - 48) / 4;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0d0d1a" },
+  container: {
+    flex: 1,
+    backgroundColor: "#0d0d1a",
+    ...(Platform.OS === "web" ? { maxWidth: 480, width: "100%", alignSelf: "center" } : {}),
+  },
 
   /* ── top panel ── */
   topPanel: {
-    flex: 55,
+    height: "35%",
     backgroundColor: "#161625",
     borderBottomWidth: 1,
     borderBottomColor: "#2a2a40",
@@ -437,6 +461,24 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   prodChipTxt: { color: "#2ecc71", fontSize: 13, fontWeight: "600" },
+  costRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 10,
+    marginTop: 8,
+  },
+  costItem: {
+    color: "#ccc",
+    fontSize: 13,
+    fontWeight: "600",
+    backgroundColor: "#00000066",
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  costShort: {
+    color: "#e74c3c",
+  },
 
   /* ── action bar (fixed bottom of top panel) ── */
   actionBar: {
@@ -519,9 +561,12 @@ const styles = StyleSheet.create({
 
   /* ── bottom grid ── */
   bottomGrid: {
-    flex: 45,
-    paddingTop: 10,
+    flex: 1,
     paddingHorizontal: 12,
+  },
+  gridContainer: {
+    paddingTop: 10,
+    paddingBottom: 20,
   },
   gridRow: {
     flexDirection: "row",

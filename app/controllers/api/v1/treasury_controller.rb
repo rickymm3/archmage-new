@@ -7,6 +7,7 @@ module Api
         render json: {
           taxable_amount: tax_service.base_taxable_amount,
           tax_rates: Treasury::TaxationService::TAX_RATES,
+          tax_cooldown: current_user.tax_cooldown&.future? ? current_user.tax_cooldown.iso8601 : nil,
           gold: current_user.gold,
           mana: current_user.mana,
           max_mana: current_user.max_mana,

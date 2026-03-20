@@ -160,4 +160,12 @@ Rails.application.routes.draw do
 
   # Defines the root path route ("/")
   root "home#index"
+
+  # Serve Expo web SPA — catch-all for client-side routing.
+  # Static assets (JS, CSS, images) in public/mobile/ are served automatically
+  # by Rails middleware. This route handles SPA navigation paths that don't
+  # map to real files, serving index.html so React Router can handle them.
+  spa_index = proc { [200, { "content-type" => "text/html; charset=utf-8" }, [Rails.public_path.join("mobile/index.html").read]] }
+  get "mobile", to: spa_index
+  get "mobile/*path", to: spa_index, constraints: ->(req) { !req.path.match?(/\.\w+$/) }
 end

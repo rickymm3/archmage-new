@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
+import LoadingButton from "../components/LoadingButton";
 
 const TABS = [
   { key: "tax", label: "💰 Tax Collection" },
@@ -21,6 +22,30 @@ export default function TreasuryScreen() {
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState("tax");
+  const [cooldownRemaining, setCooldownRemaining] = useState(null);
+  const cooldownRef = useRef(null);
+
+  // Live countdown timer for tax cooldown
+  useEffect(() => {
+    if (!data?.tax_cooldown) {
+      setCooldownRemaining(null);
+      return;
+    }
+    const target = new Date(data.tax_cooldown).getTime();
+    function tick() {
+      const left = Math.max(0, Math.floor((target - Date.now()) / 1000));
+      setCooldownRemaining(left > 0 ? left : null);
+      if (left <= 0 && cooldownRef.current) {
+        clearInterval(cooldownRef.current);
+        cooldownRef.current = null;
+      }
+    }
+    tick();
+    cooldownRef.current = setInterval(tick, 1000);
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
+  }, [data?.tax_cooldown]);
 
   async function loadData() {
     try {
@@ -67,6 +92,25 @@ export default function TreasuryScreen() {
     extortion: "#e74c3c",
   };
 
+  function formatCooldown(seconds) {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.round((seconds % 3600) / 60);
+    if (hrs > 0 && mins > 0) return `${hrs}h ${mins}m cooldown`;
+    if (hrs > 0) return `${hrs}h cooldown`;
+    return `${mins}m cooldown`;
+  }
+
+  function formatCountdown(seconds) {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hrs > 0) return `${hrs}h ${mins}m ${secs}s`;
+    if (mins > 0) return `${mins}m ${secs}s`;
+    return `${secs}s`;
+  }
+
+  const onCooldown = cooldownRemaining != null && cooldownRemaining > 0;
+
   function renderTaxTab() {
     return (
       <ScrollView
@@ -94,6 +138,17 @@ export default function TreasuryScreen() {
           <Text style={styles.infoValue}>{data.taxable_amount} gold</Text>
         </View>
 
+        {/* Cooldown banner */}
+        {onCooldown && (
+          <View style={styles.cooldownBanner}>
+            <Text style={styles.cooldownIcon}>⏳</Text>
+            <View>
+              <Text style={styles.cooldownLabel}>Tax Cooldown Active</Text>
+              <Text style={styles.cooldownTimer}>{formatCountdown(cooldownRemaining)}</Text>
+            </View>
+          </View>
+        )}
+
         {/* Tax tiers */}
         <Text style={styles.sectionLabel}>Choose Tax Rate</Text>
         {data.tax_rates &&
@@ -103,31 +158,34 @@ export default function TreasuryScreen() {
               data.taxable_amount * (config.multiplier || 1)
             );
             return (
-              <TouchableOpacity
+              <LoadingButton
                 key={tier}
-                style={styles.tierCard}
+                style={[styles.tierCard, onCooldown && styles.tierCardDisabled]}
                 onPress={() => handleTax(tier)}
-                activeOpacity={0.7}
+                disabled={onCooldown}
               >
-                <View style={[styles.tierStripe, { backgroundColor: color }]} />
+                <View style={[styles.tierStripe, { backgroundColor: onCooldown ? "#444" : color }]} />
                 <View style={styles.tierBody}>
                   <View style={styles.tierTop}>
-                    <Text style={[styles.tierName, { color }]}>
+                    <Text style={[styles.tierName, { color: onCooldown ? "#555" : color }]}>
                       {config.label || tier}
                     </Text>
-                    <Text style={styles.tierAmount}>+{amount} gold</Text>
+                    <Text style={[styles.tierAmount, onCooldown && { color: "#555" }]}>+{amount} gold</Text>
                   </View>
                   <View style={styles.tierBottom}>
                     <Text style={styles.tierMeta}>
                       {Math.round((config.multiplier || 1) * 100)}% rate
                     </Text>
                     <Text style={styles.tierMeta}>
-                      {config.cooldown ? `${Math.round(config.cooldown / 60)}m cooldown` : ""}
+                      {config.cooldown ? formatCooldown(config.cooldown) : ""}
                     </Text>
                   </View>
                 </View>
-                <Text style={[styles.collectArrow, { color }]}>→</Text>
-              </TouchableOpacity>
+                {onCooldown
+                  ? <Text style={styles.collectLock}>🔒</Text>
+                  : <Text style={[styles.collectArrow, { color }]}>→</Text>
+                }
+              </LoadingButton>
             );
           })}
         <View style={{ height: 30 }} />
@@ -138,8 +196,10 @@ export default function TreasuryScreen() {
   function renderManaTab() {
     const net = data.net_mana_potential || 0;
     const charge = data.mana_charge || 0;
-    // charge: 0.0 = just released, 1.0 = fully charged (overload)
-    const projectedChange = Math.floor(net * charge);
+    // Yield: base (60% linear) + bonus (40% quadratic) to reward waiting
+    const baseYield = Math.floor(net * 0.6 * charge);
+    const bonusYield = Math.floor(net * 0.4 * charge * charge);
+    const projectedChange = baseYield + bonusYield;
     const projectedMana = (data.mana || 0) + projectedChange;
     const wouldBreach = projectedMana < 0;
     const isOverloaded = charge >= 1.0;
@@ -196,7 +256,7 @@ export default function TreasuryScreen() {
         <View style={styles.batteryCard}>
           <Text style={styles.batteryTitle}>Mana Capacitor</Text>
           <Text style={styles.batterySubtitle}>
-            Charges over time. Release before it overloads!
+            Bonus mana increases the longer you wait.
           </Text>
 
           <View style={styles.batteryOuter}>
@@ -217,15 +277,18 @@ export default function TreasuryScreen() {
             <Text style={[styles.projectedValue, { color: projColor }]}>
               {projectedChange >= 0 ? "+" : ""}{projectedChange} mana
             </Text>
+            <View style={styles.yieldBreakdown}>
+              <Text style={styles.yieldBase}>Base: {baseYield >= 0 ? "+" : ""}{baseYield}</Text>
+              <Text style={styles.yieldBonus}>✨ Bonus: {bonusYield >= 0 ? "+" : ""}{bonusYield}</Text>
+            </View>
             {wouldBreach && (
               <Text style={styles.breachBadge}>⚠️ VOID BREACH</Text>
             )}
           </View>
 
-          <TouchableOpacity
+          <LoadingButton
             style={[styles.channelBtn, wouldBreach && styles.channelBtnDanger, isOverloaded && !wouldBreach && styles.channelBtnOverload]}
             onPress={handleRecharge}
-            activeOpacity={0.7}
           >
             <Text style={styles.channelBtnText}>
               {wouldBreach
@@ -234,7 +297,7 @@ export default function TreasuryScreen() {
                   ? "⚡  Release Now!"
                   : "🔮  Release Mana"}
             </Text>
-          </TouchableOpacity>
+          </LoadingButton>
 
           {isHighCharge && !wouldBreach && (
             <Text style={styles.overloadWarning}>
@@ -390,6 +453,25 @@ const styles = StyleSheet.create({
   tierBottom: { flexDirection: "row", gap: 16 },
   tierMeta: { color: "#888", fontSize: 12 },
   collectArrow: { fontSize: 22, fontWeight: "700", paddingRight: 14 },
+  collectLock: { fontSize: 18, paddingRight: 14, opacity: 0.5 },
+  tierCardDisabled: { opacity: 0.5 },
+
+  // ── Cooldown banner ──
+  cooldownBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#2a1a1a",
+    marginHorizontal: 12,
+    marginBottom: 12,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e74c3c44",
+    gap: 12,
+  },
+  cooldownIcon: { fontSize: 28 },
+  cooldownLabel: { color: "#e74c3c", fontSize: 13, fontWeight: "600", marginBottom: 2 },
+  cooldownTimer: { color: "#f5c6cb", fontSize: 20, fontWeight: "700", fontVariant: ["tabular-nums"] },
 
   // ── Mana battery card ──
   batteryCard: {
@@ -479,6 +561,13 @@ const styles = StyleSheet.create({
   },
   projectedLabel: { color: "#888", fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 },
   projectedValue: { fontSize: 24, fontWeight: "700" },
+  yieldBreakdown: {
+    flexDirection: "row",
+    gap: 16,
+    marginTop: 6,
+  },
+  yieldBase: { color: "#888", fontSize: 12, fontWeight: "600" },
+  yieldBonus: { color: "#f1c40f", fontSize: 12, fontWeight: "700" },
   breachBadge: {
     color: "#e74c3c",
     fontSize: 13,

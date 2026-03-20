@@ -10,6 +10,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
+import LoadingButton from "../components/LoadingButton";
 
 export default function MarketplaceScreen() {
   const { showAlert, showPrompt } = useModal();
@@ -82,9 +83,9 @@ export default function MarketplaceScreen() {
           {data.won_listings.map((l) => (
             <View key={l.id} style={styles.card}>
               <Text style={styles.itemName}>{l.item?.name}</Text>
-              <TouchableOpacity style={styles.collectButton} onPress={() => handleCollect(l.id)}>
+              <LoadingButton style={styles.collectButton} onPress={() => handleCollect(l.id)}>
                 <Text style={styles.collectText}>Collect</Text>
-              </TouchableOpacity>
+              </LoadingButton>
             </View>
           ))}
         </View>
@@ -105,9 +106,9 @@ export default function MarketplaceScreen() {
           </View>
           {l.bidder && <Text style={styles.bidder}>Leading: {l.bidder.kingdom_name || l.bidder.username}</Text>}
           <Text style={styles.expires}>Expires: {new Date(l.expires_at).toLocaleTimeString()}</Text>
-          <TouchableOpacity style={styles.bidButton} onPress={() => handleBid(l.id, l.min_next_bid)}>
+          <LoadingButton style={styles.bidButton} onPress={() => handleBid(l.id, l.min_next_bid)}>
             <Text style={styles.bidText}>Place Bid</Text>
-          </TouchableOpacity>
+          </LoadingButton>
         </View>
       ))}
 

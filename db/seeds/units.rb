@@ -159,7 +159,7 @@
     name: "Explorer",
     description: "Specialized unit for exploration. Extremely fast but defenseless.",
     requirements: { "gold" => 20, "barracks_level" => 1 },
-    upkeep_cost: 2, mana_upkeep: 0, power: 2,
+    upkeep_cost: 10, mana_upkeep: 0, power: 2,
     attack: 1, defense: 0, speed: 20,
     unit_type: "infantry", element: "nature",
     abilities: { "scout" => true }

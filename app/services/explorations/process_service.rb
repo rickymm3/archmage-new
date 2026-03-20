@@ -10,6 +10,10 @@ module Explorations
       @survivors = @initial_qty
       @log = []
       @land_potential = (@exploration.resources_found['potential_land'] || 1).to_i
+      @tc_level = exploration.user.user_structures
+                    .joins(:structure)
+                    .where(structures: { slug: 'town_center' })
+                    .pick(:level) || 1
       
       @resources = { 
         "gold" => 0, 
@@ -44,22 +48,19 @@ module Explorations
       num_events.times do |i|
         break unless @main_team_alive
         
-        # Combat Chance starts at 0% for < 20 land (Safe Zone).
-        # Increases by 1% per 2 land after 20. (Max 40% base).
-        base_chance = [(@exploration.user.land - 20) / 2.0, 0].max
-        base_chance = [base_chance, 40].min
-        
-        # Escorts provide safety (reduce chance by 50%)
-        modifier = (@unit && @survivors > 0) ? 0.5 : 1.0
-        combat_chance = (base_chance * modifier).ceil
+        # Combat is the primary danger of exploration (~60% of events).
+        # Base combat chance: 60%, escorts reduce it slightly.
+        base_combat = 60
+        modifier = (@unit && @survivors > 0) ? 0.85 : 1.0
+        combat_chance = (base_combat * modifier).ceil
         
         roll = rand(100)
         
         if roll < combat_chance
           process_combat(i + 1)
-        elsif roll < 65
+        elsif roll < combat_chance + 25
           process_discovery(i + 1)
-        elsif roll < 85
+        elsif roll < combat_chance + 35
           process_setback(i + 1)
         else
           process_uneventful(i + 1)
@@ -112,13 +113,26 @@ module Explorations
       ]
       
       encounter = enemy_types.sample
-      enemy_power = encounter[:power] + (@exploration.user.land / 50).to_i # Scaling
+      
+      # Enemy power scales with Town Center level.
+      # At TC1: expect militia (atk 2), ~20-50 units => team power ~60-150
+      # At TC5: expect heavy infantry (atk 10), ~30-80 units => team power ~330-880
+      # At TC10: expect top tier (atk 80-120), ~20-50 units => team power ~1620-6050
+      #
+      # Base power per TC level represents a "typical" encounter for that tier.
+      # encounter[:power] acts as a difficulty multiplier (5-30 base).
+      tc_power_table = [0, 30, 80, 160, 300, 500, 800, 1200, 1800, 2800, 4000]
+      base_for_tc = tc_power_table[@tc_level] || tc_power_table.last
+      
+      # Enemy power = base scaled by encounter difficulty + some randomness
+      difficulty_mult = encounter[:power] / 15.0  # normalize around 1.0 (range ~0.33 to 2.0)
+      variance = rand(0.7..1.3)
+      enemy_power = (base_for_tc * difficulty_mult * variance).ceil
       
       # Combat Calculation
-      # Survivors Attack vs Enemy Power
       if @unit && @survivors > 0
         escort_attack = @survivors * (@unit.attack + 1)
-        escort_defense = @unit.defense + 1
+        escort_defense = [(@unit.defense + 1), 1].max
       else
         escort_attack = 0
         escort_defense = 1
@@ -129,21 +143,23 @@ module Explorations
       @log << "Day #{step}: #{encounter[:text]}"
       
       if my_power > (enemy_power * 1.5)
-        # Easy win
+        # Easy win — no losses
         add_rewards(encounter[:rewards])
         @log << "  -> Your forces easily overwhelmed them. Obtained: #{format_rewards(encounter[:rewards])}."
       elsif my_power > enemy_power
         # Win with losses
-        losses = (enemy_power / escort_defense).ceil
+        loss_ratio = enemy_power.to_f / (my_power + enemy_power)
+        losses = [(@survivors * loss_ratio).ceil, 1].max
         losses = [losses, @survivors].min
         @survivors -= losses
         
         add_rewards(encounter[:rewards])
         @log << "  -> Victory, but at a cost. #{losses} escorts were lost. Obtained: #{format_rewards(encounter[:rewards])}."
       else
-        # Defeat / Retreat
+        # Defeat / Retreat — heavy losses, no spoils
         if @survivors > 0
-           losses = (@survivors * 0.5).ceil 
+           loss_pct = 0.3 + rand * 0.4  # 30-70% losses on defeat
+           losses = [(@survivors * loss_pct).ceil, 1].max
            @survivors -= losses
            @log << "  -> The enemy was too strong! You retreated, losing #{losses} escorts in the chaos."
         else
@@ -335,12 +351,12 @@ module Explorations
       )
 
       # Create Notification
-      status_text = @main_team_dead ? "Lost" : "Returned"
+      status_text = @main_team_alive ? "Returned" : "Lost"
       Notification.create!(
         user: @exploration.user,
         category: 'exploration',
         content: "Exploration Party #{status_text}: Found #{format_rewards(@resources)}",
-        data: { exploration_id: @exploration.id, success: !@main_team_dead }
+        data: { exploration_id: @exploration.id, success: @main_team_alive }
       )
     end
   end

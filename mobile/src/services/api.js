@@ -1,7 +1,19 @@
-import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
 import { API_URL } from "../config";
 
 const TOKEN_KEY = "auth_token";
+
+// expo-secure-store is not available on web; fall back to localStorage.
+let SecureStore;
+if (Platform.OS === "web") {
+  SecureStore = {
+    getItemAsync: async (key) => localStorage.getItem(key),
+    setItemAsync: async (key, value) => localStorage.setItem(key, value),
+    deleteItemAsync: async (key) => localStorage.removeItem(key),
+  };
+} else {
+  SecureStore = require("expo-secure-store");
+}
 
 async function getToken() {
   return await SecureStore.getItemAsync(TOKEN_KEY);

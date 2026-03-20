@@ -1,0 +1,96 @@
+<% return unless @active_exploration || @completed_explorations&.any? %>
+
+<div class="card bg-dark border-secondary mt-4 shadow">
+  <div class="card-header border-secondary bg-black bg-opacity-25 d-flex justify-content-between align-items-center py-2">
+    <h5 class="mb-0 font-cinzel text-info small text-uppercase">
+      <i class="bi bi-compass me-2"></i>Exploration
+    </h5>
+    <% if @active_exploration %>
+      <span class="badge bg-info bg-opacity-10 text-info border border-info" style="font-size: 0.6rem;">IN PROGRESS</span>
+    <% elsif @completed_explorations&.any? %>
+      <span class="badge bg-success bg-opacity-10 text-success border border-success" style="font-size: 0.6rem;">
+        <%= @completed_explorations.size %> READY
+      </span>
+    <% end %>
+  </div>
+
+  <div class="card-body p-3">
+    <% if @active_exploration %>
+      <%# ═══ Active Exploration ═══ %>
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="position-relative flex-shrink-0">
+          <div class="spinner-border spinner-border-sm text-info" role="status"></div>
+        </div>
+        <div class="flex-grow-1">
+          <div class="fw-bold text-white"
+               data-controller="timer"
+               data-timer-end-value="<%= @active_exploration.finishes_at.iso8601 %>"
+               data-timer-reload-value="true">
+            <span data-timer-target="output">Calculating...</span>
+          </div>
+          <small class="text-muted">until return</small>
+        </div>
+      </div>
+
+      <div class="d-flex flex-column gap-2 small mb-3">
+        <div class="d-flex justify-content-between">
+          <span class="text-white-50"><i class="bi bi-people me-1"></i>Escort</span>
+          <span class="text-light">
+            <% if @active_exploration.unit %>
+              <%= @active_exploration.quantity %> <%= @active_exploration.unit.name.pluralize(@active_exploration.quantity) %>
+            <% else %>
+              Unescorted
+            <% end %>
+          </span>
+        </div>
+        <div class="d-flex justify-content-between">
+          <span class="text-white-50"><i class="bi bi-geo-alt me-1"></i>Potential Land</span>
+          <span class="text-success">~<%= @active_exploration.resources_found['potential_land'] %></span>
+        </div>
+      </div>
+
+      <%= link_to explorations_path, class: "btn btn-sm btn-outline-info w-100" do %>
+        <i class="bi bi-compass me-1"></i>View Expedition
+      <% end %>
+
+    <% end %>
+
+    <% if @completed_explorations&.any? %>
+      <%# ═══ Completed — Ready to Claim ═══ %>
+      <% if @active_exploration %>
+        <hr class="border-secondary my-3">
+      <% end %>
+
+      <% @completed_explorations.each do |exploration| %>
+        <div class="d-flex align-items-center justify-content-between bg-black bg-opacity-25 rounded p-2 mb-2 border border-success border-opacity-25">
+          <div class="small">
+            <div class="text-success fw-bold">
+              <i class="bi bi-check-circle me-1"></i>Expedition Returned
+            </div>
+            <div class="text-white-50" style="font-size: 0.75rem;">
+              <% resources = exploration.resources_found || {} %>
+              <span class="me-2"><i class="bi bi-geo-alt me-1"></i><%= resources['land'] || 0 %> land</span>
+              <% if (resources['gold'] || 0) > 0 %>
+                <span class="me-2"><i class="bi bi-coin me-1"></i><%= resources['gold'] %> gold</span>
+              <% end %>
+              <% survivors = resources['survivors'] || exploration.quantity %>
+              <% casualties = exploration.quantity - survivors.to_i %>
+              <% if casualties > 0 %>
+                <span class="text-danger"><i class="bi bi-heartbreak me-1"></i><%= casualties %> lost</span>
+              <% end %>
+            </div>
+          </div>
+          <%= button_to claim_exploration_path(exploration), method: :post, class: "btn btn-sm btn-success ms-2", data: { turbo: false } do %>
+            <i class="bi bi-gift me-1"></i>Claim
+          <% end %>
+        </div>
+      <% end %>
+    <% end %>
+
+    <% unless @active_exploration || @completed_explorations&.any? %>
+      <div class="text-center text-muted small py-2">
+        No expeditions. <a href="<%= explorations_path %>" class="text-info text-decoration-none">Send one?</a>
+      </div>
+    <% end %>
+  </div>
+</div>

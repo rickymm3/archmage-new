@@ -10,6 +10,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { useModal } from "../context/ModalContext";
 import * as api from "../services/api";
+import LoadingButton from "../components/LoadingButton";
 
 export default function ProfileScreen() {
   const { user, refreshUser } = useAuth();
@@ -87,11 +88,11 @@ export default function ProfileScreen() {
         {user?.has_kingdom_name && (
           <Text style={styles.costNote}>Changing costs 💰 100 gold</Text>
         )}
-        <TouchableOpacity style={styles.saveButton} onPress={handleSaveKingdomName}>
+        <LoadingButton style={styles.saveButton} onPress={handleSaveKingdomName}>
           <Text style={styles.saveText}>
             {user?.has_kingdom_name ? "Rename Kingdom" : "Set Kingdom Name"}
           </Text>
-        </TouchableOpacity>
+        </LoadingButton>
       </View>
     </ScrollView>
   );

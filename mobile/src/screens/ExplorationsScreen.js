@@ -13,6 +13,7 @@ import Slider from "@react-native-community/slider";
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
+import LoadingButton from "../components/LoadingButton";
 
 // ── Preview calculation helpers (mirrors Rails StartService) ──
 
@@ -114,12 +115,16 @@ export default function ExplorationsScreen() {
     if (timerRef.current) clearInterval(timerRef.current);
     if (!data?.active) return;
 
+    let lastPoll = 0;
     const tick = () => {
       const diff = new Date(data.active.finishes_at).getTime() - Date.now();
       if (diff <= 0) {
         setCountdown("00:00");
-        clearInterval(timerRef.current);
-        loadData();
+        const now = Date.now();
+        if (now - lastPoll >= 3000) {
+          lastPoll = now;
+          loadData();
+        }
       } else {
         setCountdown(formatCountdown(diff));
       }
@@ -358,18 +363,24 @@ export default function ExplorationsScreen() {
 
   function renderRewardsLine(e) {
     const parts = [];
-    if (e.land_reward) parts.push(`🏔 +${e.land_reward}`);
     const res = e.resources_found || {};
-    if (res.gold) parts.push(`💰 +${res.gold}`);
-    if (res.mana) parts.push(`🔮 +${res.mana}`);
-    if (res.units_found) parts.push(`🗡 +${res.units_found}`);
+    const land = res.land || e.land_reward;
+    if (land) parts.push(`🏔 +${land} land`);
+    if (res.gold) parts.push(`💰 +${res.gold} gold`);
+    if (res.mana) parts.push(`🔮 +${res.mana} mana`);
+    if (Array.isArray(res.units_found) && res.units_found.length > 0) {
+      res.units_found.forEach((u) => {
+        const name = (u.slug || "unit").replace(/_/g, " ");
+        parts.push(`🗡 +${u.amount} ${name}`);
+      });
+    }
     return parts.length > 0 ? parts.join("   ") : "No rewards";
   }
 
-  function renderExpeditionLog(e) {
+  function renderExpeditionLog(e, autoExpand = false) {
     const events = e.events || [];
     if (events.length === 0) return null;
-    const isExpanded = expandedLogs.has(e.id);
+    const isExpanded = autoExpand || expandedLogs.has(e.id);
 
     return (
       <View style={styles.logSection}>
@@ -384,9 +395,10 @@ export default function ExplorationsScreen() {
         {isExpanded &&
           events.map((ev, i) => {
             const text = typeof ev === "string" ? ev : ev.description || ev.text || JSON.stringify(ev);
+            const isIndented = text.startsWith("  ");
             return (
-              <View key={i} style={styles.logEntry}>
-                <View style={[styles.logDot, { backgroundColor: eventColor(text) }]} />
+              <View key={i} style={[styles.logEntry, isIndented && { marginLeft: 16 }]}>
+                {!isIndented && <View style={[styles.logDot, { backgroundColor: eventColor(text) }]} />}
                 <Text style={[styles.logText, { color: eventColor(text) }]}>{text}</Text>
               </View>
             );
@@ -401,10 +413,18 @@ export default function ExplorationsScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>✅ Ready to Claim</Text>
         {data.completed.map((e) => {
-          const survived = e.quantity - (e.resources_found?.losses || 0);
+          const res = e.resources_found || {};
+          const survived = res.survivors != null ? res.survivors : e.quantity;
           const allSurvived = survived >= e.quantity;
+          const isFailed = (e.events || []).some((ev) => typeof ev === "string" && ev.includes("FAILURE"));
           return (
-            <View key={e.id} style={styles.completedCard}>
+            <View key={e.id} style={[styles.completedCard, isFailed && { borderColor: "#e74c3c" }]}>
+              {/* Outcome banner */}
+              <View style={[styles.outcomeBanner, { backgroundColor: isFailed ? "#e74c3c22" : "#2ecc7122" }]}>
+                <Text style={[styles.outcomeText, { color: isFailed ? "#e74c3c" : "#2ecc71" }]}>
+                  {isFailed ? "💀 Expedition Lost" : "🏆 Expedition Successful"}
+                </Text>
+              </View>
               <View style={styles.completedHeader}>
                 <Text style={styles.completedUnit}>
                   {e.unit_name ? `${e.unit_name}` : "Unescorted"}
@@ -421,13 +441,13 @@ export default function ExplorationsScreen() {
                 )}
               </View>
               <Text style={styles.rewardsText}>{renderRewardsLine(e)}</Text>
-              {renderExpeditionLog(e)}
-              <TouchableOpacity
+              {renderExpeditionLog(e, true)}
+              <LoadingButton
                 style={styles.claimButton}
                 onPress={() => handleClaim(e.id)}
               >
                 <Text style={styles.claimText}>Claim & Recover</Text>
-              </TouchableOpacity>
+              </LoadingButton>
             </View>
           );
         })}
@@ -710,6 +730,14 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "#2ecc71",
   },
+  outcomeBanner: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+    marginBottom: 10,
+  },
+  outcomeText: { fontSize: 14, fontWeight: "700" },
   completedHeader: {
     flexDirection: "row",
     justifyContent: "space-between",

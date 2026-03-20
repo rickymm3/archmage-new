@@ -1,0 +1,28 @@
+databases:
+  - name: archmage-db
+    plan: free
+    databaseName: archmage
+    user: archmage
+
+services:
+  - type: web
+    name: archmage
+    runtime: docker
+    plan: free
+    dockerCommand: ./bin/rails server -b 0.0.0.0 -p $PORT
+    healthCheckPath: /up
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: archmage-db
+          property: connectionString
+      - key: RAILS_MASTER_KEY
+        sync: false
+      - key: RAILS_ENV
+        value: production
+      - key: RAILS_LOG_TO_STDOUT
+        value: "true"
+      - key: SECRET_KEY_BASE
+        generateValue: true
+      - key: SOLID_QUEUE_IN_PUMA
+        value: "true"

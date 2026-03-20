@@ -13,6 +13,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import { useAuth } from "../context/AuthContext";
+import LoadingButton from "../components/LoadingButton";
 
 const AFFINITY_META = {
   general: { name: "General", emoji: "📜", color: "#aaa" },
@@ -398,12 +399,12 @@ export default function SpellsScreen() {
                       </View>
                     </View>
                     <Text style={styles.meta}>Rank {s.rank}</Text>
-                    <TouchableOpacity
+                    <LoadingButton
                       style={[styles.castButton, { backgroundColor: affMeta.color }]}
                       onPress={() => handleCast(s)}
                     >
                       <Text style={styles.actionText}>Cast</Text>
-                    </TouchableOpacity>
+                    </LoadingButton>
                   </View>
                 ))}
               </View>
@@ -450,12 +451,12 @@ export default function SpellsScreen() {
                 <Text style={styles.stackCount}>x{s.stack_count}</Text>
               </View>
               <Text style={styles.meta}>{s.spell_type} • Expires: {new Date(s.expires_at).toLocaleTimeString()}</Text>
-              <TouchableOpacity
+              <LoadingButton
                 style={styles.cancelButton}
                 onPress={() => handleCancel(s.id)}
               >
                 <Text style={styles.cancelText}>Dispel</Text>
-              </TouchableOpacity>
+              </LoadingButton>
             </View>
           ))}
           {activeData.sustained_spells.map((s) => (
@@ -464,12 +465,12 @@ export default function SpellsScreen() {
                 <Text style={styles.spellName}>{s.spell_name}</Text>
                 <Text style={styles.sustainedBadge}>Sustained</Text>
               </View>
-              <TouchableOpacity
+              <LoadingButton
                 style={styles.cancelButton}
                 onPress={() => handleCancel(s.id, "sustained")}
               >
                 <Text style={styles.cancelText}>Deactivate</Text>
-              </TouchableOpacity>
+              </LoadingButton>
             </View>
           ))}
           {activeData.active_spells.length === 0 && activeData.sustained_spells.length === 0 && (
@@ -522,13 +523,13 @@ export default function SpellsScreen() {
                 <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setResearchModal(null)}>
                   <Text style={styles.modalCancelTxt}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
+                <LoadingButton
                   style={[styles.modalConfirmBtn, sliderValue === 0 && { opacity: 0.4 }]}
                   onPress={confirmResearch}
                   disabled={sliderValue === 0}
                 >
                   <Text style={styles.modalConfirmTxt}>Research</Text>
-                </TouchableOpacity>
+                </LoadingButton>
               </View>
             </View>
           </View>
@@ -582,12 +583,12 @@ export default function SpellsScreen() {
                 <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setCastModal(null)}>
                   <Text style={styles.modalCancelTxt}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
+                <LoadingButton
                   style={[styles.modalConfirmBtn, { backgroundColor: "#3498db" }]}
                   onPress={confirmCast}
                 >
                   <Text style={styles.modalConfirmTxt}>Cast</Text>
-                </TouchableOpacity>
+                </LoadingButton>
               </View>
             </View>
           </View>

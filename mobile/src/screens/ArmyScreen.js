@@ -6,10 +6,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
+  Platform,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
+import LoadingButton from "../components/LoadingButton";
 
 export default function ArmyScreen({ navigation }) {
   const { showAlert, showConfirm, showPrompt } = useModal();
@@ -78,7 +80,7 @@ export default function ArmyScreen({ navigation }) {
   return (
     <ScrollView
       style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadArmy(); setRefreshing(false); }} />}
+      {...(Platform.OS !== "web" ? { refreshControl: <RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadArmy(); setRefreshing(false); }} /> } : {})}
     >
       {/* Stats */}
       <View style={styles.statsBar}>
@@ -104,9 +106,9 @@ export default function ArmyScreen({ navigation }) {
       <View style={styles.card}>
         <View style={styles.moraleRow}>
           <Text style={[styles.moraleLabel, { color: moraleColor }]}>Morale: {morale}%</Text>
-          <TouchableOpacity style={styles.payButton} onPress={handlePayUpkeep}>
+          <LoadingButton style={styles.payButton} onPress={handlePayUpkeep}>
             <Text style={styles.payText}>Pay Upkeep</Text>
-          </TouchableOpacity>
+          </LoadingButton>
         </View>
         <View style={styles.moraleBarBg}>
           <View style={[styles.moraleBarFill, { width: `${Math.min(s.morale, 100)}%`, backgroundColor: moraleColor }]} />
@@ -183,12 +185,12 @@ export default function ArmyScreen({ navigation }) {
           </View>
           <View style={styles.unitActions}>
             <Text style={styles.availableText}>{u.available} available</Text>
-            <TouchableOpacity
+            <LoadingButton
               style={styles.disbandBtn}
               onPress={() => handleDisband(u.unit_id, u.name)}
             >
               <Text style={styles.disbandText}>Disband</Text>
-            </TouchableOpacity>
+            </LoadingButton>
           </View>
         </View>
       ))}

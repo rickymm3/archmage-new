@@ -26,6 +26,7 @@ import ProfileScreen from "../screens/ProfileScreen";
 const Tab = createBottomTabNavigator();
 const MoreStack = createNativeStackNavigator();
 const ArmyStack = createNativeStackNavigator();
+const RootStack = createNativeStackNavigator();
 
 const screenOptions = {
   headerStyle: { backgroundColor: "#1a1a2e" },
@@ -66,7 +67,6 @@ function MoreStackNavigator() {
       <MoreStack.Screen name="Battles" component={BattlesScreen} />
       <MoreStack.Screen name="AttackSetup" component={AttackSetupScreen} options={{ title: "Attack Setup" }} />
       <MoreStack.Screen name="BattleResult" component={BattleResultScreen} options={{ title: "Battle Result", headerLeft: () => null }} />
-      <MoreStack.Screen name="Explorations" component={ExplorationsScreen} />
       <MoreStack.Screen name="Marketplace" component={MarketplaceScreen} />
       <MoreStack.Screen name="Notifications" component={NotificationsScreen} />
       <MoreStack.Screen name="Rankings" component={RankingsScreen} />
@@ -76,7 +76,7 @@ function MoreStackNavigator() {
   );
 }
 
-export default function MainTabs() {
+function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -98,5 +98,18 @@ export default function MainTabs() {
         options={{ headerShown: false }}
       />
     </Tab.Navigator>
+  );
+}
+
+export default function MainNavigator() {
+  return (
+    <RootStack.Navigator screenOptions={{ headerShown: false }}>
+      <RootStack.Screen name="MainTabs" component={MainTabs} />
+      <RootStack.Screen
+        name="Explorations"
+        component={ExplorationsScreen}
+        options={{ ...screenOptions, headerShown: true, title: "Explorations" }}
+      />
+    </RootStack.Navigator>
   );
 }

@@ -4,12 +4,26 @@ module Api
       def show
         user = current_user
 
+        # Auto-process finished exploration
+        active_exploration = user.explorations.active.first
+        if active_exploration && active_exploration.finishes_at <= Time.current
+          Explorations::ProcessService.new(active_exploration).call
+          active_exploration = nil
+        end
+
+        completed_explorations = user.explorations.completed.order(finishes_at: :desc)
+
         render json: {
           player: serialize_player(user),
           production_rates: user.production_rates,
           active_spells: serialize_active_spells(user),
           unread_notifications: user.notifications.unread.count,
-          army_summary: serialize_army_summary(user)
+          army_summary: serialize_army_summary(user),
+          active_orders: serialize_active_orders(user),
+          exploration: {
+            active: active_exploration ? serialize_exploration(active_exploration) : nil,
+            completed: completed_explorations.map { |e| serialize_exploration(e) }
+          }
         }
       end
 
@@ -55,6 +69,37 @@ module Api
           total_strength: user.army_strength,
           total_upkeep: holdings.sum { |uu| uu.quantity * uu.unit.upkeep_cost },
           unit_count: holdings.count
+        }
+      end
+
+      def serialize_active_orders(user)
+        user.recruitment_orders.active.includes(:unit).map do |order|
+          {
+            id: order.id,
+            unit_name: order.unit.name,
+            tier: order.tier,
+            total_quantity: order.total_quantity,
+            accepted_quantity: order.accepted_quantity,
+            available_to_accept: order.available_to_accept,
+            progress_percent: order.progress_percent,
+            estimated_completion: order.estimated_completion.iso8601
+          }
+        end
+      end
+
+      def serialize_exploration(exploration)
+        {
+          id: exploration.id,
+          status: exploration.status,
+          unit_name: exploration.unit&.name,
+          quantity: exploration.quantity,
+          started_at: exploration.started_at,
+          finishes_at: exploration.finishes_at,
+          land_reward: exploration.resources_found&.dig('land') || 0,
+          gold_reward: exploration.resources_found&.dig('gold') || 0,
+          mana_reward: exploration.resources_found&.dig('mana') || 0,
+          potential_land: exploration.resources_found&.dig('potential_land'),
+          survivors: exploration.resources_found&.dig('survivors') || exploration.quantity
         }
       end
     end

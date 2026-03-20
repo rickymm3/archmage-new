@@ -12,6 +12,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
+import LoadingButton from "../components/LoadingButton";
 
 function formatCountdown(ms) {
   if (ms <= 0) return "Ready";
@@ -293,15 +294,14 @@ export default function RecruitScreen() {
                     {/* Actions */}
                     <View style={styles.actionRow}>
                       {hasReady ? (
-                        <TouchableOpacity
+                        <LoadingButton
                           style={styles.collectBtn}
                           onPress={() => handleCollect(order.id)}
-                          activeOpacity={0.7}
                         >
                           <Text style={styles.collectBtnText}>
                             Collect {prog.available} {prog.available === 1 ? "Unit" : "Units"}
                           </Text>
-                        </TouchableOpacity>
+                        </LoadingButton>
                       ) : (
                         <View style={styles.waitingPill}>
                           <Text style={styles.waitingText}>Recruiting...</Text>
@@ -319,10 +319,9 @@ export default function RecruitScreen() {
 
                 {/* ── IDLE: start button ── */}
                 {!isActive && (
-                  <TouchableOpacity
+                  <LoadingButton
                     style={[styles.startBtn, !canStart && styles.btnDisabled]}
-                    onPress={() => canStart && handleStart(u)}
-                    activeOpacity={canStart ? 0.7 : 1}
+                    onPress={() => handleStart(u)}
                     disabled={!canStart}
                   >
                     <Text style={styles.startBtnText}>
@@ -332,7 +331,7 @@ export default function RecruitScreen() {
                           ? "Not Enough Gold"
                           : `Start Recruiting  ·  ${(u.base_cost * 10).toLocaleString()} gold`}
                     </Text>
-                  </TouchableOpacity>
+                  </LoadingButton>
                 )}
               </View>
             </View>

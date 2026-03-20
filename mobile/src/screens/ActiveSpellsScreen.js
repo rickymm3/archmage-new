@@ -10,6 +10,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
+import LoadingButton from "../components/LoadingButton";
 
 export default function ActiveSpellsScreen() {
   const { showAlert } = useModal();
@@ -55,9 +56,9 @@ export default function ActiveSpellsScreen() {
             <Text style={styles.stack}>x{s.stack_count}</Text>
           </View>
           <Text style={styles.meta}>{s.spell_type} • Expires: {new Date(s.expires_at).toLocaleTimeString()}</Text>
-          <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancel(s.id)}>
+          <LoadingButton style={styles.cancelBtn} onPress={() => handleCancel(s.id)}>
             <Text style={styles.cancelText}>Dispel</Text>
-          </TouchableOpacity>
+          </LoadingButton>
         </View>
       ))}
 
@@ -70,9 +71,9 @@ export default function ActiveSpellsScreen() {
             <Text style={styles.name}>{s.spell_name}</Text>
             <Text style={styles.sustained}>Sustained</Text>
           </View>
-          <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancel(s.id, "sustained")}>
+          <LoadingButton style={styles.cancelBtn} onPress={() => handleCancel(s.id, "sustained")}>
             <Text style={styles.cancelText}>Deactivate</Text>
-          </TouchableOpacity>
+          </LoadingButton>
         </View>
       ))}
 

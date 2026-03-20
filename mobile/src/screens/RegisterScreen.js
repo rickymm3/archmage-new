@@ -5,11 +5,11 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   ScrollView,
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
+import { useModal } from "../context/ModalContext";
 
 const AFFINITIES = [
   { id: "pyromancer", name: "Pyromancer", color: "#e74c3c", emoji: "🔥" },
@@ -21,6 +21,7 @@ const AFFINITIES = [
 
 export default function RegisterScreen() {
   const { register } = useAuth();
+  const { showAlert } = useModal();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
