@@ -9,7 +9,8 @@ services:
     name: archmage
     runtime: docker
     plan: free
-    dockerCommand: ./bin/rails server -b 0.0.0.0 -p $PORT
+    preDeployCommand: ./bin/rails db:prepare
+    dockerCommand: bundle exec puma
     healthCheckPath: /up
     envVars:
       - key: DATABASE_URL
