@@ -690,8 +690,13 @@ namespace :game do
     checks = []
 
     # 1. Spell configurations working (non-zero magnitudes)
-    attack_spells = ActiveSpell.active.where("json_extract(metadata, '$.spell_type') = 'attack'")
-    defense_spells = ActiveSpell.active.where("json_extract(metadata, '$.spell_type') = 'defense'")
+    if ActiveRecord::Base.connection.adapter_name == "PostgreSQL"
+      attack_spells = ActiveSpell.active.where("metadata->>'spell_type' = 'attack'")
+      defense_spells = ActiveSpell.active.where("metadata->>'spell_type' = 'defense'")
+    else
+      attack_spells = ActiveSpell.active.where("json_extract(metadata, '$.spell_type') = 'attack'")
+      defense_spells = ActiveSpell.active.where("json_extract(metadata, '$.spell_type') = 'defense'")
+    end
     nonzero_attack = attack_spells.select { |as| as.metadata['magnitude'].to_f > 0 }
     nonzero_defense = defense_spells.select { |as| as.metadata['magnitude'].to_f > 0 }
 

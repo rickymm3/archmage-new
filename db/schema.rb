@@ -104,120 +104,14 @@ ActiveRecord::Schema[8.0].define(version: 2026_03_20_100002) do
     t.index ["user_id"], name: "index_sessions_on_user_id"
   end
 
-  create_table "spells", force: :cascade do |t|
-    t.string "name"
-    t.text "description"
-    t.integer "rank"
-    t.string "affinity"
-    t.integer "mana_cost"
-    t.integer "research_cost"
-    t.string "spell_type"
+  create_table "solid_cable_messages", force: :cascade do |t|
+    t.binary "channel", limit: 1024, null: false
+    t.binary "payload", limit: 536870912, null: false
     t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.json "configuration"
-    t.integer "rarity", default: 0
-  end
-
-  create_table "structures", force: :cascade do |t|
-    t.string "name"
-    t.string "slug"
-    t.text "description"
-    t.json "requirements"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.boolean "level_based", default: true
-    t.integer "max_level", default: 10
-    t.integer "land_cost", default: 1
-    t.integer "base_income_gold", default: 0
-    t.integer "base_income_mana", default: 0
-    t.json "production"
-  end
-
-  create_table "units", force: :cascade do |t|
-    t.string "name"
-    t.string "slug"
-    t.text "description"
-    t.json "requirements"
-    t.integer "upkeep_cost"
-    t.integer "attack"
-    t.integer "defense"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.boolean "recruitable", default: true
-    t.integer "rarity", default: 0
-    t.integer "mana_upkeep"
-    t.integer "power"
-    t.string "unit_type"
-    t.string "element"
-    t.integer "speed"
-    t.json "abilities"
-    t.index ["speed"], name: "index_units_on_speed"
-  end
-
-  create_table "user_spells", force: :cascade do |t|
-    t.integer "user_id", null: false
-    t.integer "spell_id", null: false
-    t.integer "research_progress"
-    t.boolean "learned"
-    t.boolean "active"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["spell_id"], name: "index_user_spells_on_spell_id"
-    t.index ["user_id"], name: "index_user_spells_on_user_id"
-  end
-
-  create_table "user_structures", force: :cascade do |t|
-    t.integer "user_id", null: false
-    t.integer "structure_id", null: false
-    t.integer "quantity"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.integer "level", default: 1
-    t.index ["structure_id"], name: "index_user_structures_on_structure_id"
-    t.index ["user_id"], name: "index_user_structures_on_user_id"
-  end
-
-  create_table "user_units", force: :cascade do |t|
-    t.integer "user_id", null: false
-    t.integer "unit_id", null: false
-    t.integer "quantity"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.integer "garrison", default: 0
-    t.integer "exploring", default: 0
-    t.integer "hero_id"
-    t.index ["hero_id"], name: "index_user_units_on_hero_id"
-    t.index ["unit_id"], name: "index_user_units_on_unit_id"
-    t.index ["user_id"], name: "index_user_units_on_user_id"
-  end
-
-  create_table "users", force: :cascade do |t|
-    t.string "email_address", null: false
-    t.string "password_digest", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.string "color"
-    t.integer "land", default: 10, null: false
-    t.datetime "protection_expires_at"
-    t.integer "gold"
-    t.integer "mana"
-    t.datetime "tax_cooldown"
-    t.float "morale", default: 100.0
-    t.datetime "morale_updated_at"
-    t.datetime "last_mana_recharge_at"
-    t.integer "active_attack_spell_id"
-    t.integer "active_defense_spell_id"
-    t.boolean "auto_reinforce", default: false
-    t.json "scouted_targets"
-    t.datetime "last_scouted_at"
-    t.string "username"
-    t.string "auth_token"
-    t.string "kingdom_name", limit: 15
-    t.index ["auth_token"], name: "index_users_on_auth_token", unique: true
-    t.index ["color"], name: "index_users_on_color"
-    t.index ["email_address"], name: "index_users_on_email_address", unique: true
-    t.index ["kingdom_name"], name: "index_users_on_kingdom_name", unique: true
-    t.index ["username"], name: "index_users_on_username"
+    t.integer "channel_hash", limit: 8, null: false
+    t.index ["channel"], name: "index_solid_cable_messages_on_channel"
+    t.index ["channel_hash"], name: "index_solid_cable_messages_on_channel_hash"
+    t.index ["created_at"], name: "index_solid_cable_messages_on_created_at"
   end
 
   create_table "solid_cache_entries", force: :cascade do |t|
@@ -229,16 +123,6 @@ ActiveRecord::Schema[8.0].define(version: 2026_03_20_100002) do
     t.index ["byte_size"], name: "index_solid_cache_entries_on_byte_size"
     t.index ["key_hash", "byte_size"], name: "index_solid_cache_entries_on_key_hash_and_byte_size"
     t.index ["key_hash"], name: "index_solid_cache_entries_on_key_hash", unique: true
-  end
-
-  create_table "solid_cable_messages", force: :cascade do |t|
-    t.binary "channel", limit: 1024, null: false
-    t.binary "payload", limit: 536870912, null: false
-    t.datetime "created_at", null: false
-    t.integer "channel_hash", limit: 8, null: false
-    t.index ["channel"], name: "index_solid_cable_messages_on_channel"
-    t.index ["channel_hash"], name: "index_solid_cable_messages_on_channel_hash"
-    t.index ["created_at"], name: "index_solid_cable_messages_on_created_at"
   end
 
   create_table "solid_queue_blocked_executions", force: :cascade do |t|
@@ -362,6 +246,122 @@ ActiveRecord::Schema[8.0].define(version: 2026_03_20_100002) do
     t.index ["key"], name: "index_solid_queue_semaphores_on_key", unique: true
   end
 
+  create_table "spells", force: :cascade do |t|
+    t.string "name"
+    t.text "description"
+    t.integer "rank"
+    t.string "affinity"
+    t.integer "mana_cost"
+    t.integer "research_cost"
+    t.string "spell_type"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.json "configuration"
+    t.integer "rarity", default: 0
+  end
+
+  create_table "structures", force: :cascade do |t|
+    t.string "name"
+    t.string "slug"
+    t.text "description"
+    t.json "requirements"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.boolean "level_based", default: true
+    t.integer "max_level", default: 10
+    t.integer "land_cost", default: 1
+    t.integer "base_income_gold", default: 0
+    t.integer "base_income_mana", default: 0
+    t.json "production"
+  end
+
+  create_table "units", force: :cascade do |t|
+    t.string "name"
+    t.string "slug"
+    t.text "description"
+    t.json "requirements"
+    t.integer "upkeep_cost"
+    t.integer "attack"
+    t.integer "defense"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.boolean "recruitable", default: true
+    t.integer "rarity", default: 0
+    t.integer "mana_upkeep"
+    t.integer "power"
+    t.string "unit_type"
+    t.string "element"
+    t.integer "speed"
+    t.json "abilities"
+    t.index ["speed"], name: "index_units_on_speed"
+  end
+
+  create_table "user_spells", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.integer "spell_id", null: false
+    t.integer "research_progress"
+    t.boolean "learned"
+    t.boolean "active"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["spell_id"], name: "index_user_spells_on_spell_id"
+    t.index ["user_id"], name: "index_user_spells_on_user_id"
+  end
+
+  create_table "user_structures", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.integer "structure_id", null: false
+    t.integer "quantity"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.integer "level", default: 1
+    t.index ["structure_id"], name: "index_user_structures_on_structure_id"
+    t.index ["user_id"], name: "index_user_structures_on_user_id"
+  end
+
+  create_table "user_units", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.integer "unit_id", null: false
+    t.integer "quantity"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.integer "garrison", default: 0
+    t.integer "exploring", default: 0
+    t.integer "hero_id"
+    t.index ["hero_id"], name: "index_user_units_on_hero_id"
+    t.index ["unit_id"], name: "index_user_units_on_unit_id"
+    t.index ["user_id"], name: "index_user_units_on_user_id"
+  end
+
+  create_table "users", force: :cascade do |t|
+    t.string "email_address", null: false
+    t.string "password_digest", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.string "color"
+    t.integer "land", default: 10, null: false
+    t.datetime "protection_expires_at"
+    t.integer "gold"
+    t.integer "mana"
+    t.datetime "tax_cooldown"
+    t.float "morale", default: 100.0
+    t.datetime "morale_updated_at"
+    t.datetime "last_mana_recharge_at"
+    t.integer "active_attack_spell_id"
+    t.integer "active_defense_spell_id"
+    t.boolean "auto_reinforce", default: false
+    t.json "scouted_targets"
+    t.datetime "last_scouted_at"
+    t.string "username"
+    t.string "auth_token"
+    t.string "kingdom_name", limit: 15
+    t.index ["auth_token"], name: "index_users_on_auth_token", unique: true
+    t.index ["color"], name: "index_users_on_color"
+    t.index ["email_address"], name: "index_users_on_email_address", unique: true
+    t.index ["kingdom_name"], name: "index_users_on_kingdom_name", unique: true
+    t.index ["username"], name: "index_users_on_username"
+  end
+
   add_foreign_key "active_spells", "spells"
   add_foreign_key "active_spells", "users"
   add_foreign_key "bids", "market_listings"
@@ -373,16 +373,16 @@ ActiveRecord::Schema[8.0].define(version: 2026_03_20_100002) do
   add_foreign_key "recruitment_orders", "units"
   add_foreign_key "recruitment_orders", "users"
   add_foreign_key "sessions", "users"
-  add_foreign_key "user_spells", "spells"
-  add_foreign_key "user_spells", "users"
-  add_foreign_key "user_structures", "structures"
-  add_foreign_key "user_structures", "users"
-  add_foreign_key "user_units", "units"
-  add_foreign_key "user_units", "users"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_failed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_ready_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
+  add_foreign_key "user_spells", "spells"
+  add_foreign_key "user_spells", "users"
+  add_foreign_key "user_structures", "structures"
+  add_foreign_key "user_structures", "users"
+  add_foreign_key "user_units", "units"
+  add_foreign_key "user_units", "users"
 end

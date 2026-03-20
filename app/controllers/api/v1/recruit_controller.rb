@@ -11,7 +11,12 @@ module Api
       def index
         barracks_level = current_user.barracks_level
 
-        units = Unit.where(recruitable: true).order(Arel.sql("CAST(json_extract(requirements, '$.barracks_level') AS INTEGER) ASC"))
+        json_order = if ActiveRecord::Base.connection.adapter_name == "PostgreSQL"
+          Arel.sql("CAST(requirements->>'barracks_level' AS INTEGER) ASC")
+        else
+          Arel.sql("CAST(json_extract(requirements, '$.barracks_level') AS INTEGER) ASC")
+        end
+        units = Unit.where(recruitable: true).order(json_order)
         user_units = current_user.user_units.index_by(&:unit_id)
 
         recruit_bonus = calculate_recruit_bonus
