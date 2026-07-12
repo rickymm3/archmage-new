@@ -11,6 +11,9 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
+import { LoadingState, ArtPlaceholder, EmptyState } from "../components/ui";
+import { anyUnitImage, spellImage } from "../assets";
+import { colors } from "../theme";
 
 export default function MarketplaceScreen() {
   const { showAlert, showPrompt } = useModal();
@@ -51,7 +54,7 @@ export default function MarketplaceScreen() {
   }
 
   if (!data) {
-    return <View style={styles.container}><Text style={styles.loading}>Loading...</Text></View>;
+    return <View style={styles.container}><LoadingState /></View>;
   }
 
   return (
@@ -68,7 +71,7 @@ export default function MarketplaceScreen() {
             onPress={() => setFilter(f)}
           >
             <Text style={[styles.tabText, filter === f && styles.tabTextActive]}>
-              {f === "heroes" ? "Heroes" : "Items"}
+              {f === "heroes" ? "Heroes" : "Goods"}
             </Text>
           </TouchableOpacity>
         ))}
@@ -95,7 +98,14 @@ export default function MarketplaceScreen() {
       {data.listings.map((l) => (
         <View key={l.id} style={styles.card}>
           <View style={styles.listingHeader}>
-            <View>
+            <ArtPlaceholder
+              emoji={filter === "heroes" ? "🦸" : l.item_type === "Spell" ? "📜" : "⚔️"}
+              label={null}
+              size={44}
+              source={l.item_type === "Spell" ? spellImage(l.item?.affinity) : anyUnitImage(l.item?.slug)}
+              style={{ marginRight: 10 }}
+            />
+            <View style={{ flex: 1 }}>
               <Text style={styles.itemName}>{l.item?.name}</Text>
               <Text style={styles.itemType}>{l.item_type}{l.quantity > 1 ? ` x${l.quantity}` : ""}</Text>
             </View>
@@ -113,43 +123,43 @@ export default function MarketplaceScreen() {
       ))}
 
       {data.listings.length === 0 && (
-        <Text style={styles.emptyText}>No listings available</Text>
+        <EmptyState icon="🏪" title="No listings available" subtitle="The market restocks over time — check back soon." />
       )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
-  loading: { color: "#666", textAlign: "center", marginTop: 60 },
-  tabs: { flexDirection: "row", backgroundColor: "#1a1a2e", borderBottomWidth: 1, borderBottomColor: "#2a2a4a" },
+  container: { flex: 1, backgroundColor: colors.bg },
+  loading: { color: colors.faint, textAlign: "center", marginTop: 60 },
+  tabs: { flexDirection: "row", backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border },
   tab: { flex: 1, paddingVertical: 14, alignItems: "center" },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: "#7c5cbf" },
-  tabText: { color: "#888", fontSize: 14, fontWeight: "600" },
-  tabTextActive: { color: "#7c5cbf" },
-  goldDisplay: { color: "#f1c40f", textAlign: "center", padding: 10, fontSize: 14 },
+  tabActive: { borderBottomWidth: 2, borderBottomColor: colors.accent },
+  tabText: { color: colors.muted, fontSize: 14, fontWeight: "600" },
+  tabTextActive: { color: colors.accent },
+  goldDisplay: { color: colors.gold, textAlign: "center", padding: 10, fontSize: 14 },
   section: { marginBottom: 8 },
-  sectionTitle: { color: "#7c5cbf", fontSize: 16, fontWeight: "600", paddingHorizontal: 14, paddingVertical: 8 },
+  sectionTitle: { color: colors.accent, fontSize: 16, fontWeight: "600", paddingHorizontal: 14, paddingVertical: 8 },
   card: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     marginHorizontal: 12,
     marginBottom: 8,
     padding: 14,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
   listingHeader: { flexDirection: "row", justifyContent: "space-between" },
-  itemName: { color: "#e0e0e0", fontSize: 16, fontWeight: "600" },
-  itemType: { color: "#888", fontSize: 12, marginTop: 2 },
+  itemName: { color: colors.text, fontSize: 16, fontWeight: "600" },
+  itemType: { color: colors.muted, fontSize: 12, marginTop: 2 },
   priceCol: { alignItems: "flex-end" },
-  price: { color: "#f1c40f", fontSize: 16, fontWeight: "bold" },
-  minBid: { color: "#999", fontSize: 11 },
-  bidder: { color: "#3498db", fontSize: 12, marginTop: 4 },
-  expires: { color: "#888", fontSize: 12, marginTop: 4 },
-  bidButton: { backgroundColor: "#7c5cbf", paddingVertical: 8, borderRadius: 6, alignItems: "center", marginTop: 10 },
-  bidText: { color: "#fff", fontWeight: "600" },
-  collectButton: { backgroundColor: "#2ecc71", paddingVertical: 8, borderRadius: 6, alignItems: "center", marginTop: 8 },
-  collectText: { color: "#fff", fontWeight: "600" },
-  emptyText: { color: "#666", textAlign: "center", padding: 24 },
+  price: { color: colors.gold, fontSize: 16, fontWeight: "bold" },
+  minBid: { color: colors.muted, fontSize: 11 },
+  bidder: { color: colors.info, fontSize: 12, marginTop: 4 },
+  expires: { color: colors.muted, fontSize: 12, marginTop: 4 },
+  bidButton: { backgroundColor: colors.accent, paddingVertical: 8, borderRadius: 6, alignItems: "center", marginTop: 10 },
+  bidText: { color: colors.white, fontWeight: "600" },
+  collectButton: { backgroundColor: colors.success, paddingVertical: 8, borderRadius: 6, alignItems: "center", marginTop: 8 },
+  collectText: { color: colors.white, fontWeight: "600" },
+  emptyText: { color: colors.faint, textAlign: "center", padding: 24 },
 });

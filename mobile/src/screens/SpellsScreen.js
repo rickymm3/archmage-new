@@ -12,16 +12,19 @@ import Slider from "@react-native-community/slider";
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
+import { ArtPlaceholder } from "../components/ui";
+import { spellImage } from "../assets";
 import { useAuth } from "../context/AuthContext";
 import LoadingButton from "../components/LoadingButton";
+import { colors } from "../theme";
 
 const AFFINITY_META = {
-  general: { name: "General", emoji: "📜", color: "#aaa" },
-  pyromancer: { name: "Pyromancer", emoji: "🔥", color: "#e74c3c" },
-  mindweaver: { name: "Mindweaver", emoji: "🧠", color: "#3498db" },
-  geomancer: { name: "Geomancer", emoji: "🌿", color: "#2ecc71" },
-  tempest: { name: "Tempest", emoji: "⚡", color: "#f1c40f" },
-  voidwalker: { name: "Voidwalker", emoji: "🌑", color: "#95a5a6" },
+  general: { name: "General", emoji: "📜", color: colors.textDim },
+  pyromancer: { name: "Pyromancer", emoji: "🔥", color: colors.danger },
+  mindweaver: { name: "Mindweaver", emoji: "🧠", color: colors.info },
+  geomancer: { name: "Geomancer", emoji: "🌿", color: colors.success },
+  tempest: { name: "Tempest", emoji: "⚡", color: colors.gold },
+  voidwalker: { name: "Voidwalker", emoji: "🌑", color: colors.muted },
 };
 
 const SPELL_TYPE_META = {
@@ -188,7 +191,7 @@ export default function SpellsScreen() {
     const activeSpell = currentResearch || nextToResearch;
     const learnedSpells = spells.filter((s) => s.learned);
     const lockedSpells = spells.filter((s) => !s.learned && s !== activeSpell);
-    const affMeta = AFFINITY_META[selectedAffinity] || { name: selectedAffinity, emoji: "✨", color: "#888" };
+    const affMeta = AFFINITY_META[selectedAffinity] || { name: selectedAffinity, emoji: "✨", color: colors.muted };
     const isNative = selectedAffinity === userAff || selectedAffinity === "general";
 
     return (
@@ -198,7 +201,7 @@ export default function SpellsScreen() {
         {/* Affinity Selector */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.affinityBar} contentContainerStyle={styles.affinityBarContent}>
           {affinityKeys.map((aff) => {
-            const meta = AFFINITY_META[aff] || { name: aff, emoji: "✨", color: "#888" };
+            const meta = AFFINITY_META[aff] || { name: aff, emoji: "✨", color: colors.muted };
             const isSelected = selectedAffinity === aff;
             const isUserAff = aff === userAff;
             return (
@@ -333,7 +336,7 @@ export default function SpellsScreen() {
     // Default to first available affinity if current selection has no castable spells
     const effectiveAffinity = affinityKeys.includes(selectedAffinity) ? selectedAffinity : affinityKeys[0];
     const spells = grouped[effectiveAffinity] || [];
-    const affMeta = AFFINITY_META[effectiveAffinity] || { name: effectiveAffinity, emoji: "✨", color: "#888" };
+    const affMeta = AFFINITY_META[effectiveAffinity] || { name: effectiveAffinity, emoji: "✨", color: colors.muted };
 
     return (
       <>
@@ -342,7 +345,7 @@ export default function SpellsScreen() {
         {/* Affinity Selector */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.affinityBar} contentContainerStyle={styles.affinityBarContent}>
           {affinityKeys.map((aff) => {
-            const meta = AFFINITY_META[aff] || { name: aff, emoji: "✨", color: "#888" };
+            const meta = AFFINITY_META[aff] || { name: aff, emoji: "✨", color: colors.muted };
             const isSelected = effectiveAffinity === aff;
             const isUserAff = aff === userAff;
             const count = grouped[aff]?.length || 0;
@@ -506,9 +509,9 @@ export default function SpellsScreen() {
                 step={1}
                 value={sliderValue}
                 onValueChange={setSliderValue}
-                minimumTrackTintColor="#7c5cbf"
-                maximumTrackTintColor="#2a2a4a"
-                thumbTintColor="#7c5cbf"
+                minimumTrackTintColor={colors.accent}
+                maximumTrackTintColor={colors.border}
+                thumbTintColor={colors.accent}
               />
               <View style={styles.sliderLabels}>
                 <Text style={styles.sliderLabel}>0</Text>
@@ -555,9 +558,9 @@ export default function SpellsScreen() {
                 step={1}
                 value={castSliderValue}
                 onValueChange={setCastSliderValue}
-                minimumTrackTintColor="#3498db"
-                maximumTrackTintColor="#2a2a4a"
-                thumbTintColor="#3498db"
+                minimumTrackTintColor={colors.info}
+                maximumTrackTintColor={colors.border}
+                thumbTintColor={colors.info}
               />
               <View style={styles.sliderLabels}>
                 <Text style={styles.sliderLabel}>{castModal.minCost}</Text>
@@ -584,7 +587,7 @@ export default function SpellsScreen() {
                   <Text style={styles.modalCancelTxt}>Cancel</Text>
                 </TouchableOpacity>
                 <LoadingButton
-                  style={[styles.modalConfirmBtn, { backgroundColor: "#3498db" }]}
+                  style={[styles.modalConfirmBtn, { backgroundColor: colors.info }]}
                   onPress={confirmCast}
                 >
                   <Text style={styles.modalConfirmTxt}>Cast</Text>
@@ -600,8 +603,9 @@ export default function SpellsScreen() {
         <Modal transparent visible animationType="fade" onRequestClose={() => setInfoSpell(null)}>
           <View style={styles.modalOverlay}>
             <View style={styles.modalCard}>
+              <ArtPlaceholder emoji="📜" label="Spell art" aspect={2.4} source={spellImage(infoSpell.affinity)} style={{ marginBottom: 12 }} />
               <Text style={styles.modalTitle}>{infoSpell.name}</Text>
-              <Text style={[styles.infoAffinity, { color: (AFFINITY_META[infoSpell.affinity] || {}).color || "#888" }]}>
+              <Text style={[styles.infoAffinity, { color: (AFFINITY_META[infoSpell.affinity] || {}).color || colors.muted }]}>
                 {(AFFINITY_META[infoSpell.affinity] || {}).emoji} {(AFFINITY_META[infoSpell.affinity] || {}).name} • Rank {infoSpell.rank}
               </Text>
               <Text style={styles.infoDescription}>{infoSpell.description}</Text>
@@ -622,16 +626,16 @@ export default function SpellsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
-  tabs: { flexDirection: "row", backgroundColor: "#1a1a2e", borderBottomWidth: 1, borderBottomColor: "#2a2a4a" },
+  container: { flex: 1, backgroundColor: colors.bg },
+  tabs: { flexDirection: "row", backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border },
   tab: { flex: 1, paddingVertical: 14, alignItems: "center" },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: "#7c5cbf" },
-  tabText: { color: "#888", fontSize: 14, fontWeight: "600" },
-  tabTextActive: { color: "#7c5cbf" },
-  manaDisplay: { color: "#7c5cbf", textAlign: "center", padding: 12, fontSize: 14 },
+  tabActive: { borderBottomWidth: 2, borderBottomColor: colors.accent },
+  tabText: { color: colors.muted, fontSize: 14, fontWeight: "600" },
+  tabTextActive: { color: colors.accent },
+  manaDisplay: { color: colors.accent, textAlign: "center", padding: 12, fontSize: 14 },
 
   // Affinity bar
-  affinityBar: { maxHeight: 54, borderBottomWidth: 1, borderBottomColor: "#2a2a4a" },
+  affinityBar: { maxHeight: 54, borderBottomWidth: 1, borderBottomColor: colors.border },
   affinityBarContent: { paddingHorizontal: 8, paddingVertical: 8, gap: 8 },
   affinityChip: {
     flexDirection: "row",
@@ -640,14 +644,14 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1.5,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
     gap: 4,
   },
   affinityEmoji: { fontSize: 14 },
-  affinityName: { color: "#888", fontSize: 13, fontWeight: "600" },
+  affinityName: { color: colors.muted, fontSize: 13, fontWeight: "600" },
   nativeDot: { width: 6, height: 6, borderRadius: 3, marginLeft: 2 },
-  castCount: { color: "#666", fontSize: 11, fontWeight: "bold", marginLeft: 2 },
-  foreignNote: { color: "#888", fontSize: 12, textAlign: "center", paddingVertical: 6, fontStyle: "italic" },
+  castCount: { color: colors.faint, fontSize: 11, fontWeight: "bold", marginLeft: 2 },
+  foreignNote: { color: colors.muted, fontSize: 12, textAlign: "center", paddingVertical: 6, fontStyle: "italic" },
 
   // Spell type group headers
   typeHeader: {
@@ -660,49 +664,49 @@ const styles = StyleSheet.create({
   },
   typeEmoji: { fontSize: 13 },
   typeLabel: {
-    color: "#888",
+    color: colors.muted,
     fontSize: 12,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 1,
   },
-  typeLine: { flex: 1, height: 1, backgroundColor: "#2a2a4a", marginLeft: 6 },
+  typeLine: { flex: 1, height: 1, backgroundColor: colors.border, marginLeft: 6 },
 
   // Active research card
   activeResearchCard: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     margin: 12,
     padding: 16,
     borderRadius: 12,
     borderWidth: 1.5,
   },
   activeResearchHeader: { flexDirection: "row", alignItems: "flex-start" },
-  activeResearchLabel: { color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 1 },
+  activeResearchLabel: { color: colors.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 1 },
   activeResearchName: { fontSize: 20, fontWeight: "bold", marginTop: 2 },
   infoBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 8,
   },
-  infoBtnText: { color: "#888", fontSize: 18 },
+  infoBtnText: { color: colors.muted, fontSize: 18 },
   activeResearchProgress: { marginTop: 12 },
-  activeProgressText: { color: "#888", fontSize: 12, marginBottom: 6 },
+  activeProgressText: { color: colors.muted, fontSize: 12, marginBottom: 6 },
   researchBtn: { paddingVertical: 10, borderRadius: 8, alignItems: "center", marginTop: 12 },
-  researchBtnText: { color: "#fff", fontWeight: "bold", fontSize: 15 },
+  researchBtnText: { color: colors.white, fontWeight: "bold", fontSize: 15 },
 
   // Completed
   completedCard: { margin: 12, padding: 24, alignItems: "center" },
   completedEmoji: { fontSize: 32, marginBottom: 8 },
-  completedText: { color: "#2ecc71", fontSize: 15, fontWeight: "600" },
+  completedText: { color: colors.success, fontSize: 15, fontWeight: "600" },
 
   // Section titles
   sectionTitle: {
-    color: "#888",
+    color: colors.muted,
     fontSize: 12,
     fontWeight: "600",
     textTransform: "uppercase",
@@ -714,66 +718,66 @@ const styles = StyleSheet.create({
 
   // Learned cards
   learnedCard: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     marginHorizontal: 12,
     marginBottom: 6,
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
   learnedRow: { flexDirection: "row", alignItems: "center" },
-  learnedName: { color: "#e0e0e0", fontSize: 15, fontWeight: "600" },
-  learnedMeta: { color: "#666", fontSize: 11, marginTop: 2 },
-  learnedCheck: { color: "#2ecc71", fontSize: 18, fontWeight: "bold" },
+  learnedName: { color: colors.text, fontSize: 15, fontWeight: "600" },
+  learnedMeta: { color: colors.faint, fontSize: 11, marginTop: 2 },
+  learnedCheck: { color: colors.success, fontSize: 18, fontWeight: "bold" },
 
   // Locked cards
   lockedCard: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     marginHorizontal: 12,
     marginBottom: 6,
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
-  lockedName: { color: "#666", fontSize: 15, fontWeight: "600" },
+  lockedName: { color: colors.faint, fontSize: 15, fontWeight: "600" },
   lockedIcon: { fontSize: 16 },
 
   // Shared card styles for cast/active tabs
   card: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     marginHorizontal: 12,
     marginBottom: 8,
     padding: 14,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
   spellHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   spellHeaderRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  spellName: { color: "#e0e0e0", fontSize: 16, fontWeight: "600", flex: 1 },
-  meta: { color: "#888", fontSize: 12, marginTop: 4 },
-  manaCost: { color: "#3498db", fontSize: 13 },
+  spellName: { color: colors.text, fontSize: 16, fontWeight: "600", flex: 1 },
+  meta: { color: colors.muted, fontSize: 12, marginTop: 4 },
+  manaCost: { color: colors.info, fontSize: 13 },
   infoBtnSmall: {
     width: 26,
     height: 26,
     borderRadius: 13,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
-  infoBtnSmallText: { color: "#888", fontSize: 15 },
-  progressBarBg: { height: 4, backgroundColor: "#333", borderRadius: 2, marginTop: 8 },
-  progressBarFill: { height: 4, backgroundColor: "#7c5cbf", borderRadius: 2 },
-  castButton: { backgroundColor: "#3498db", paddingVertical: 8, borderRadius: 6, alignItems: "center", marginTop: 10 },
-  actionText: { color: "#fff", fontWeight: "600", fontSize: 14 },
-  stackCount: { color: "#7c5cbf", fontSize: 16, fontWeight: "bold" },
-  sustainedBadge: { color: "#2ecc71", fontSize: 12 },
-  cancelButton: { borderWidth: 1, borderColor: "#e74c3c", paddingVertical: 6, borderRadius: 6, alignItems: "center", marginTop: 10 },
-  cancelText: { color: "#e74c3c", fontSize: 13 },
-  emptyText: { color: "#666", textAlign: "center", padding: 24, fontSize: 14 },
+  infoBtnSmallText: { color: colors.muted, fontSize: 15 },
+  progressBarBg: { height: 4, backgroundColor: colors.border, borderRadius: 2, marginTop: 8 },
+  progressBarFill: { height: 4, backgroundColor: colors.accent, borderRadius: 2 },
+  castButton: { backgroundColor: colors.info, paddingVertical: 8, borderRadius: 6, alignItems: "center", marginTop: 10 },
+  actionText: { color: colors.white, fontWeight: "600", fontSize: 14 },
+  stackCount: { color: colors.accent, fontSize: 16, fontWeight: "bold" },
+  sustainedBadge: { color: colors.success, fontSize: 12 },
+  cancelButton: { borderWidth: 1, borderColor: colors.danger, paddingVertical: 6, borderRadius: 6, alignItems: "center", marginTop: 10 },
+  cancelText: { color: colors.danger, fontSize: 13 },
+  emptyText: { color: colors.faint, textAlign: "center", padding: 24, fontSize: 14 },
 
   // Slider modal styles
   modalOverlay: {
@@ -786,42 +790,42 @@ const styles = StyleSheet.create({
   modalCard: {
     width: "100%",
     maxWidth: 320,
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2a2a40",
+    borderColor: colors.border,
     padding: 20,
   },
   modalTitle: {
     fontSize: 17,
     fontWeight: "700",
-    color: "#f1c40f",
+    color: colors.gold,
     marginBottom: 4,
     textAlign: "center",
   },
   modalSpellName: {
     fontSize: 15,
-    color: "#e0e0e0",
+    color: colors.text,
     textAlign: "center",
     marginBottom: 12,
   },
   manaAvailable: {
-    color: "#7c5cbf",
+    color: colors.accent,
     fontSize: 13,
     textAlign: "center",
     marginBottom: 12,
   },
   manaProgress: { marginBottom: 16 },
   manaProgressText: {
-    color: "#888",
+    color: colors.muted,
     fontSize: 13,
     textAlign: "center",
     marginBottom: 6,
   },
-  manaProgressBarBg: { height: 6, backgroundColor: "#333", borderRadius: 3 },
-  manaProgressBarFill: { height: 6, backgroundColor: "#7c5cbf", borderRadius: 3 },
+  manaProgressBarBg: { height: 6, backgroundColor: colors.border, borderRadius: 3 },
+  manaProgressBarFill: { height: 6, backgroundColor: colors.accent, borderRadius: 3 },
   investLabel: {
-    color: "#e0e0e0",
+    color: colors.text,
     fontSize: 20,
     fontWeight: "bold",
     textAlign: "center",
@@ -834,9 +838,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  sliderLabel: { color: "#666", fontSize: 12 },
+  sliderLabel: { color: colors.faint, fontSize: 12 },
   learnNote: {
-    color: "#2ecc71",
+    color: colors.success,
     fontSize: 12,
     textAlign: "center",
     marginBottom: 8,
@@ -847,43 +851,43 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: "#2a2a40",
+    backgroundColor: colors.border,
     alignItems: "center",
   },
-  modalCancelTxt: { color: "#aaa", fontWeight: "600", fontSize: 14 },
+  modalCancelTxt: { color: colors.textDim, fontWeight: "600", fontSize: 14 },
   modalConfirmBtn: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: "#7c5cbf",
+    backgroundColor: colors.accent,
     alignItems: "center",
   },
-  modalConfirmTxt: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  modalConfirmTxt: { color: colors.white, fontWeight: "700", fontSize: 14 },
 
   // Info modal styles
   infoAffinity: { fontSize: 13, textAlign: "center", marginBottom: 12 },
-  infoDescription: { color: "#ccc", fontSize: 14, lineHeight: 20, textAlign: "center", marginBottom: 12 },
-  infoDivider: { height: 1, backgroundColor: "#2a2a4a", marginBottom: 12 },
-  infoDetail: { color: "#888", fontSize: 13, marginBottom: 4 },
+  infoDescription: { color: colors.textDim, fontSize: 14, lineHeight: 20, textAlign: "center", marginBottom: 12 },
+  infoDivider: { height: 1, backgroundColor: colors.border, marginBottom: 12 },
+  infoDetail: { color: colors.muted, fontSize: 13, marginBottom: 4 },
   infoCloseBtn: {
     marginTop: 12,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: "#2a2a40",
+    backgroundColor: colors.border,
     alignItems: "center",
   },
-  infoCloseTxt: { color: "#aaa", fontWeight: "600", fontSize: 14 },
+  infoCloseTxt: { color: colors.textDim, fontWeight: "600", fontSize: 14 },
 
   // Cast modal styles
-  castModalDesc: { color: "#888", fontSize: 12, textAlign: "center", marginBottom: 12, lineHeight: 18 },
+  castModalDesc: { color: colors.muted, fontSize: 12, textAlign: "center", marginBottom: 12, lineHeight: 18 },
   effectPreview: {
-    backgroundColor: "#0f0f1a",
+    backgroundColor: colors.bg,
     borderRadius: 8,
     padding: 10,
     marginBottom: 8,
     alignItems: "center",
   },
-  effectPreviewLabel: { color: "#666", fontSize: 11, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 },
-  effectPreviewValue: { color: "#3498db", fontSize: 18, fontWeight: "bold" },
-  effectPreviewBonus: { color: "#666", fontSize: 11, marginTop: 4 },
+  effectPreviewLabel: { color: colors.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 },
+  effectPreviewValue: { color: colors.info, fontSize: 18, fontWeight: "bold" },
+  effectPreviewBonus: { color: colors.faint, fontSize: 11, marginTop: 4 },
 });

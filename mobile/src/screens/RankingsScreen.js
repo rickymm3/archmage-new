@@ -8,6 +8,8 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
+import { LoadingState } from "../components/ui";
+import { colors } from "../theme";
 
 export default function RankingsScreen() {
   const [data, setData] = useState(null);
@@ -24,7 +26,7 @@ export default function RankingsScreen() {
   useFocusEffect(useCallback(() => { loadData(); }, []));
 
   if (!data) {
-    return <View style={styles.container}><Text style={styles.loading}>Loading...</Text></View>;
+    return <View style={styles.container}><LoadingState /></View>;
   }
 
   return (
@@ -58,29 +60,29 @@ export default function RankingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
-  loading: { color: "#666", textAlign: "center", marginTop: 60 },
+  container: { flex: 1, backgroundColor: colors.bg },
+  loading: { color: colors.faint, textAlign: "center", marginTop: 60 },
   headerRow: {
     flexDirection: "row",
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: "#2a2a4a",
+    borderBottomColor: colors.border,
   },
-  headerCol: { color: "#888", fontSize: 12, fontWeight: "bold" },
+  headerCol: { color: colors.muted, fontSize: 12, fontWeight: "bold" },
   row: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#1a1a2e",
+    borderBottomColor: colors.card,
   },
-  rank: { color: "#888", fontSize: 16, fontWeight: "bold", width: 30 },
-  topRank: { color: "#f1c40f" },
-  username: { color: "#e0e0e0", fontSize: 15, fontWeight: "600" },
-  affinity: { color: "#7c5cbf", fontSize: 11, marginTop: 1 },
-  power: { color: "#e0e0e0", fontSize: 14, width: 70, textAlign: "right" },
-  land: { color: "#999", fontSize: 14, width: 50, textAlign: "right" },
+  rank: { color: colors.muted, fontSize: 16, fontWeight: "bold", width: 30 },
+  topRank: { color: colors.gold },
+  username: { color: colors.text, fontSize: 15, fontWeight: "600" },
+  affinity: { color: colors.accent, fontSize: 11, marginTop: 1 },
+  power: { color: colors.text, fontSize: 14, width: 70, textAlign: "right" },
+  land: { color: colors.muted, fontSize: 14, width: 50, textAlign: "right" },
 });

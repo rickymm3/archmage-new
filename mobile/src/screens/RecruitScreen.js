@@ -7,12 +7,24 @@ import {
   StyleSheet,
   RefreshControl,
   Animated,
-  Alert,
+  Modal,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
+import { LoadingState, ArtPlaceholder } from "../components/ui";
+import { unitImage } from "../assets";
+import { colors, alpha } from "../theme";
+
+// Recruitment tiers: how much gold to invest in one order. Bigger batches
+// cost proportionally more and yield proportionally more soldiers.
+const TIERS = [
+  { key: "cautious",     label: "Cautious",     batch: "½× batch", desc: "Dip a toe in — small, cheap batch" },
+  { key: "standard",     label: "Standard",     batch: "1× batch", desc: "The usual muster" },
+  { key: "aggressive",   label: "Aggressive",   batch: "2× batch", desc: "Double investment, double soldiers" },
+  { key: "conscription", label: "Conscription", batch: "4× batch", desc: "Empty the villages — maximum muster" },
+];
 
 function formatCountdown(ms) {
   if (ms <= 0) return "Ready";
@@ -78,10 +90,11 @@ function PulsingStrip() {
 }
 
 export default function RecruitScreen() {
-  const { showAlert } = useModal();
+  const { showAlert, showConfirm } = useModal();
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [recruiting, setRecruiting] = useState(false);
+  const [tierModal, setTierModal] = useState(null); // unit whose tier is being picked
 
   const activeOrders = data?.active_orders || [];
 
@@ -103,12 +116,14 @@ export default function RecruitScreen() {
 
   useFocusEffect(useCallback(() => { loadData(); }, []));
 
-  // Start recruiting (standard tier, one tap)
-  async function handleStart(unit) {
+  // Tap "Recruit" → pick a tier (batch size), then start the order.
+  async function startWithTier(unit, tierKey) {
     if (recruiting) return;
+    setTierModal(null);
     setRecruiting(true);
     try {
-      await api.recruitUnits(unit.id, "standard");
+      const result = await api.recruitUnits(unit.id, tierKey);
+      showAlert("Muster Begun!", result.message);
       loadData();
     } catch (e) {
       showAlert("Can't Recruit", e.message);
@@ -129,31 +144,24 @@ export default function RecruitScreen() {
   }
 
   // Stop recruiting
-  function handleStop(orderId) {
-    Alert.alert(
+  async function handleStop(orderId) {
+    const confirmed = await showConfirm(
       "Stop Recruiting?",
       "Arrived units will be added to your army. 50% of remaining gold is refunded.",
-      [
-        { text: "Keep Going", style: "cancel" },
-        {
-          text: "Stop",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const result = await api.cancelRecruitOrder(orderId);
-              showAlert("Stopped", result.message);
-              loadData();
-            } catch (e) {
-              showAlert("Error", e.message);
-            }
-          },
-        },
-      ]
+      { confirmText: "Stop", destructive: true }
     );
+    if (!confirmed) return;
+    try {
+      const result = await api.cancelRecruitOrder(orderId);
+      showAlert("Stopped", result.message);
+      loadData();
+    } catch (e) {
+      showAlert("Error", e.message);
+    }
   }
 
   if (!data) {
-    return <View style={styles.container}><Text style={styles.loading}>Loading...</Text></View>;
+    return <View style={styles.container}><LoadingState /></View>;
   }
 
   // Map unitId → active order so state shows inline on the card
@@ -173,7 +181,7 @@ export default function RecruitScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={async () => { setRefreshing(true); await loadData(); setRefreshing(false); }}
-            tintColor="#f1c40f"
+            tintColor={colors.gold}
           />
         }
       >
@@ -185,7 +193,7 @@ export default function RecruitScreen() {
           </View>
           <View style={styles.headerCenter}>
             <Text style={styles.headerLabel}>Recruiting</Text>
-            <Text style={[styles.headerValue, { color: slotsFull ? "#e74c3c" : "#3498db" }]}>
+            <Text style={[styles.headerValue, { color: slotsFull ? colors.danger : colors.info }]}>
               {slotsUsed}/{slotsMax}
             </Text>
           </View>
@@ -215,7 +223,9 @@ export default function RecruitScreen() {
           const prog = isActive ? getOrderProgress(order) : null;
           const hasReady = prog && prog.available > 0;
           const allArrived = prog && prog.fraction >= 1.0;
-          const canStart = !isActive && !slotsFull && data.gold >= (u.base_cost * 10);
+          // Cheapest tier (cautious) gates the button; the picker shows the rest.
+          const cheapest = u.tier_costs?.cautious ?? (u.base_cost * 5);
+          const canStart = !isActive && !slotsFull && data.gold >= cheapest;
 
           return (
             <View key={u.id} style={[styles.unitCard, isActive && styles.unitCardActive]}>
@@ -225,6 +235,7 @@ export default function RecruitScreen() {
               <View style={styles.unitBody}>
                 {/* Name + status */}
                 <View style={styles.unitTop}>
+                  <ArtPlaceholder emoji="🪖" label={null} size={44} source={unitImage(u.slug)} style={{ marginRight: 10 }} />
                   <View style={styles.unitInfo}>
                     <View style={styles.unitNameRow}>
                       {isActive && <PulsingDot />}
@@ -317,21 +328,22 @@ export default function RecruitScreen() {
                   </View>
                 )}
 
-                {/* ── IDLE: start button ── */}
+                {/* ── IDLE: start button opens the tier picker ── */}
                 {!isActive && (
-                  <LoadingButton
+                  <TouchableOpacity
                     style={[styles.startBtn, !canStart && styles.btnDisabled]}
-                    onPress={() => handleStart(u)}
+                    onPress={() => setTierModal(u)}
                     disabled={!canStart}
+                    activeOpacity={0.8}
                   >
                     <Text style={styles.startBtnText}>
                       {slotsFull
                         ? "All Slots Full"
-                        : data.gold < (u.base_cost * 10)
-                          ? "Not Enough Gold"
-                          : `Start Recruiting  ·  ${(u.base_cost * 10).toLocaleString()} gold`}
+                        : data.gold < cheapest
+                          ? `Need 💰 ${cheapest.toLocaleString()}`
+                          : `📯 Recruit  ·  from ${cheapest.toLocaleString()} gold`}
                     </Text>
-                  </LoadingButton>
+                  </TouchableOpacity>
                 )}
               </View>
             </View>
@@ -378,49 +390,95 @@ export default function RecruitScreen() {
 
         <View style={{ height: 30 }} />
       </ScrollView>
+
+      {/* ── TIER PICKER ── */}
+      {tierModal && (
+        <Modal transparent visible animationType="slide" onRequestClose={() => setTierModal(null)}>
+          <View style={styles.tierOverlay}>
+            <View style={styles.tierSheet}>
+              <View style={styles.tierGrip} />
+              <Text style={styles.tierTitle}>Recruit {tierModal.name}</Text>
+              <Text style={styles.tierSub}>
+                💰 {data.gold?.toLocaleString()} available · bigger batches take the same time
+              </Text>
+
+              {TIERS.map((t) => {
+                const cost = tierModal.tier_costs?.[t.key] ?? 0;
+                const affordable = data.gold >= cost && cost > 0;
+                return (
+                  <TouchableOpacity
+                    key={t.key}
+                    style={[styles.tierOption, !affordable && styles.tierOptionDisabled]}
+                    onPress={() => startWithTier(tierModal, t.key)}
+                    disabled={!affordable || recruiting}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.tierNameRow}>
+                        <Text style={[styles.tierName, !affordable && styles.tierTextDisabled]}>{t.label}</Text>
+                        <View style={styles.tierBatchBadge}>
+                          <Text style={styles.tierBatchTxt}>{t.batch}</Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.tierDesc, !affordable && styles.tierTextDisabled]}>{t.desc}</Text>
+                    </View>
+                    <Text style={[styles.tierCost, !affordable && { color: colors.danger }]}>
+                      💰 {cost.toLocaleString()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+
+              <TouchableOpacity style={styles.tierCancel} onPress={() => setTierModal(null)}>
+                <Text style={styles.tierCancelTxt}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
-  loading: { color: "#666", textAlign: "center", marginTop: 60 },
+  container: { flex: 1, backgroundColor: colors.bg },
+  loading: { color: colors.faint, textAlign: "center", marginTop: 60 },
 
   // Header
   headerBar: {
     flexDirection: "row",
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: "#2a2a4a",
+    borderBottomColor: colors.border,
     padding: 14,
   },
   headerLeft: { flex: 1 },
   headerCenter: { flex: 1, alignItems: "center" },
   headerRight: { flex: 1, alignItems: "flex-end" },
   headerLabel: {
-    color: "#888",
+    color: colors.muted,
     fontSize: 11,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 1,
     marginBottom: 2,
   },
-  headerValue: { color: "#e0e0e0", fontSize: 18, fontWeight: "700" },
-  headerValueGold: { color: "#f1c40f", fontSize: 18, fontWeight: "700" },
+  headerValue: { color: colors.text, fontSize: 18, fontWeight: "700" },
+  headerValueGold: { color: colors.gold, fontSize: 18, fontWeight: "700" },
 
   bonusBanner: {
-    backgroundColor: "#1a2e1a",
+    backgroundColor: alpha(colors.success, "22"),
     marginHorizontal: 12,
     marginTop: 8,
     borderRadius: 8,
     padding: 10,
     borderWidth: 1,
-    borderColor: "#2ecc71",
+    borderColor: colors.success,
   },
-  bonusText: { color: "#2ecc71", fontSize: 13, fontWeight: "600", textAlign: "center" },
+  bonusText: { color: colors.success, fontSize: 13, fontWeight: "600", textAlign: "center" },
 
   sectionLabel: {
-    color: "#aaa",
+    color: colors.textDim,
     fontSize: 13,
     fontWeight: "600",
     textTransform: "uppercase",
@@ -429,7 +487,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 8,
   },
-  emptyText: { color: "#666", fontSize: 14, paddingHorizontal: 14, fontStyle: "italic" },
+  emptyText: { color: colors.faint, fontSize: 14, paddingHorizontal: 14, fontStyle: "italic" },
 
   // Unit card
   unitCard: {
@@ -437,13 +495,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
-    backgroundColor: "#1a1a2e",
+    borderColor: colors.border,
+    backgroundColor: colors.card,
     overflow: "hidden",
     flexDirection: "row",
   },
   unitCardActive: {
-    borderColor: "#2ecc71",
+    borderColor: colors.success,
   },
   unitCardLocked: { opacity: 0.4 },
   unitBody: { flex: 1, padding: 14 },
@@ -451,13 +509,13 @@ const styles = StyleSheet.create({
   // Pulsing indicators
   activeStrip: {
     flex: 1,
-    backgroundColor: "#2ecc71",
+    backgroundColor: colors.success,
   },
   pulsingDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#2ecc71",
+    backgroundColor: colors.success,
     marginRight: 8,
   },
 
@@ -472,20 +530,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  unitName: { color: "#e0e0e0", fontSize: 16, fontWeight: "700" },
-  unitType: { color: "#7c5cbf", fontSize: 12, fontWeight: "500", marginTop: 2 },
+  unitName: { color: colors.text, fontSize: 16, fontWeight: "700" },
+  unitType: { color: colors.accent, fontSize: 12, fontWeight: "500", marginTop: 2 },
   costBadge: {
     alignItems: "flex-end",
   },
   costBadgeLabel: {
-    color: "#888",
+    color: colors.muted,
     fontSize: 10,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   costBadgeValue: {
-    color: "#f1c40f",
+    color: colors.gold,
     fontSize: 16,
     fontWeight: "700",
   },
@@ -493,14 +551,14 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   investedLabel: {
-    color: "#888",
+    color: colors.muted,
     fontSize: 10,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   investedValue: {
-    color: "#f1c40f",
+    color: colors.gold,
     fontSize: 16,
     fontWeight: "700",
   },
@@ -509,32 +567,32 @@ const styles = StyleSheet.create({
   statRow: { flexDirection: "row", gap: 3, marginBottom: 10 },
   statItem: {
     flex: 1,
-    backgroundColor: "#12122a",
+    backgroundColor: colors.bg,
     borderRadius: 6,
     paddingVertical: 5,
     alignItems: "center",
   },
   statLabel: {
-    color: "#666",
+    color: colors.faint,
     fontSize: 9,
     fontWeight: "600",
     letterSpacing: 0.5,
     marginBottom: 1,
   },
-  statValue: { color: "#e0e0e0", fontSize: 14, fontWeight: "700" },
-  statValueWarn: { color: "#e74c3c", fontSize: 14, fontWeight: "700" },
-  textLocked: { color: "#666" },
+  statValue: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  statValueWarn: { color: colors.danger, fontSize: 14, fontWeight: "700" },
+  textLocked: { color: colors.faint },
   lockBadge: {
-    backgroundColor: "#2a2a4a",
+    backgroundColor: colors.border,
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  lockBadgeText: { color: "#888", fontSize: 12, fontWeight: "600" },
+  lockBadgeText: { color: colors.muted, fontSize: 12, fontWeight: "600" },
 
   // Active section (inside card)
   activeSection: {
-    backgroundColor: "#12122a",
+    backgroundColor: colors.bg,
     borderRadius: 8,
     padding: 12,
     marginTop: 2,
@@ -548,17 +606,17 @@ const styles = StyleSheet.create({
   progressBg: {
     flex: 1,
     height: 8,
-    backgroundColor: "#0a0a1a",
+    backgroundColor: colors.bg,
     borderRadius: 4,
     overflow: "hidden",
   },
   progressFill: {
     height: 8,
-    backgroundColor: "#2ecc71",
+    backgroundColor: colors.success,
     borderRadius: 4,
   },
   progressCount: {
-    color: "#2ecc71",
+    color: colors.success,
     fontSize: 14,
     fontWeight: "700",
     minWidth: 50,
@@ -568,12 +626,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   statusDone: {
-    color: "#2ecc71",
+    color: colors.success,
     fontSize: 13,
     fontWeight: "600",
   },
   statusTimer: {
-    color: "#888",
+    color: colors.muted,
     fontSize: 12,
   },
   actionRow: {
@@ -582,13 +640,13 @@ const styles = StyleSheet.create({
   },
   collectBtn: {
     flex: 1,
-    backgroundColor: "#2ecc71",
+    backgroundColor: colors.success,
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: "center",
   },
   collectBtnText: {
-    color: "#0f0f1a",
+    color: colors.bg,
     fontSize: 15,
     fontWeight: "800",
     letterSpacing: 0.5,
@@ -599,42 +657,93 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
   waitingText: {
-    color: "#666",
+    color: colors.faint,
     fontSize: 13,
     fontWeight: "600",
   },
   stopBtn: {
-    backgroundColor: "#2a2a4a",
+    backgroundColor: colors.border,
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 18,
     alignItems: "center",
   },
   stopBtnText: {
-    color: "#e74c3c",
+    color: colors.danger,
     fontSize: 13,
     fontWeight: "700",
   },
 
   // Start button (idle)
   startBtn: {
-    backgroundColor: "#1a2e1a",
+    backgroundColor: alpha(colors.success, "22"),
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#2ecc71",
+    borderColor: colors.success,
   },
   startBtnText: {
-    color: "#2ecc71",
+    color: colors.success,
     fontSize: 14,
     fontWeight: "700",
   },
   btnDisabled: {
     opacity: 0.3,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
+
+  /* tier picker (bottom sheet) */
+  tierOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "flex-end",
+  },
+  tierSheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    paddingBottom: 28,
+  },
+  tierGrip: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: 12,
+  },
+  tierTitle: { color: colors.text, fontSize: 18, fontWeight: "800", textAlign: "center" },
+  tierSub: { color: colors.muted, fontSize: 12, textAlign: "center", marginTop: 4, marginBottom: 14 },
+  tierOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.cardAlt,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 13,
+    marginBottom: 8,
+  },
+  tierOptionDisabled: { opacity: 0.5 },
+  tierNameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  tierName: { color: colors.text, fontSize: 15, fontWeight: "700" },
+  tierBatchBadge: {
+    backgroundColor: alpha(colors.accent, "33"),
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  tierBatchTxt: { color: colors.accent, fontSize: 10, fontWeight: "800" },
+  tierDesc: { color: colors.muted, fontSize: 11, marginTop: 3 },
+  tierCost: { color: colors.gold, fontSize: 14, fontWeight: "800", marginLeft: 10, fontVariant: ["tabular-nums"] },
+  tierTextDisabled: { color: colors.faint },
+  tierCancel: { alignItems: "center", paddingVertical: 12, marginTop: 2 },
+  tierCancelTxt: { color: colors.muted, fontSize: 14 },
 });

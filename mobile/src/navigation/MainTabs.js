@@ -22,6 +22,7 @@ import RankingsScreen from "../screens/RankingsScreen";
 import ActiveSpellsScreen from "../screens/ActiveSpellsScreen";
 import RecruitScreen from "../screens/RecruitScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+import { colors } from "../theme";
 
 const Tab = createBottomTabNavigator();
 const MoreStack = createNativeStackNavigator();
@@ -29,8 +30,8 @@ const ArmyStack = createNativeStackNavigator();
 const RootStack = createNativeStackNavigator();
 
 const screenOptions = {
-  headerStyle: { backgroundColor: "#1a1a2e" },
-  headerTintColor: "#e0e0e0",
+  headerStyle: { backgroundColor: colors.card },
+  headerTintColor: colors.text,
   headerTitleStyle: { fontWeight: "bold" },
 };
 
@@ -81,9 +82,9 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         ...screenOptions,
-        tabBarStyle: { backgroundColor: "#1a1a2e", borderTopColor: "#333" },
-        tabBarActiveTintColor: "#7c5cbf",
-        tabBarInactiveTintColor: "#888",
+        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border },
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.muted,
         tabBarIcon: ({ focused }) => <TabIcon label={route.name} focused={focused} />,
       })}
     >

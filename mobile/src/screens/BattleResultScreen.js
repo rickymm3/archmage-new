@@ -1,4 +1,7 @@
 import React, { useState } from "react";
+import { colors, alpha } from "../theme";
+import { ArtPlaceholder } from "../components/ui";
+import { ui as art } from "../assets";
 import {
   View,
   Text,
@@ -16,25 +19,32 @@ const TYPE_ICONS = {
   hero: "👑",
 };
 const ELEM_COLORS = {
-  fire: "#e74c3c",
-  water: "#3498db",
-  nature: "#2ecc71",
-  holy: "#f1c40f",
-  void: "#9b59b6",
-  physical: "#aaa",
+  fire: colors.danger,
+  water: colors.info,
+  nature: colors.success,
+  holy: colors.gold,
+  void: colors.arcane,
+  physical: colors.textDim,
 };
 
 export default function BattleResultScreen({ route, navigation }) {
-  const { result } = route.params;
+  // `viewer` is "attacker" (default, post-attack flow) or "defender"
+  // (viewing a battle report from a notification).
+  const { result, viewer = "attacker" } = route.params;
   const [logExpanded, setLogExpanded] = useState(true);
 
-  const isVictory = result.outcome === "attacker";
+  const isVictory = result.outcome === viewer;
   const landSeized = result.land_seized || 0;
+
+  const yourArmy = viewer === "attacker" ? result.attacker_army : result.defender_army;
+  const enemyArmy = viewer === "attacker" ? result.defender_army : result.attacker_army;
+  const yourLabel = viewer === "attacker" ? "⚔️  YOUR FORCES (ATTACKER)" : "🛡  YOUR FORCES (DEFENDER)";
+  const enemyLabel = viewer === "attacker" ? "🛡  ENEMY FORCES (DEFENDER)" : "⚔️  ENEMY FORCES (ATTACKER)";
 
   function renderStackCard(st, i, sideColor) {
     const pctLost = st.initial > 0 ? st.lost / st.initial : 0;
     const typeIcon = TYPE_ICONS[st.unit_type] || "⚔️";
-    const elemColor = ELEM_COLORS[st.element] || "#aaa";
+    const elemColor = ELEM_COLORS[st.element] || colors.textDim;
     const ehp = (st.defense * 2) + 10;
 
     return (
@@ -112,11 +122,11 @@ export default function BattleResultScreen({ route, navigation }) {
           </View>
           <View style={styles.totalItem}>
             <Text style={styles.totalLabel}>Survived</Text>
-            <Text style={[styles.totalValue, { color: "#2ecc71" }]}>{totalRemaining}</Text>
+            <Text style={[styles.totalValue, { color: colors.success }]}>{totalRemaining}</Text>
           </View>
           <View style={styles.totalItem}>
             <Text style={styles.totalLabel}>Casualties</Text>
-            <Text style={[styles.totalValue, { color: "#e74c3c" }]}>
+            <Text style={[styles.totalValue, { color: colors.danger }]}>
               {totalLost} ({totalSent > 0 ? Math.round((totalLost / totalSent) * 100) : 0}%)
             </Text>
           </View>
@@ -126,23 +136,23 @@ export default function BattleResultScreen({ route, navigation }) {
   }
 
   function colorForLogLine(line) {
-    if (line.includes("=== BATTLE")) return "#f1c40f";
-    if (line.includes("--- ROUND")) return "#3498db";
-    if (line.startsWith("[ATK]")) return "#5dade2";
-    if (line.startsWith("[DEF]")) return "#e07070";
-    if (line.includes("[ATK]") && line.includes("hits")) return "#5dade2";
-    if (line.includes("[DEF]") && line.includes("hits")) return "#e07070";
-    if (line.includes("[ATK]") && line.includes("counter-attacks")) return "#5dade2";
-    if (line.includes("[DEF]") && line.includes("counter-attacks")) return "#e07070";
+    if (line.includes("=== BATTLE")) return colors.gold;
+    if (line.includes("--- ROUND")) return colors.info;
+    if (line.startsWith("[ATK]")) return colors.info;
+    if (line.startsWith("[DEF]")) return colors.dangerSoft;
+    if (line.includes("[ATK]") && line.includes("hits")) return colors.info;
+    if (line.includes("[DEF]") && line.includes("hits")) return colors.dangerSoft;
+    if (line.includes("[ATK]") && line.includes("counter-attacks")) return colors.info;
+    if (line.includes("[DEF]") && line.includes("counter-attacks")) return colors.dangerSoft;
     if (line.includes("HERO STRIKE") || line.includes("VENGEANCE") || line.includes("ARCANE NOVA") || line.includes("DESPERATE VOLLEY"))
-      return "#e67e22";
-    if (line.includes("kills") || line.includes("slaying")) return "#cc6666";
-    if (line.includes("LEECH") || line.includes("recovering")) return "#2ecc71";
-    if (line.includes("SPLASH")) return "#9b59b6";
-    if (line.includes("Morale") || line.includes("⚠")) return "#f39c12";
-    if (line.includes("Winner")) return "#f1c40f";
-    if (line.includes("creates distance")) return "#888";
-    return "#777";
+      return colors.warning;
+    if (line.includes("kills") || line.includes("slaying")) return colors.dangerSoft;
+    if (line.includes("LEECH") || line.includes("recovering")) return colors.success;
+    if (line.includes("SPLASH")) return colors.arcane;
+    if (line.includes("Morale") || line.includes("⚠")) return colors.warning;
+    if (line.includes("Winner")) return colors.gold;
+    if (line.includes("creates distance")) return colors.muted;
+    return colors.faint;
   }
 
   function styleForLogLine(line) {
@@ -157,6 +167,13 @@ export default function BattleResultScreen({ route, navigation }) {
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
       {/* Outcome Banner */}
       <View style={[styles.banner, isVictory ? styles.victory : styles.defeat]}>
+        <ArtPlaceholder
+          emoji={isVictory ? "🏆" : "🥀"}
+          label={isVictory ? "Victory art" : "Defeat art"}
+          aspect={3}
+          source={isVictory ? art.bannerVictory : art.bannerDefeat}
+          style={{ marginBottom: 10 }}
+        />
         <Text style={styles.bannerEmoji}>{isVictory ? "⚔️" : "💀"}</Text>
         <Text style={styles.bannerTitle}>
           {isVictory ? "VICTORY" : "DEFEAT"}
@@ -171,17 +188,17 @@ export default function BattleResultScreen({ route, navigation }) {
       </View>
 
       {/* Army Summaries */}
-      {renderArmySummary("⚔️  YOUR FORCES (ATTACKER)", result.attacker_army, "#3498db")}
-      {renderArmySummary("🛡  ENEMY FORCES (DEFENDER)", result.defender_army, "#e74c3c")}
+      {renderArmySummary(yourLabel, yourArmy, colors.info)}
+      {renderArmySummary(enemyLabel, enemyArmy, colors.danger)}
 
       {/* Legend */}
       <View style={styles.legendRow}>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: "#5dade2" }]} />
+          <View style={[styles.legendDot, { backgroundColor: colors.info }]} />
           <Text style={styles.legendText}>Your actions</Text>
         </View>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: "#e07070" }]} />
+          <View style={[styles.legendDot, { backgroundColor: colors.dangerSoft }]} />
           <Text style={styles.legendText}>Enemy actions</Text>
         </View>
       </View>
@@ -225,64 +242,64 @@ export default function BattleResultScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
+  container: { flex: 1, backgroundColor: colors.bg },
   banner: { alignItems: "center", paddingVertical: 28, marginBottom: 4 },
-  victory: { backgroundColor: "#1a2e1a" },
-  defeat: { backgroundColor: "#2e1a1a" },
+  victory: { backgroundColor: alpha(colors.success, "22") },
+  defeat: { backgroundColor: alpha(colors.danger, "18") },
   bannerEmoji: { fontSize: 36 },
-  bannerTitle: { color: "#e0e0e0", fontSize: 28, fontWeight: "bold", letterSpacing: 3, marginTop: 4 },
-  bannerSub: { color: "#aaa", fontSize: 14, marginTop: 4 },
+  bannerTitle: { color: colors.text, fontSize: 28, fontWeight: "bold", letterSpacing: 3, marginTop: 4 },
+  bannerSub: { color: colors.textDim, fontSize: 14, marginTop: 4 },
 
-  armySection: { margin: 12, padding: 12, backgroundColor: "#1a1a2e", borderRadius: 10, borderWidth: 1 },
+  armySection: { margin: 12, padding: 12, backgroundColor: colors.card, borderRadius: 10, borderWidth: 1 },
   armyHeader: { marginBottom: 8 },
   armyLabel: { fontSize: 13, fontWeight: "700", letterSpacing: 1 },
-  armyName: { color: "#e0e0e0", fontSize: 16, fontWeight: "bold", marginTop: 2 },
+  armyName: { color: colors.text, fontSize: 16, fontWeight: "bold", marginTop: 2 },
 
   stackCard: {
-    backgroundColor: "#12122a",
+    backgroundColor: colors.bg,
     borderRadius: 8,
     padding: 10,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: "#2a2a4a33",
+    borderColor: alpha(colors.border, "33"),
   },
   stackTop: { flexDirection: "row", alignItems: "center" },
-  stackName: { color: "#e0e0e0", fontSize: 15, fontWeight: "600" },
+  stackName: { color: colors.text, fontSize: 15, fontWeight: "600" },
   elemBadge: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, borderWidth: 1 },
   elemText: { fontSize: 10, fontWeight: "600", textTransform: "capitalize" },
 
   statsRow: { flexDirection: "row", gap: 8, marginTop: 6, flexWrap: "wrap" },
-  statChip: { color: "#888", fontSize: 11 },
+  statChip: { color: colors.muted, fontSize: 11 },
 
   countsRow: { flexDirection: "row", alignItems: "center", marginTop: 8, gap: 8 },
   countBox: { alignItems: "center" },
-  countLabel: { color: "#666", fontSize: 10 },
-  countValue: { color: "#e0e0e0", fontSize: 16, fontWeight: "bold" },
-  countArrow: { color: "#555", fontSize: 16 },
-  survived: { color: "#2ecc71" },
-  wiped: { color: "#e74c3c" },
+  countLabel: { color: colors.faint, fontSize: 10 },
+  countValue: { color: colors.text, fontSize: 16, fontWeight: "bold" },
+  countArrow: { color: colors.faint, fontSize: 16 },
+  survived: { color: colors.success },
+  wiped: { color: colors.danger },
   lostBox: {
     marginLeft: "auto",
     alignItems: "center",
-    backgroundColor: "#e74c3c11",
+    backgroundColor: alpha(colors.danger, "11"),
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
   },
-  lostBoxHeavy: { backgroundColor: "#e74c3c22" },
-  lostLabel: { color: "#e74c3c88", fontSize: 10 },
-  lostValue: { color: "#e74c3c", fontSize: 13, fontWeight: "600" },
+  lostBoxHeavy: { backgroundColor: alpha(colors.danger, "22") },
+  lostLabel: { color: alpha(colors.danger, "88"), fontSize: 10 },
+  lostValue: { color: colors.danger, fontSize: 13, fontWeight: "600" },
 
   heroBanner: {
-    backgroundColor: "#f1c40f11",
+    backgroundColor: alpha(colors.gold, "11"),
     borderRadius: 6,
     padding: 6,
     marginTop: 6,
     borderLeftWidth: 3,
-    borderLeftColor: "#f1c40f",
+    borderLeftColor: colors.gold,
   },
-  heroBannerFallen: { borderLeftColor: "#e74c3c", backgroundColor: "#e74c3c11" },
-  heroBannerText: { color: "#f1c40f", fontSize: 11 },
+  heroBannerFallen: { borderLeftColor: colors.danger, backgroundColor: alpha(colors.danger, "11") },
+  heroBannerText: { color: colors.gold, fontSize: 11 },
 
   totalRow: {
     flexDirection: "row",
@@ -290,37 +307,37 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "#2a2a4a",
+    borderTopColor: colors.border,
   },
   totalItem: { alignItems: "center" },
-  totalLabel: { color: "#666", fontSize: 10 },
-  totalValue: { color: "#e0e0e0", fontSize: 14, fontWeight: "600" },
+  totalLabel: { color: colors.faint, fontSize: 10 },
+  totalValue: { color: colors.text, fontSize: 14, fontWeight: "600" },
 
   legendRow: { flexDirection: "row", justifyContent: "center", gap: 20, marginTop: 8, marginBottom: 4 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
   legendDot: { width: 10, height: 10, borderRadius: 5 },
-  legendText: { color: "#888", fontSize: 12 },
+  legendText: { color: colors.muted, fontSize: 12 },
 
   logToggle: {
     marginHorizontal: 12,
     marginTop: 8,
     padding: 12,
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     borderRadius: 8,
     alignItems: "center",
   },
-  logToggleText: { color: "#8888cc", fontSize: 14, fontWeight: "600" },
+  logToggleText: { color: colors.accentDim, fontSize: 14, fontWeight: "600" },
   logContainer: {
     marginHorizontal: 12,
     marginTop: 4,
     padding: 10,
-    backgroundColor: "#111122",
+    backgroundColor: colors.bg,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
   logLine: { fontSize: 11, fontFamily: "monospace", lineHeight: 17, marginVertical: 1 },
 
-  backButton: { margin: 12, marginTop: 16, backgroundColor: "#2a2a4a", paddingVertical: 14, borderRadius: 8, alignItems: "center" },
-  backText: { color: "#e0e0e0", fontSize: 15, fontWeight: "600" },
+  backButton: { margin: 12, marginTop: 16, backgroundColor: colors.border, paddingVertical: 14, borderRadius: 8, alignItems: "center" },
+  backText: { color: colors.text, fontSize: 15, fontWeight: "600" },
 });

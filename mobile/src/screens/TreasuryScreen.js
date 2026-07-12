@@ -11,6 +11,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
+import { LoadingState } from "../components/ui";
+import { colors, alpha } from "../theme";
 
 const TABS = [
   { key: "tax", label: "💰 Tax Collection" },
@@ -80,16 +82,16 @@ export default function TreasuryScreen() {
   if (!data) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loading}>Loading...</Text>
+        <LoadingState />
       </View>
     );
   }
 
   const tierColors = {
-    lenient: "#2ecc71",
-    standard: "#3498db",
-    heavy: "#f39c12",
-    extortion: "#e74c3c",
+    lenient: colors.success,
+    standard: colors.info,
+    heavy: colors.warning,
+    extortion: colors.danger,
   };
 
   function formatCooldown(seconds) {
@@ -119,7 +121,7 @@ export default function TreasuryScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={async () => { setRefreshing(true); await loadData(); setRefreshing(false); }}
-            tintColor="#f1c40f"
+            tintColor={colors.gold}
           />
         }
       >
@@ -153,7 +155,7 @@ export default function TreasuryScreen() {
         <Text style={styles.sectionLabel}>Choose Tax Rate</Text>
         {data.tax_rates &&
           Object.entries(data.tax_rates).map(([tier, config]) => {
-            const color = tierColors[tier] || "#888";
+            const color = tierColors[tier] || colors.muted;
             const amount = Math.round(
               data.taxable_amount * (config.multiplier || 1)
             );
@@ -164,13 +166,13 @@ export default function TreasuryScreen() {
                 onPress={() => handleTax(tier)}
                 disabled={onCooldown}
               >
-                <View style={[styles.tierStripe, { backgroundColor: onCooldown ? "#444" : color }]} />
+                <View style={[styles.tierStripe, { backgroundColor: onCooldown ? colors.border : color }]} />
                 <View style={styles.tierBody}>
                   <View style={styles.tierTop}>
-                    <Text style={[styles.tierName, { color: onCooldown ? "#555" : color }]}>
+                    <Text style={[styles.tierName, { color: onCooldown ? colors.faint : color }]}>
                       {config.label || tier}
                     </Text>
-                    <Text style={[styles.tierAmount, onCooldown && { color: "#555" }]}>+{amount} gold</Text>
+                    <Text style={[styles.tierAmount, onCooldown && { color: colors.faint }]}>+{amount} gold</Text>
                   </View>
                   <View style={styles.tierBottom}>
                     <Text style={styles.tierMeta}>
@@ -205,10 +207,10 @@ export default function TreasuryScreen() {
     const isOverloaded = charge >= 1.0;
     const isHighCharge = charge >= 0.75;
 
-    const netColor = net >= 0 ? "#2ecc71" : "#e74c3c";
-    const projColor = wouldBreach ? "#e74c3c" : projectedChange >= 0 ? "#2ecc71" : "#f39c12";
+    const netColor = net >= 0 ? colors.success : colors.danger;
+    const projColor = wouldBreach ? colors.danger : projectedChange >= 0 ? colors.success : colors.warning;
     const chargePercent = Math.round(charge * 100);
-    const barColor = isOverloaded ? "#e74c3c" : isHighCharge ? "#f39c12" : chargePercent > 30 ? "#7c5cbf" : "#3498db";
+    const barColor = isOverloaded ? colors.danger : isHighCharge ? colors.warning : chargePercent > 30 ? colors.accent : colors.info;
 
     return (
       <ScrollView
@@ -217,14 +219,14 @@ export default function TreasuryScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={async () => { setRefreshing(true); await loadData(); setRefreshing(false); }}
-            tintColor="#7c5cbf"
+            tintColor={colors.accent}
           />
         }
       >
         {/* Mana balance */}
-        <View style={[styles.balanceCard, { borderColor: "#7c5cbf" }]}>
+        <View style={[styles.balanceCard, { borderColor: colors.accent }]}>
           <Text style={styles.balanceLabel}>Mana Reserves</Text>
-          <Text style={[styles.balanceValue, { color: "#7c5cbf" }]}>
+          <Text style={[styles.balanceValue, { color: colors.accent }]}>
             🔮 {data.mana?.toLocaleString()} / {data.max_mana?.toLocaleString()}
           </Text>
         </View>
@@ -234,13 +236,13 @@ export default function TreasuryScreen() {
           <Text style={styles.manaFlowTitle}>Mana Flow (per cycle)</Text>
           <View style={styles.manaFlowRow}>
             <Text style={styles.manaFlowLabel}>Generation</Text>
-            <Text style={[styles.manaFlowValue, { color: "#2ecc71" }]}>
+            <Text style={[styles.manaFlowValue, { color: colors.success }]}>
               +{data.mana_generation || 0}
             </Text>
           </View>
           <View style={styles.manaFlowRow}>
             <Text style={styles.manaFlowLabel}>Upkeep (spells + units)</Text>
-            <Text style={[styles.manaFlowValue, { color: "#e74c3c" }]}>
+            <Text style={[styles.manaFlowValue, { color: colors.danger }]}>
               -{data.mana_upkeep || 0}
             </Text>
           </View>
@@ -267,7 +269,7 @@ export default function TreasuryScreen() {
               ]}
             />
           </View>
-          <Text style={[styles.batteryPercent, { color: isOverloaded ? "#e74c3c" : isHighCharge ? "#f39c12" : "#aaa" }]}>
+          <Text style={[styles.batteryPercent, { color: isOverloaded ? colors.danger : isHighCharge ? colors.warning : colors.textDim }]}>
             {isOverloaded ? "⚡ OVERLOADED" : `${chargePercent}% charged`}
           </Text>
 
@@ -346,15 +348,15 @@ export default function TreasuryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
-  loading: { color: "#666", textAlign: "center", marginTop: 60 },
+  container: { flex: 1, backgroundColor: colors.bg },
+  loading: { color: colors.faint, textAlign: "center", marginTop: 60 },
 
   // ── Tab bar ──
   tabBar: {
     flexDirection: "row",
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: "#2a2a4a",
+    borderBottomColor: colors.border,
   },
   tab: {
     flex: 1,
@@ -363,24 +365,24 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     borderBottomWidth: 2,
-    borderBottomColor: "#f1c40f",
+    borderBottomColor: colors.gold,
   },
-  tabText: { color: "#888", fontSize: 14, fontWeight: "600" },
-  tabTextActive: { color: "#f1c40f" },
+  tabText: { color: colors.muted, fontSize: 14, fontWeight: "600" },
+  tabTextActive: { color: colors.gold },
   tabContent: { flex: 1 },
 
   // ── Balance card ──
   balanceCard: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     margin: 12,
     padding: 20,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: "#f1c40f",
+    borderColor: colors.gold,
     alignItems: "center",
   },
   balanceLabel: {
-    color: "#888",
+    color: colors.muted,
     fontSize: 12,
     fontWeight: "600",
     textTransform: "uppercase",
@@ -388,11 +390,11 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   balanceValue: {
-    color: "#f1c40f",
+    color: colors.gold,
     fontSize: 32,
     fontWeight: "700",
   },
-  balanceSub: { color: "#666", fontSize: 13, marginTop: 4 },
+  balanceSub: { color: colors.faint, fontSize: 13, marginTop: 4 },
 
   // ── Info row ──
   infoRow: {
@@ -401,18 +403,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
     marginBottom: 12,
   },
-  infoLabel: { color: "#888", fontSize: 13 },
-  infoValue: { color: "#e0e0e0", fontSize: 14, fontWeight: "600" },
+  infoLabel: { color: colors.muted, fontSize: 13 },
+  infoValue: { color: colors.text, fontSize: 14, fontWeight: "600" },
 
   // ── Section label ──
   sectionLabel: {
-    color: "#aaa",
+    color: colors.textDim,
     fontSize: 13,
     fontWeight: "600",
     textTransform: "uppercase",
@@ -424,12 +426,12 @@ const styles = StyleSheet.create({
 
   // ── Tax tier cards ──
   tierCard: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     marginHorizontal: 12,
     marginBottom: 8,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
     flexDirection: "row",
     alignItems: "center",
     overflow: "hidden",
@@ -449,9 +451,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   tierName: { fontSize: 16, fontWeight: "700" },
-  tierAmount: { color: "#e0e0e0", fontSize: 16, fontWeight: "700" },
+  tierAmount: { color: colors.text, fontSize: 16, fontWeight: "700" },
   tierBottom: { flexDirection: "row", gap: 16 },
-  tierMeta: { color: "#888", fontSize: 12 },
+  tierMeta: { color: colors.muted, fontSize: 12 },
   collectArrow: { fontSize: 22, fontWeight: "700", paddingRight: 14 },
   collectLock: { fontSize: 18, paddingRight: 14, opacity: 0.5 },
   tierCardDisabled: { opacity: 0.5 },
@@ -460,38 +462,38 @@ const styles = StyleSheet.create({
   cooldownBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#2a1a1a",
+    backgroundColor: alpha(colors.danger, "18"),
     marginHorizontal: 12,
     marginBottom: 12,
     padding: 14,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e74c3c44",
+    borderColor: alpha(colors.danger, "44"),
     gap: 12,
   },
   cooldownIcon: { fontSize: 28 },
-  cooldownLabel: { color: "#e74c3c", fontSize: 13, fontWeight: "600", marginBottom: 2 },
-  cooldownTimer: { color: "#f5c6cb", fontSize: 20, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  cooldownLabel: { color: colors.danger, fontSize: 13, fontWeight: "600", marginBottom: 2 },
+  cooldownTimer: { color: colors.dangerSoft, fontSize: 20, fontWeight: "700", fontVariant: ["tabular-nums"] },
 
   // ── Mana battery card ──
   batteryCard: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     margin: 12,
     padding: 18,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
   batteryTitle: {
-    color: "#7c5cbf",
+    color: colors.accent,
     fontSize: 17,
     fontWeight: "700",
     marginBottom: 4,
   },
-  batterySubtitle: { color: "#666", fontSize: 12, marginBottom: 16 },
+  batterySubtitle: { color: colors.faint, fontSize: 12, marginBottom: 16 },
   batteryOuter: {
     height: 24,
-    backgroundColor: "#2a2a4a",
+    backgroundColor: colors.border,
     borderRadius: 12,
     overflow: "hidden",
     marginBottom: 8,
@@ -513,24 +515,24 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
   batteryInfoItem: { alignItems: "center" },
-  batteryInfoLabel: { color: "#888", fontSize: 11, marginBottom: 4 },
+  batteryInfoLabel: { color: colors.muted, fontSize: 11, marginBottom: 4 },
   batteryInfoValue: { fontSize: 14, fontWeight: "700" },
 
   // Mana flow card
   manaFlowCard: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     marginHorizontal: 12,
     marginBottom: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
     padding: 14,
   },
   manaFlowTitle: {
-    color: "#aaa",
+    color: colors.textDim,
     fontSize: 12,
     fontWeight: "600",
     textTransform: "uppercase",
@@ -544,36 +546,36 @@ const styles = StyleSheet.create({
   },
   manaFlowTotal: {
     borderTopWidth: 1,
-    borderTopColor: "#2a2a4a",
+    borderTopColor: colors.border,
     marginTop: 6,
     paddingTop: 8,
   },
-  manaFlowLabel: { color: "#888", fontSize: 14 },
+  manaFlowLabel: { color: colors.muted, fontSize: 14 },
   manaFlowValue: { fontSize: 14, fontWeight: "600", fontVariant: ["tabular-nums"] },
 
   // Projected result
   projectedCard: {
-    backgroundColor: "#12122a",
+    backgroundColor: colors.bg,
     borderRadius: 8,
     padding: 12,
     alignItems: "center",
     marginBottom: 14,
   },
-  projectedLabel: { color: "#888", fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 },
+  projectedLabel: { color: colors.muted, fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 },
   projectedValue: { fontSize: 24, fontWeight: "700" },
   yieldBreakdown: {
     flexDirection: "row",
     gap: 16,
     marginTop: 6,
   },
-  yieldBase: { color: "#888", fontSize: 12, fontWeight: "600" },
-  yieldBonus: { color: "#f1c40f", fontSize: 12, fontWeight: "700" },
+  yieldBase: { color: colors.muted, fontSize: 12, fontWeight: "600" },
+  yieldBonus: { color: colors.gold, fontSize: 12, fontWeight: "700" },
   breachBadge: {
-    color: "#e74c3c",
+    color: colors.danger,
     fontSize: 13,
     fontWeight: "700",
     marginTop: 6,
-    backgroundColor: "#2a1a1a",
+    backgroundColor: alpha(colors.danger, "18"),
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -581,28 +583,28 @@ const styles = StyleSheet.create({
   },
 
   channelBtn: {
-    backgroundColor: "#7c5cbf",
+    backgroundColor: colors.accent,
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
     marginBottom: 12,
   },
   channelBtnDanger: {
-    backgroundColor: "#a33",
+    backgroundColor: colors.danger,
   },
   channelBtnOverload: {
-    backgroundColor: "#f39c12",
+    backgroundColor: colors.warning,
   },
-  channelBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  channelBtnText: { color: colors.white, fontSize: 16, fontWeight: "700" },
   overloadWarning: {
-    color: "#f39c12",
+    color: colors.warning,
     fontSize: 12,
     textAlign: "center",
     lineHeight: 18,
     marginBottom: 8,
   },
   warningText: {
-    color: "#e74c3c",
+    color: colors.danger,
     fontSize: 12,
     textAlign: "center",
     lineHeight: 18,

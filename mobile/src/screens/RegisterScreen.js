@@ -10,13 +10,14 @@ import {
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { useModal } from "../context/ModalContext";
+import { colors } from "../theme";
 
 const AFFINITIES = [
-  { id: "pyromancer", name: "Pyromancer", color: "#e74c3c", emoji: "🔥" },
-  { id: "mindweaver", name: "Mindweaver", color: "#3498db", emoji: "🧠" },
-  { id: "geomancer", name: "Geomancer", color: "#2ecc71", emoji: "🌿" },
-  { id: "tempest", name: "Tempest", color: "#f1c40f", emoji: "⚡" },
-  { id: "voidwalker", name: "Voidwalker", color: "#95a5a6", emoji: "🌑" },
+  { id: "pyromancer", name: "Pyromancer", color: colors.danger, emoji: "🔥" },
+  { id: "mindweaver", name: "Mindweaver", color: colors.info, emoji: "🧠" },
+  { id: "geomancer", name: "Geomancer", color: colors.success, emoji: "🌿" },
+  { id: "tempest", name: "Tempest", color: colors.gold, emoji: "⚡" },
+  { id: "voidwalker", name: "Voidwalker", color: colors.muted, emoji: "🌑" },
 ];
 
 export default function RegisterScreen() {
@@ -56,7 +57,7 @@ export default function RegisterScreen() {
         value={username}
         onChangeText={setUsername}
         autoCapitalize="none"
-        placeholderTextColor="#666"
+        placeholderTextColor={colors.faint}
         placeholder="ArchmageSupreme"
       />
 
@@ -67,7 +68,7 @@ export default function RegisterScreen() {
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
-        placeholderTextColor="#666"
+        placeholderTextColor={colors.faint}
         placeholder="wizard@archmage.com"
       />
 
@@ -77,7 +78,7 @@ export default function RegisterScreen() {
         value={password}
         onChangeText={setPassword}
         secureTextEntry
-        placeholderTextColor="#666"
+        placeholderTextColor={colors.faint}
         placeholder="••••••••"
       />
 
@@ -87,7 +88,7 @@ export default function RegisterScreen() {
         value={passwordConfirmation}
         onChangeText={setPasswordConfirmation}
         secureTextEntry
-        placeholderTextColor="#666"
+        placeholderTextColor={colors.faint}
         placeholder="••••••••"
       />
 
@@ -116,7 +117,7 @@ export default function RegisterScreen() {
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.white} />
         ) : (
           <Text style={styles.buttonText}>Create Account</Text>
         )}
@@ -128,25 +129,25 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0f0f1a",
+    backgroundColor: colors.bg,
   },
   content: {
     padding: 24,
     paddingBottom: 48,
   },
   label: {
-    color: "#ccc",
+    color: colors.textDim,
     fontSize: 14,
     marginBottom: 6,
     marginTop: 16,
   },
   input: {
-    backgroundColor: "#1a1a2e",
-    color: "#e0e0e0",
+    backgroundColor: colors.card,
+    color: colors.text,
     padding: 14,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#333",
+    borderColor: colors.border,
     fontSize: 16,
   },
   affinityGrid: {
@@ -156,11 +157,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   affinityCard: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#333",
+    borderColor: colors.border,
     alignItems: "center",
     width: "30%",
   },
@@ -173,7 +174,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   button: {
-    backgroundColor: "#7c5cbf",
+    backgroundColor: colors.accent,
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: "center",
@@ -183,7 +184,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: "#fff",
+    color: colors.white,
     fontSize: 18,
     fontWeight: "600",
   },

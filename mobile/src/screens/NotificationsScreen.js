@@ -10,9 +10,29 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
+import { useAuth } from "../context/AuthContext";
+import { LoadingState, EmptyState } from "../components/ui";
+import { colors } from "../theme";
 
-export default function NotificationsScreen() {
+// Older stored battle reports used initial_quantity / remaining_quantity keys.
+function normalizeArmy(army) {
+  return {
+    ...army,
+    stacks: (army.stacks || []).map((s) => ({
+      ...s,
+      initial: s.initial ?? s.initial_quantity ?? 0,
+      remaining: s.remaining ?? s.remaining_quantity ?? 0,
+      lost: s.lost ?? 0,
+      attack: s.attack ?? 0,
+      defense: s.defense ?? 0,
+      speed: s.speed ?? 0,
+    })),
+  };
+}
+
+export default function NotificationsScreen({ navigation }) {
   const { showAlert } = useModal();
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -39,7 +59,24 @@ export default function NotificationsScreen() {
     try {
       const result = await api.getNotification(id);
       const n = result.notification;
-      showAlert(n.title, n.content + (n.battle_log ? `\n\n${JSON.stringify(n.battle_log)}` : ""));
+      const battle = n.category === "battle" ? n.data : null;
+
+      if (battle?.attacker_army?.stacks && battle?.defender_army?.stacks) {
+        // Open the full battle report instead of a raw-text alert.
+        const viewer = battle.attacker?.username === user?.username ? "attacker" : "defender";
+        navigation.navigate("BattleResult", {
+          result: {
+            outcome: battle.winner,
+            land_seized: battle.land_seized || 0,
+            log: battle.log || [],
+            attacker_army: normalizeArmy(battle.attacker_army),
+            defender_army: normalizeArmy(battle.defender_army),
+          },
+          viewer,
+        });
+      } else {
+        showAlert(n.title, n.content);
+      }
       loadData();
     } catch (e) {
       showAlert("Error", e.message);
@@ -47,7 +84,7 @@ export default function NotificationsScreen() {
   }
 
   if (!data) {
-    return <View style={styles.container}><Text style={styles.loading}>Loading...</Text></View>;
+    return <View style={styles.container}><LoadingState /></View>;
   }
 
   return (
@@ -80,32 +117,32 @@ export default function NotificationsScreen() {
       ))}
 
       {data.notifications.length === 0 && (
-        <Text style={styles.emptyText}>No notifications</Text>
+        <EmptyState icon="📭" title="No notifications" subtitle="Battle reports and kingdom events will appear here." />
       )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
-  loading: { color: "#666", textAlign: "center", marginTop: 60 },
+  container: { flex: 1, backgroundColor: colors.bg },
+  loading: { color: colors.faint, textAlign: "center", marginTop: 60 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 14 },
-  headerText: { color: "#e0e0e0", fontSize: 16 },
-  markAllText: { color: "#3498db", fontSize: 14 },
+  headerText: { color: colors.text, fontSize: 16 },
+  markAllText: { color: colors.info, fontSize: 14 },
   card: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     marginHorizontal: 12,
     marginBottom: 6,
     padding: 14,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
-  unread: { borderLeftWidth: 3, borderLeftColor: "#7c5cbf" },
+  unread: { borderLeftWidth: 3, borderLeftColor: colors.accent },
   notifHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
-  category: { color: "#7c5cbf", fontSize: 11, textTransform: "uppercase" },
-  time: { color: "#666", fontSize: 11 },
-  title: { color: "#e0e0e0", fontSize: 15, fontWeight: "600" },
-  content: { color: "#999", fontSize: 13, marginTop: 4 },
-  emptyText: { color: "#666", textAlign: "center", padding: 24 },
+  category: { color: colors.accent, fontSize: 11, textTransform: "uppercase" },
+  time: { color: colors.faint, fontSize: 11 },
+  title: { color: colors.text, fontSize: 15, fontWeight: "600" },
+  content: { color: colors.muted, fontSize: 13, marginTop: 4 },
+  emptyText: { color: colors.faint, textAlign: "center", padding: 24 },
 });

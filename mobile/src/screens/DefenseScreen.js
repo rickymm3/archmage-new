@@ -12,6 +12,8 @@ import Slider from "@react-native-community/slider";
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
+import { LoadingState } from "../components/ui";
+import { colors, alpha } from "../theme";
 
 export default function DefenseScreen({ navigation }) {
   const { showAlert } = useModal();
@@ -26,6 +28,9 @@ export default function DefenseScreen({ navigation }) {
   // Slider modal state
   const [sliderModal, setSliderModal] = useState(null);
   const [sliderValue, setSliderValue] = useState(0);
+
+  // Hero assignment modal state
+  const [heroModal, setHeroModal] = useState(null);
 
   async function loadGarrison() {
     try {
@@ -102,8 +107,24 @@ export default function DefenseScreen({ navigation }) {
     }
   }
 
+  async function assignHeroTo(hero, unit) {
+    setHeroModal(null);
+    try {
+      if (unit) {
+        await api.assignHero(unit.unit_id, hero.id);
+      } else {
+        // Unassign: clear from whichever stack the hero currently leads
+        const ledUnit = data.units.find((u) => u.hero?.id === hero.id);
+        if (ledUnit) await api.assignHero(ledUnit.unit_id, null);
+      }
+      await loadGarrison();
+    } catch (e) {
+      showAlert("Error", e.message);
+    }
+  }
+
   if (!data) {
-    return <View style={styles.container}><Text style={styles.loading}>Loading...</Text></View>;
+    return <View style={styles.container}><LoadingState /></View>;
   }
 
   const nonHeroUnits = data.units.filter((u) => u.unit_type !== "hero");
@@ -111,24 +132,35 @@ export default function DefenseScreen({ navigation }) {
   const availableUnits = nonHeroUnits.filter((u) => (garrisonValues[u.id] || 0) < u.quantity);
   const dirty = isDirty();
 
+  // Live defense strength — updates as sliders change, before saving.
+  const garrisonCount = nonHeroUnits.reduce((n, u) => n + (garrisonValues[u.id] || 0), 0);
+  const garrisonDefense = nonHeroUnits.reduce((n, u) => n + (garrisonValues[u.id] || 0) * (u.defense || 0), 0);
+
   return (
+    <View style={styles.container}>
     <ScrollView
-      style={styles.container}
+      style={{ flex: 1 }}
+      contentContainerStyle={{ paddingBottom: dirty ? 90 : 20 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadGarrison(); setRefreshing(false); }} />}
     >
-      {/* Header with save icon */}
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>🛡 Garrison Setup</Text>
-          <Text style={styles.headerSub}>Assign units to defend your kingdom</Text>
+      {/* Defense strength summary */}
+      <View style={styles.summaryBar}>
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryValue}>🛡 {garrisonCount}</Text>
+          <Text style={styles.summaryLabel}>Garrisoned</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.saveIcon, { backgroundColor: dirty ? "#f39c12" : "#2ecc71" }, saving && { opacity: 0.4 }]}
-          onPress={handleSave}
-          disabled={saving}
-        >
-          <Text style={styles.saveIconText}>{saving ? "…" : "💾"}</Text>
-        </TouchableOpacity>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={[styles.summaryValue, { color: colors.info }]}>{garrisonDefense.toLocaleString()}</Text>
+          <Text style={styles.summaryLabel}>Defense Power</Text>
+        </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={[styles.summaryValue, { color: dirty ? colors.warning : colors.success }]}>
+            {dirty ? "●" : "✓"}
+          </Text>
+          <Text style={styles.summaryLabel}>{dirty ? "Unsaved" : "Saved"}</Text>
+        </View>
       </View>
 
       {/* Defending Units */}
@@ -187,10 +219,39 @@ export default function DefenseScreen({ navigation }) {
         );
       })}
 
+      {/* Hero Command — right after the units it empowers */}
+      {data.heroes && data.heroes.length > 0 && (
+        <View style={styles.spellSection}>
+          <Text style={styles.spellSectionTitle}>🦸 Hero Command</Text>
+          <Text style={styles.heroHint}>
+            Assign heroes to lead your defending stacks. A hero empowers its unit
+            and keeps fighting even if the stack falls.
+          </Text>
+          {data.heroes.map((hero) => {
+            const ledUnit = data.units.find((u) => u.hero?.id === hero.id);
+            return (
+              <TouchableOpacity
+                key={hero.id}
+                style={[styles.spellOption, ledUnit && styles.spellSelected]}
+                onPress={() => setHeroModal(hero)}
+              >
+                <View>
+                  <Text style={[styles.spellName, ledUnit && styles.spellNameSelected]}>{hero.name}</Text>
+                  <Text style={styles.spellType}>⚔️ {hero.attack}   🛡 {hero.defense}</Text>
+                </View>
+                <Text style={ledUnit ? styles.heroAssigned : styles.spellType}>
+                  {ledUnit ? `Leading ${ledUnit.name}` : "Unassigned"}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
       {/* Defense Spell */}
       {data.available_spells && data.available_spells.length > 0 && (
         <View style={styles.spellSection}>
-          <Text style={styles.spellSectionTitle}>Defense Spell</Text>
+          <Text style={styles.spellSectionTitle}>✨ Defense Spell</Text>
           <TouchableOpacity
             style={[styles.spellOption, !selectedSpellId && styles.spellSelected]}
             onPress={() => setSelectedSpellId(null)}
@@ -212,7 +273,46 @@ export default function DefenseScreen({ navigation }) {
         </View>
       )}
 
-      <View style={{ height: 40 }} />
+      <View style={{ height: 20 }} />
+
+      {/* Hero Assignment Modal */}
+      {heroModal && (
+        <Modal transparent visible animationType="fade" onRequestClose={() => setHeroModal(null)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Assign {heroModal.name}</Text>
+              <Text style={styles.modalInfo}>Choose a unit stack for this hero to lead.</Text>
+              <ScrollView style={{ maxHeight: 300 }}>
+                {nonHeroUnits.filter((u) => u.quantity > 0).map((u) => (
+                  <TouchableOpacity
+                    key={u.id}
+                    style={[styles.spellOption, u.hero?.id === heroModal.id && styles.spellSelected]}
+                    onPress={() => assignHeroTo(heroModal, u)}
+                  >
+                    <Text style={styles.spellName}>{u.name}</Text>
+                    <Text style={styles.spellType}>
+                      x{u.quantity}{u.hero ? ` • ${u.hero.name}` : ""}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <View style={styles.modalRow}>
+                <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setHeroModal(null)}>
+                  <Text style={styles.modalCancelTxt}>Cancel</Text>
+                </TouchableOpacity>
+                {data.units.some((u) => u.hero?.id === heroModal.id) && (
+                  <TouchableOpacity
+                    style={[styles.modalConfirmBtn, { backgroundColor: colors.danger }]}
+                    onPress={() => assignHeroTo(heroModal, null)}
+                  >
+                    <Text style={styles.modalConfirmTxt}>Unassign</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* Slider Modal */}
       {sliderModal && (
@@ -241,9 +341,9 @@ export default function DefenseScreen({ navigation }) {
                 step={1}
                 value={sliderValue}
                 onValueChange={setSliderValue}
-                minimumTrackTintColor={sliderModal.mode === "add" ? "#2ecc71" : "#e74c3c"}
-                maximumTrackTintColor="#2a2a4a"
-                thumbTintColor={sliderModal.mode === "add" ? "#2ecc71" : "#e74c3c"}
+                minimumTrackTintColor={sliderModal.mode === "add" ? colors.success : colors.danger}
+                maximumTrackTintColor={colors.border}
+                thumbTintColor={sliderModal.mode === "add" ? colors.success : colors.danger}
               />
               <View style={styles.sliderLabels}>
                 <Text style={styles.sliderLabel}>0</Text>
@@ -268,7 +368,7 @@ export default function DefenseScreen({ navigation }) {
                 <TouchableOpacity
                   style={[
                     styles.modalConfirmBtn,
-                    { backgroundColor: sliderModal.mode === "add" ? "#2ecc71" : "#e74c3c" },
+                    { backgroundColor: sliderModal.mode === "add" ? colors.success : colors.danger },
                     sliderModal.mode === "add" && sliderValue === 0 && { opacity: 0.4 },
                     sliderModal.mode === "remove" && sliderValue === sliderModal.current && { opacity: 0.4 },
                   ]}
@@ -285,30 +385,64 @@ export default function DefenseScreen({ navigation }) {
         </Modal>
       )}
     </ScrollView>
+
+    {/* Sticky save bar — only when there are unsaved changes */}
+    {dirty && (
+      <View style={styles.saveBar}>
+        <TouchableOpacity
+          style={[styles.saveBtn, saving && { opacity: 0.5 }]}
+          onPress={handleSave}
+          disabled={saving}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.saveBtnTxt}>{saving ? "Saving…" : "💾 Save Defense Setup"}</Text>
+        </TouchableOpacity>
+      </View>
+    )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
-  loading: { color: "#666", textAlign: "center", marginTop: 60 },
+  container: { flex: 1, backgroundColor: colors.bg },
+  loading: { color: colors.faint, textAlign: "center", marginTop: 60 },
 
-  // Header
-  header: { flexDirection: "row", alignItems: "center", padding: 16, paddingBottom: 8 },
-  headerTitle: { color: "#e0e0e0", fontSize: 20, fontWeight: "bold" },
-  headerSub: { color: "#888", fontSize: 13, marginTop: 4 },
-  saveIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 12,
+  // Summary bar
+  summaryBar: {
+    flexDirection: "row",
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingVertical: 10,
+    marginBottom: 8,
   },
-  saveIconText: { fontSize: 16 },
+  summaryItem: { flex: 1, alignItems: "center" },
+  summaryValue: { color: colors.text, fontSize: 16, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  summaryLabel: { color: colors.muted, fontSize: 10, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.5 },
+  summaryDivider: { width: 1, backgroundColor: colors.border },
+
+  // Sticky save bar
+  saveBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: 12,
+    backgroundColor: alpha(colors.bg, "f2"),
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  saveBtn: {
+    backgroundColor: colors.success,
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  saveBtnTxt: { color: colors.white, fontSize: 15, fontWeight: "800" },
 
   // Section label
   sectionLabel: {
-    color: "#888",
+    color: colors.muted,
     fontSize: 12,
     fontWeight: "600",
     textTransform: "uppercase",
@@ -318,52 +452,52 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   emptySection: { marginHorizontal: 12, paddingVertical: 16, alignItems: "center" },
-  emptyText: { color: "#555", fontSize: 13, fontStyle: "italic" },
+  emptyText: { color: colors.faint, fontSize: 13, fontStyle: "italic" },
 
   // Defending cards
   defendCard: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     marginHorizontal: 12,
     marginBottom: 6,
     padding: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2ecc71",
+    borderColor: colors.success,
     borderLeftWidth: 3,
   },
   defendRow: { flexDirection: "row", alignItems: "center" },
-  defendName: { color: "#e0e0e0", fontSize: 15, fontWeight: "600" },
-  defendStats: { color: "#888", fontSize: 11, marginTop: 3 },
+  defendName: { color: colors.text, fontSize: 15, fontWeight: "600" },
+  defendStats: { color: colors.muted, fontSize: 11, marginTop: 3 },
   defendBadge: { alignItems: "center", marginLeft: 12 },
-  defendCount: { color: "#2ecc71", fontSize: 20, fontWeight: "bold" },
-  defendTotal: { color: "#555", fontSize: 11, marginTop: 2 },
+  defendCount: { color: colors.success, fontSize: 20, fontWeight: "bold" },
+  defendTotal: { color: colors.faint, fontSize: 11, marginTop: 2 },
 
   // Available cards
   availCard: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     marginHorizontal: 12,
     marginBottom: 6,
     padding: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
-  availName: { color: "#aaa", fontSize: 15, fontWeight: "600" },
+  availName: { color: colors.textDim, fontSize: 15, fontWeight: "600" },
   availBadge: { alignItems: "center", marginLeft: 12 },
-  availCount: { color: "#888", fontSize: 18, fontWeight: "bold" },
-  availLabel: { color: "#555", fontSize: 10, marginTop: 2 },
+  availCount: { color: colors.muted, fontSize: 18, fontWeight: "bold" },
+  availLabel: { color: colors.faint, fontSize: 10, marginTop: 2 },
 
   // Spell section
   spellSection: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     margin: 12,
     marginTop: 20,
     padding: 14,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
-  spellSectionTitle: { color: "#e0e0e0", fontSize: 16, fontWeight: "bold", marginBottom: 10 },
+  spellSectionTitle: { color: colors.text, fontSize: 16, fontWeight: "bold", marginBottom: 10 },
   spellOption: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -371,16 +505,18 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
     marginBottom: 6,
   },
   spellSelected: {
-    borderColor: "#7c5cbf",
+    borderColor: colors.accent,
     backgroundColor: "rgba(124,92,191,0.1)",
   },
-  spellName: { color: "#e0e0e0", fontSize: 14 },
-  spellNameSelected: { color: "#7c5cbf", fontWeight: "600" },
-  spellType: { color: "#888", fontSize: 12 },
+  spellName: { color: colors.text, fontSize: 14 },
+  spellNameSelected: { color: colors.accent, fontWeight: "600" },
+  spellType: { color: colors.muted, fontSize: 12 },
+  heroHint: { color: colors.muted, fontSize: 12, marginBottom: 10, lineHeight: 17 },
+  heroAssigned: { color: colors.gold, fontSize: 12, fontWeight: "600" },
 
   // Modal
   modalOverlay: {
@@ -393,39 +529,39 @@ const styles = StyleSheet.create({
   modalCard: {
     width: "100%",
     maxWidth: 320,
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2a2a40",
+    borderColor: colors.border,
     padding: 20,
   },
   modalTitle: {
     fontSize: 17,
     fontWeight: "700",
-    color: "#f1c40f",
+    color: colors.gold,
     textAlign: "center",
     marginBottom: 4,
   },
   modalUnit: {
     fontSize: 15,
-    color: "#e0e0e0",
+    color: colors.text,
     textAlign: "center",
     marginBottom: 12,
   },
   modalInfo: {
-    color: "#888",
+    color: colors.muted,
     fontSize: 13,
     textAlign: "center",
     marginBottom: 12,
   },
   modalValueLabel: {
-    color: "#888",
+    color: colors.muted,
     fontSize: 12,
     textAlign: "center",
     marginBottom: 2,
   },
   modalValue: {
-    color: "#e0e0e0",
+    color: colors.text,
     fontSize: 28,
     fontWeight: "bold",
     textAlign: "center",
@@ -438,9 +574,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  sliderLabel: { color: "#666", fontSize: 12 },
+  sliderLabel: { color: colors.faint, fontSize: 12 },
   modalPreview: {
-    color: "#aaa",
+    color: colors.textDim,
     fontSize: 13,
     textAlign: "center",
     marginBottom: 8,
@@ -450,15 +586,15 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: "#2a2a40",
+    backgroundColor: colors.border,
     alignItems: "center",
   },
-  modalCancelTxt: { color: "#aaa", fontWeight: "600", fontSize: 14 },
+  modalCancelTxt: { color: colors.textDim, fontWeight: "600", fontSize: 14 },
   modalConfirmBtn: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: 8,
     alignItems: "center",
   },
-  modalConfirmTxt: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  modalConfirmTxt: { color: colors.white, fontWeight: "700", fontSize: 14 },
 });

@@ -124,6 +124,13 @@ export async function demolishStructure(structureId, quantity = 1) {
   });
 }
 
+export async function extinguishStructure(structureId) {
+  return apiRequest("/town/extinguish", {
+    method: "POST",
+    body: JSON.stringify({ structure_id: structureId }),
+  });
+}
+
 export async function townRecruit(unitId, goldAmount) {
   return apiRequest("/town/recruit", {
     method: "POST",

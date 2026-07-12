@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { View, Text, TextInput, TouchableOpacity, Modal, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
+import { colors } from "../theme";
 
 const ModalContext = createContext(null);
 
@@ -119,8 +120,8 @@ function PromptModal({ title, message, submitText, defaultValue, keyboardType, d
             onChangeText={setValue}
             keyboardType={keyboardType}
             autoFocus
-            placeholderTextColor="#666"
-            selectionColor="#7c5cbf"
+            placeholderTextColor={colors.faint}
+            selectionColor={colors.accent}
           />
           <View style={styles.row}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} activeOpacity={0.7}>
@@ -147,32 +148,32 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 320,
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2a2a40",
+    borderColor: colors.border,
     padding: 20,
   },
   title: {
     fontSize: 17,
     fontWeight: "700",
-    color: "#f1c40f",
+    color: colors.gold,
     marginBottom: 8,
     textAlign: "center",
   },
   message: {
     fontSize: 14,
-    color: "#ccc",
+    color: colors.textDim,
     textAlign: "center",
     marginBottom: 16,
     lineHeight: 20,
   },
   input: {
-    backgroundColor: "#0d0d1a",
+    backgroundColor: colors.bg,
     borderWidth: 1,
-    borderColor: "#2a2a40",
+    borderColor: colors.border,
     borderRadius: 8,
-    color: "#e0e0e0",
+    color: colors.text,
     fontSize: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -184,25 +185,25 @@ const styles = StyleSheet.create({
   okBtn: {
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: "#3498db",
+    backgroundColor: colors.info,
     alignItems: "center",
   },
-  okTxt: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  okTxt: { color: colors.white, fontWeight: "700", fontSize: 14 },
   cancelBtn: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: "#2a2a40",
+    backgroundColor: colors.border,
     alignItems: "center",
   },
-  cancelTxt: { color: "#aaa", fontWeight: "600", fontSize: 14 },
+  cancelTxt: { color: colors.textDim, fontWeight: "600", fontSize: 14 },
   confirmBtn: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: "#3498db",
+    backgroundColor: colors.info,
     alignItems: "center",
   },
-  destructiveBtn: { backgroundColor: "#c0392b" },
-  confirmTxt: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  destructiveBtn: { backgroundColor: colors.danger },
+  confirmTxt: { color: colors.white, fontWeight: "700", fontSize: 14 },
 });

@@ -7,6 +7,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
+import { colors } from "../theme";
 
 const MENU_ITEMS = [
   { screen: "Profile", icon: "👤", label: "Profile" },
@@ -43,25 +44,25 @@ export default function MoreScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
+  container: { flex: 1, backgroundColor: colors.bg },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#2a2a4a",
+    borderBottomColor: colors.border,
   },
   menuIcon: { fontSize: 22, marginRight: 14 },
-  menuLabel: { color: "#e0e0e0", fontSize: 16, flex: 1 },
-  chevron: { color: "#555", fontSize: 22 },
+  menuLabel: { color: colors.text, fontSize: 16, flex: 1 },
+  chevron: { color: colors.faint, fontSize: 22 },
   logoutItem: {
     padding: 16,
     margin: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#555",
+    borderColor: colors.faint,
     alignItems: "center",
   },
-  logoutText: { color: "#999", fontSize: 16 },
+  logoutText: { color: colors.muted, fontSize: 16 },
 });

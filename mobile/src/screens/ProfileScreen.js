@@ -11,6 +11,9 @@ import { useAuth } from "../context/AuthContext";
 import { useModal } from "../context/ModalContext";
 import * as api from "../services/api";
 import LoadingButton from "../components/LoadingButton";
+import { ArtPlaceholder } from "../components/ui";
+import { ui as art } from "../assets";
+import { colors } from "../theme";
 
 export default function ProfileScreen() {
   const { user, refreshUser } = useAuth();
@@ -52,6 +55,13 @@ export default function ProfileScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Player Info */}
       <View style={styles.card}>
+        <View style={styles.avatarRow}>
+          <ArtPlaceholder emoji="🧙" label="Avatar" size={72} source={art.avatarDefault} />
+          <View style={{ marginLeft: 14, flex: 1 }}>
+            <Text style={styles.avatarName}>{user?.kingdom_name || user?.username}</Text>
+            <Text style={styles.avatarSub}>{user?.affinity}</Text>
+          </View>
+        </View>
         <Text style={styles.sectionTitle}>Player Info</Text>
         <View style={styles.infoRow}>
           <Text style={styles.label}>Username</Text>
@@ -63,7 +73,7 @@ export default function ProfileScreen() {
         </View>
         <View style={styles.infoRow}>
           <Text style={styles.label}>Gold</Text>
-          <Text style={[styles.value, { color: "#f1c40f" }]}>
+          <Text style={[styles.value, { color: colors.gold }]}>
             {Number(user?.gold || 0).toLocaleString()}
           </Text>
         </View>
@@ -80,7 +90,7 @@ export default function ProfileScreen() {
           value={kingdomName}
           onChangeText={(t) => setKingdomName(t.slice(0, 15))}
           placeholder="Enter kingdom name"
-          placeholderTextColor="#666"
+          placeholderTextColor={colors.faint}
           maxLength={15}
           autoCapitalize="words"
         />
@@ -99,61 +109,64 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
+  container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 12, paddingBottom: 40 },
   card: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
     marginBottom: 12,
   },
   sectionTitle: {
-    color: "#7c5cbf",
+    color: colors.accent,
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 12,
   },
+  avatarRow: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
+  avatarName: { color: colors.text, fontSize: 18, fontWeight: "bold" },
+  avatarSub: { color: colors.accent, fontSize: 13, marginTop: 2, textTransform: "capitalize" },
   infoRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#2a2a4a",
+    borderBottomColor: colors.border,
   },
-  label: { color: "#999", fontSize: 14 },
-  value: { color: "#e0e0e0", fontSize: 14, fontWeight: "600" },
-  currentLabel: { color: "#888", fontSize: 13, marginBottom: 10 },
-  currentValue: { color: "#e0e0e0", fontWeight: "600" },
+  label: { color: colors.muted, fontSize: 14 },
+  value: { color: colors.text, fontSize: 14, fontWeight: "600" },
+  currentLabel: { color: colors.muted, fontSize: 13, marginBottom: 10 },
+  currentValue: { color: colors.text, fontWeight: "600" },
   input: {
-    backgroundColor: "#0d0d1a",
+    backgroundColor: colors.bg,
     borderWidth: 1,
-    borderColor: "#2a2a40",
+    borderColor: colors.border,
     borderRadius: 8,
-    color: "#e0e0e0",
+    color: colors.text,
     fontSize: 16,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
   charCount: {
-    color: "#666",
+    color: colors.faint,
     fontSize: 11,
     textAlign: "right",
     marginTop: 4,
   },
   costNote: {
-    color: "#f1c40f",
+    color: colors.gold,
     fontSize: 12,
     textAlign: "center",
     marginTop: 8,
   },
   saveButton: {
-    backgroundColor: "#7c5cbf",
+    backgroundColor: colors.accent,
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: "center",
     marginTop: 12,
   },
-  saveText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  saveText: { color: colors.white, fontWeight: "700", fontSize: 15 },
 });

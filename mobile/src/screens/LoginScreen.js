@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { useModal } from "../context/ModalContext";
+import { colors } from "../theme";
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -41,7 +42,7 @@ export default function LoginScreen() {
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
-        placeholderTextColor="#666"
+        placeholderTextColor={colors.faint}
         placeholder="wizard@archmage.com"
       />
 
@@ -51,7 +52,7 @@ export default function LoginScreen() {
         value={password}
         onChangeText={setPassword}
         secureTextEntry
-        placeholderTextColor="#666"
+        placeholderTextColor={colors.faint}
         placeholder="••••••••"
       />
 
@@ -61,7 +62,7 @@ export default function LoginScreen() {
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.white} />
         ) : (
           <Text style={styles.buttonText}>Sign In</Text>
         )}
@@ -73,27 +74,27 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0f0f1a",
+    backgroundColor: colors.bg,
     padding: 24,
     justifyContent: "center",
   },
   label: {
-    color: "#ccc",
+    color: colors.textDim,
     fontSize: 14,
     marginBottom: 6,
     marginTop: 16,
   },
   input: {
-    backgroundColor: "#1a1a2e",
-    color: "#e0e0e0",
+    backgroundColor: colors.card,
+    color: colors.text,
     padding: 14,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#333",
+    borderColor: colors.border,
     fontSize: 16,
   },
   button: {
-    backgroundColor: "#7c5cbf",
+    backgroundColor: colors.accent,
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: "center",
@@ -103,7 +104,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: "#fff",
+    color: colors.white,
     fontSize: 18,
     fontWeight: "600",
   },

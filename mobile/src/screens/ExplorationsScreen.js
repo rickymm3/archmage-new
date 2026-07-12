@@ -2,18 +2,29 @@ import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
+  Image,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  RefreshControl,
   Modal,
   Animated,
+  Dimensions,
+  Platform,
 } from "react-native";
 import Slider from "@react-native-community/slider";
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
+import { LoadingState, ProgressBar } from "../components/ui";
+import { ui as art, unitImage } from "../assets";
+import { colors, alpha } from "../theme";
+
+const { width: RAW_W } = Dimensions.get("window");
+const SCREEN_W = Platform.OS === "web" ? Math.min(RAW_W, 480) : RAW_W;
+const GRID_COLS = 4;
+const GRID_GAP = 8;
+const TILE_W = (SCREEN_W - 24 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS;
 
 // ── Preview calculation helpers (mirrors Rails StartService) ──
 
@@ -52,20 +63,25 @@ function formatCountdown(diffMs) {
   return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
+function formatClock(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 function dangerMeta(pct) {
-  if (pct <= 0) return { label: "Safe", color: "#2ecc71" };
-  if (pct < 10) return { label: "Low Risk", color: "#3498db" };
-  if (pct < 20) return { label: "Moderate", color: "#f39c12" };
-  return { label: "Dangerous", color: "#e74c3c" };
+  if (pct <= 0) return { label: "Safe", color: colors.success };
+  if (pct < 10) return { label: "Low Risk", color: colors.info };
+  if (pct < 20) return { label: "Moderate", color: colors.warning };
+  return { label: "Dangerous", color: colors.danger };
 }
 
 function eventColor(text) {
-  if (!text) return "#888";
+  if (!text) return colors.muted;
   const lower = text.toLowerCase();
-  if (lower.includes("combat") || lower.includes("ambush") || lower.includes("attacked") || lower.includes("fought")) return "#e74c3c";
-  if (lower.includes("discover") || lower.includes("found") || lower.includes("treasure") || lower.includes("fertile")) return "#2ecc71";
-  if (lower.includes("lost") || lower.includes("collapse") || lower.includes("setback") || lower.includes("trap")) return "#f39c12";
-  return "#888";
+  if (lower.includes("combat") || lower.includes("ambush") || lower.includes("attacked") || lower.includes("fought")) return colors.danger;
+  if (lower.includes("discover") || lower.includes("found") || lower.includes("treasure") || lower.includes("fertile")) return colors.success;
+  if (lower.includes("lost") || lower.includes("collapse") || lower.includes("setback") || lower.includes("trap")) return colors.warning;
+  return colors.muted;
 }
 
 function timeAgo(dateStr) {
@@ -78,14 +94,53 @@ function timeAgo(dateStr) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+function rewardParts(e) {
+  const parts = [];
+  const res = e.resources_found || {};
+  const land = res.land || e.land_reward;
+  if (land) parts.push(`🏔 +${land} land`);
+  if (res.gold) parts.push(`💰 +${res.gold}`);
+  if (res.mana) parts.push(`🔮 +${res.mana}`);
+  if (Array.isArray(res.units_found)) {
+    res.units_found.forEach((u) => {
+      parts.push(`🗡 +${u.amount} ${(u.slug || "unit").replace(/_/g, " ")}`);
+    });
+  }
+  return parts;
+}
+
+/* ================================================================
+   HERO — full-width art with overlaid title/status + scrim.
+   ================================================================ */
+function Hero({ title, subtitle, accent = colors.gold, onHistory, historyCount }) {
+  return (
+    <View style={styles.hero}>
+      <Image source={art.expeditionMap} resizeMode="cover" style={StyleSheet.absoluteFill} />
+      <View style={styles.heroTint} />
+
+      {historyCount > 0 && (
+        <TouchableOpacity style={styles.historyFab} onPress={onHistory} activeOpacity={0.8}>
+          <Text style={styles.historyFabTxt}>📜</Text>
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.heroScrim}>
+        <Text style={[styles.heroTitle, { color: accent }]}>{title}</Text>
+        {subtitle ? <Text style={styles.heroSub}>{subtitle}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+/* ================================================================
+   MAIN SCREEN
+   ================================================================ */
 export default function ExplorationsScreen() {
   const { showAlert } = useModal();
   const [data, setData] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedUnit, setSelectedUnit] = useState(null); // null = no escort
+  const [selectedUnit, setSelectedUnit] = useState(null); // null = solo
   const [sliderValue, setSliderValue] = useState(1);
-  const [countdown, setCountdown] = useState("");
-  const [expandedLogs, setExpandedLogs] = useState(new Set());
+  const [now, setNow] = useState(Date.now());
   const [dispatching, setDispatching] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const timerRef = useRef(null);
@@ -95,7 +150,6 @@ export default function ExplorationsScreen() {
     try {
       const d = await api.getExplorations();
       setData(d);
-      if (!d.active) setCountdown("");
     } catch (e) {
       if (e.message !== "UNAUTHORIZED") showAlert("Error", e.message);
     }
@@ -110,23 +164,18 @@ export default function ExplorationsScreen() {
     }, [])
   );
 
-  // Countdown timer
+  // Single 1s clock drives countdown + progress; polls when expedition is due.
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (!data?.active) return;
 
     let lastPoll = 0;
     const tick = () => {
-      const diff = new Date(data.active.finishes_at).getTime() - Date.now();
-      if (diff <= 0) {
-        setCountdown("00:00");
-        const now = Date.now();
-        if (now - lastPoll >= 3000) {
-          lastPoll = now;
-          loadData();
-        }
-      } else {
-        setCountdown(formatCountdown(diff));
+      const t = Date.now();
+      setNow(t);
+      if (new Date(data.active.finishes_at).getTime() <= t && t - lastPoll >= 3000) {
+        lastPoll = t;
+        loadData();
       }
     };
     tick();
@@ -134,31 +183,25 @@ export default function ExplorationsScreen() {
     return () => clearInterval(timerRef.current);
   }, [data?.active?.id, data?.active?.finishes_at]);
 
-  // Pulsing animation for active badge
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: Platform.OS !== "web" }),
+        Animated.timing(pulseAnim, { toValue: 0.4, duration: 800, useNativeDriver: Platform.OS !== "web" }),
       ])
     );
     loop.start();
     return () => loop.stop();
   }, []);
 
-  function selectUnit(unit) {
+  function toggleUnit(unit) {
     if (selectedUnit?.unit_id === unit.unit_id) {
       setSelectedUnit(null);
       setSliderValue(1);
     } else {
       setSelectedUnit(unit);
-      setSliderValue(Math.min(1, unit.available));
+      setSliderValue(Math.min(Math.max(1, Math.ceil(unit.available / 2)), unit.available));
     }
-  }
-
-  function selectNoEscort() {
-    setSelectedUnit(null);
-    setSliderValue(0);
   }
 
   async function handleDispatch() {
@@ -167,8 +210,7 @@ export default function ExplorationsScreen() {
     try {
       const unitId = selectedUnit ? selectedUnit.unit_id : null;
       const qty = selectedUnit ? sliderValue : 0;
-      const result = await api.startExploration(unitId, qty);
-      showAlert("Dispatched!", result.message);
+      await api.startExploration(unitId, qty);
       setSelectedUnit(null);
       setSliderValue(1);
       loadData();
@@ -189,22 +231,164 @@ export default function ExplorationsScreen() {
     }
   }
 
-  function toggleLog(id) {
-    setExpandedLogs((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  }
-
   if (!data) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loading}>Loading...</Text>
+        <LoadingState />
       </View>
     );
   }
 
+  const historyCount = data.claimed?.length || 0;
+
+  /* ── STATE C: RETURNED (claim) ── */
+  if (data.completed.length > 0) {
+    const e = data.completed[0];
+    const res = e.resources_found || {};
+    const survived = res.survivors != null ? res.survivors : e.quantity;
+    const isFailed = (e.events || []).some((ev) => typeof ev === "string" && ev.includes("FAILURE"));
+    const parts = rewardParts(e);
+    const moreWaiting = data.completed.length - 1;
+    const events = e.events || [];
+
+    return (
+      <View style={styles.container}>
+        <Hero
+          title={isFailed ? "💀 Expedition Lost" : "🏆 Expedition Returned!"}
+          subtitle={e.unit_name ? `${e.unit_name} party` : "Unescorted party"}
+          accent={isFailed ? colors.danger : colors.gold}
+          onHistory={() => setShowHistory(true)}
+          historyCount={historyCount}
+        />
+
+        <View style={styles.content}>
+          {/* Rewards */}
+          <View style={styles.rewardRow}>
+            {parts.length > 0 ? (
+              parts.map((p, i) => (
+                <View key={i} style={[styles.rewardChip, isFailed && { borderColor: alpha(colors.danger, "55") }]}>
+                  <Text style={styles.rewardChipTxt}>{p}</Text>
+                </View>
+              ))
+            ) : (
+              <View style={styles.rewardChip}>
+                <Text style={styles.rewardChipTxt}>No rewards recovered</Text>
+              </View>
+            )}
+          </View>
+
+          {e.quantity > 0 && (
+            <Text style={[styles.survivorLine, { color: survived >= e.quantity ? colors.success : colors.warning }]}>
+              {survived >= e.quantity
+                ? `All ${e.quantity} escorts returned safely`
+                : `${survived} of ${e.quantity} escorts survived`}
+            </Text>
+          )}
+
+          {/* Journal — fixed window, scrolls internally */}
+          {events.length > 0 && (
+            <View style={styles.journal}>
+              <Text style={styles.journalTitle}>📜 Expedition Log</Text>
+              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 6 }}>
+                {events.map((ev, i) => {
+                  const text = typeof ev === "string" ? ev : ev.description || ev.text || "";
+                  const isIndented = text.startsWith("  ");
+                  return (
+                    <View key={i} style={[styles.logEntry, isIndented && { marginLeft: 14 }]}>
+                      {!isIndented && <View style={[styles.logDot, { backgroundColor: eventColor(text) }]} />}
+                      <Text style={[styles.logText, { color: eventColor(text) }]}>{text}</Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.actionBar}>
+          {moreWaiting > 0 && (
+            <Text style={styles.moreWaiting}>+{moreWaiting} more expedition{moreWaiting > 1 ? "s" : ""} waiting</Text>
+          )}
+          <LoadingButton style={[styles.actionBtn, { backgroundColor: colors.success }]} onPress={() => handleClaim(e.id)}>
+            <Text style={styles.actionBtnTxt}>🎁 Claim & Recover</Text>
+          </LoadingButton>
+        </View>
+
+        {renderHistoryModal()}
+      </View>
+    );
+  }
+
+  /* ── STATE B: UNDERWAY ── */
+  if (data.active) {
+    const e = data.active;
+    const startMs = new Date(e.started_at).getTime();
+    const endMs = new Date(e.finishes_at).getTime();
+    const frac = Math.max(0, Math.min(1, (now - startMs) / Math.max(1, endMs - startMs)));
+    const pct = Math.round(frac * 100);
+    const returning = now >= endMs;
+    const countdown = formatCountdown(endMs - now);
+    const partyLabel = e.unit_name ? `${e.quantity}× ${e.unit_name}` : "Unescorted Party";
+    const potential = e.resources_found?.potential_land || "?";
+    const partyEmoji = e.unit_name ? "🐎" : "🚶";
+
+    return (
+      <View style={styles.container}>
+        <Hero
+          title="🧭 Expedition Underway"
+          subtitle={partyLabel}
+          accent={colors.gold}
+          onHistory={() => setShowHistory(true)}
+          historyCount={historyCount}
+        />
+
+        <View style={[styles.content, { justifyContent: "center" }]}>
+          <View style={styles.badgeRow}>
+            <Animated.View style={[styles.pulseDot, { opacity: pulseAnim }]} />
+            <Text style={styles.badgeTxt}>{returning ? "RETURNING HOME" : "IN THE WILDS"}</Text>
+          </View>
+
+          <Text style={styles.countdown}>{returning ? "..." : countdown}</Text>
+
+          {/* Journey trail — marker walks from castle to peaks */}
+          <View style={styles.trailBox}>
+            <View style={styles.trailRow}>
+              <Text style={styles.trailEnd}>🏰</Text>
+              <View style={styles.trailBarWrap}>
+                <ProgressBar percent={pct} color={colors.gold} height={10} />
+                <Text style={[styles.trailMarker, { left: `${Math.min(94, Math.max(0, pct))}%` }]}>
+                  {partyEmoji}
+                </Text>
+              </View>
+              <Text style={styles.trailEnd}>🏔</Text>
+            </View>
+            <Text style={styles.trailPct}>{pct}% of the journey complete</Text>
+          </View>
+
+          <View style={styles.statChipRow}>
+            <View style={styles.statChip}>
+              <Text style={styles.statChipTxt}>🏔 ~{potential} land</Text>
+            </View>
+            <View style={styles.statChip}>
+              <Text style={styles.statChipTxt}>🕐 left {timeAgo(e.started_at)}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.actionBar}>
+          <View style={[styles.actionBtn, styles.actionBtnGhost]}>
+            <Text style={styles.actionGhostTxt}>
+              {returning ? "Tallying the spoils…" : `Party returns at ${formatClock(e.finishes_at)}`}
+            </Text>
+          </View>
+        </View>
+
+        {renderHistoryModal()}
+      </View>
+    );
+  }
+
+  /* ── STATE A: MUSTER ── */
   const land = data.land || 0;
   const escorted = selectedUnit != null;
   const speed = selectedUnit?.speed || 5;
@@ -213,268 +397,122 @@ export default function ExplorationsScreen() {
   const previewDanger = calcDanger(land, escorted);
   const danger = dangerMeta(previewDanger);
 
-  // ── Render helpers ──
+  return (
+    <View style={styles.container}>
+      <Hero
+        title="🗺 Explore the Wilds"
+        subtitle={`${land} acres held · choose your expedition party`}
+        accent={colors.gold}
+        onHistory={() => setShowHistory(true)}
+        historyCount={historyCount}
+      />
 
-  function renderPreviewPanel() {
-    return (
-      <View style={styles.previewPanel}>
-        <Text style={styles.previewTitle}>Mission Preview</Text>
-        <View style={styles.previewRow}>
-          <View style={styles.previewStat}>
-            <Text style={styles.previewEmoji}>⏱</Text>
-            <Text style={styles.previewValue}>{formatDuration(previewDuration)}</Text>
-            <Text style={styles.previewLabel}>Duration</Text>
-          </View>
-          <View style={[styles.previewStat, styles.previewStatCenter]}>
-            <Text style={styles.previewEmoji}>🏔</Text>
-            <Text style={[styles.previewValue, { color: "#2ecc71" }]}>~{previewPotential}</Text>
-            <Text style={styles.previewLabel}>Max Land</Text>
-          </View>
-          <View style={styles.previewStat}>
-            <Text style={styles.previewEmoji}>⚔️</Text>
-            <Text style={[styles.previewValue, { color: danger.color }]}>
-              {previewDanger}%
-            </Text>
-            <Text style={[styles.previewLabel, { color: danger.color }]}>{danger.label}</Text>
-          </View>
-        </View>
-      </View>
-    );
-  }
+      <View style={styles.content}>
+        <Text style={styles.gridLabel}>Expedition Party</Text>
 
-  function renderUnitList() {
-    return (
-      <ScrollView style={styles.unitList} contentContainerStyle={styles.unitListContent}>
-        {/* No Escort option */}
-        <TouchableOpacity
-          style={[styles.unitCard, !escorted && styles.unitCardSelected]}
-          onPress={selectNoEscort}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={styles.unitName}>🚶 No Escort</Text>
-            <Text style={styles.unitSub}>Higher risk, no speed bonus</Text>
-          </View>
-        </TouchableOpacity>
+        {/* Inventory grid — scrolls within its own window */}
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.grid}>
+          {/* Solo tile */}
+          <TouchableOpacity
+            style={[styles.tile, !escorted && styles.tileSelected]}
+            onPress={() => { setSelectedUnit(null); setSliderValue(1); }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.tileEmoji}>🚶</Text>
+            <Text style={styles.tileName} numberOfLines={1}>Solo</Text>
+            {!escorted && <View style={styles.tileCheck}><Text style={styles.tileCheckTxt}>✓</Text></View>}
+          </TouchableOpacity>
 
-        {/* Unit cards */}
-        {data.available_units.map((u) => {
-          const isSel = selectedUnit?.unit_id === u.unit_id;
-          return (
-            <TouchableOpacity
-              key={u.unit_id}
-              style={[styles.unitCard, isSel && styles.unitCardSelected]}
-              onPress={() => selectUnit(u)}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.unitName}>{u.name}</Text>
-                <View style={styles.unitStatsRow}>
-                  <Text style={styles.unitStat}>⚡ {u.speed}</Text>
-                  <Text style={styles.unitStat}>⚔️ {u.attack}</Text>
-                  <Text style={styles.unitStat}>🛡 {u.defense}</Text>
+          {data.available_units.map((u) => {
+            const isSel = selectedUnit?.unit_id === u.unit_id;
+            const img = unitImage(u.slug);
+            return (
+              <TouchableOpacity
+                key={u.unit_id}
+                style={[styles.tile, isSel && styles.tileSelected]}
+                onPress={() => toggleUnit(u)}
+                activeOpacity={0.8}
+              >
+                {img ? (
+                  <Image source={img} resizeMode="contain" style={styles.tileArt} />
+                ) : (
+                  <Text style={styles.tileEmoji}>🪖</Text>
+                )}
+                <Text style={styles.tileName} numberOfLines={1}>{u.name}</Text>
+                <View style={styles.tileCount}>
+                  <Text style={styles.tileCountTxt}>{u.available}</Text>
                 </View>
-              </View>
-              <View style={styles.unitRight}>
-                <Text style={styles.unitAvail}>{u.available}</Text>
-                <Text style={styles.unitAvailLabel}>available</Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-
-        {data.available_units.length === 0 && (
-          <Text style={styles.emptyText}>No units available. Sending unescorted party.</Text>
-        )}
-      </ScrollView>
-    );
-  }
-
-  function renderBottomPanel() {
-    return (
-      <View style={styles.bottomPanel}>
-        {/* Slider for selected unit */}
-        {selectedUnit && selectedUnit.available > 0 && (
-          <View style={styles.sliderBox}>
-            <View style={styles.sliderHeader}>
-              <Text style={styles.sliderLabel}>Escort Size</Text>
-              <TouchableOpacity onPress={() => setSliderValue(selectedUnit.available)}>
-                <Text style={styles.maxBtn}>MAX</Text>
+                {isSel && <View style={styles.tileCheck}><Text style={styles.tileCheckTxt}>✓</Text></View>}
               </TouchableOpacity>
-            </View>
-            <Text style={styles.sliderBigNum}>{sliderValue}</Text>
+            );
+          })}
+        </ScrollView>
+
+        {/* Party size — compact single row */}
+        {escorted && selectedUnit.available > 0 && (
+          <View style={styles.sizeRow}>
+            <Text style={styles.sizeValue}>{sliderValue}</Text>
             <Slider
-              style={styles.slider}
+              style={{ flex: 1, height: 34 }}
               minimumValue={1}
               maximumValue={selectedUnit.available}
               step={1}
               value={sliderValue}
               onValueChange={setSliderValue}
-              minimumTrackTintColor="#f1c40f"
-              maximumTrackTintColor="#2a2a4a"
-              thumbTintColor="#f1c40f"
+              minimumTrackTintColor={colors.gold}
+              maximumTrackTintColor={colors.border}
+              thumbTintColor={colors.gold}
             />
-            <View style={styles.sliderRange}>
-              <Text style={styles.sliderRangeText}>1</Text>
-              <Text style={styles.sliderRangeText}>{selectedUnit.available}</Text>
-            </View>
+            <TouchableOpacity onPress={() => setSliderValue(selectedUnit.available)}>
+              <Text style={styles.maxBtn}>MAX</Text>
+            </TouchableOpacity>
           </View>
         )}
+      </View>
 
-        {/* Mission Preview */}
-        {renderPreviewPanel()}
+      {/* Mission strip + dispatch */}
+      <View style={styles.actionBar}>
+        <View style={styles.missionStrip}>
+          <View style={styles.missionStat}>
+            <Text style={styles.missionValue}>⏱ {formatDuration(previewDuration)}</Text>
+            <Text style={styles.missionLabel}>Duration</Text>
+          </View>
+          <View style={styles.missionDivider} />
+          <View style={styles.missionStat}>
+            <Text style={[styles.missionValue, { color: colors.success }]}>🏔 ~{previewPotential}</Text>
+            <Text style={styles.missionLabel}>Max Land</Text>
+          </View>
+          <View style={styles.missionDivider} />
+          <View style={styles.missionStat}>
+            <Text style={[styles.missionValue, { color: danger.color }]}>⚔️ {previewDanger}%</Text>
+            <Text style={[styles.missionLabel, { color: danger.color }]}>{danger.label}</Text>
+          </View>
+        </View>
 
-        {/* Dispatch button */}
         <TouchableOpacity
-          style={[styles.dispatchBtn, dispatching && { opacity: 0.5 }]}
+          style={[styles.actionBtn, { backgroundColor: colors.gold }, dispatching && { opacity: 0.5 }]}
           onPress={handleDispatch}
           disabled={dispatching}
+          activeOpacity={0.85}
         >
-          <Text style={styles.dispatchText}>
-            {dispatching ? "Dispatching..." : "⚔️  Dispatch Expedition"}
+          <Text style={[styles.actionBtnTxt, { color: colors.bg }]}>
+            {dispatching
+              ? "Dispatching…"
+              : escorted
+                ? `⚔️ Dispatch ${sliderValue}× ${selectedUnit.name}`
+                : "⚔️ Dispatch Solo Expedition"}
           </Text>
         </TouchableOpacity>
-
-        {renderHistoryButton()}
       </View>
-    );
-  }
 
-  function renderActiveExploration() {
-    const e = data.active;
-    const unitLabel = e.unit_name
-      ? `${e.quantity}× ${e.unit_name}`
-      : "Unescorted Party";
-    const potential = e.resources_found?.potential_land || "?";
+      {renderHistoryModal()}
+    </View>
+  );
 
-    return (
-      <View style={styles.activeCard}>
-        <View style={styles.activeBadgeRow}>
-          <Animated.View style={[styles.pulseDot, { opacity: pulseAnim }]} />
-          <Text style={styles.activeBadge}>IN PROGRESS</Text>
-        </View>
-        <Text style={styles.activeUnit}>{unitLabel}</Text>
-        <Text style={styles.countdownText}>{countdown || "..."}</Text>
-        <View style={styles.activeStatsRow}>
-          <Text style={styles.activeStat}>🏔 ~{potential} land potential</Text>
-          <Text style={styles.activeStat}>🕐 Started {timeAgo(e.started_at)}</Text>
-        </View>
-      </View>
-    );
-  }
-
-  function renderRewardsLine(e) {
-    const parts = [];
-    const res = e.resources_found || {};
-    const land = res.land || e.land_reward;
-    if (land) parts.push(`🏔 +${land} land`);
-    if (res.gold) parts.push(`💰 +${res.gold} gold`);
-    if (res.mana) parts.push(`🔮 +${res.mana} mana`);
-    if (Array.isArray(res.units_found) && res.units_found.length > 0) {
-      res.units_found.forEach((u) => {
-        const name = (u.slug || "unit").replace(/_/g, " ");
-        parts.push(`🗡 +${u.amount} ${name}`);
-      });
-    }
-    return parts.length > 0 ? parts.join("   ") : "No rewards";
-  }
-
-  function renderExpeditionLog(e, autoExpand = false) {
-    const events = e.events || [];
-    if (events.length === 0) return null;
-    const isExpanded = autoExpand || expandedLogs.has(e.id);
-
-    return (
-      <View style={styles.logSection}>
-        <TouchableOpacity
-          onPress={() => toggleLog(e.id)}
-          style={styles.logToggle}
-        >
-          <Text style={styles.logToggleText}>
-            {isExpanded ? "▼" : "▶"} Expedition Log ({events.length})
-          </Text>
-        </TouchableOpacity>
-        {isExpanded &&
-          events.map((ev, i) => {
-            const text = typeof ev === "string" ? ev : ev.description || ev.text || JSON.stringify(ev);
-            const isIndented = text.startsWith("  ");
-            return (
-              <View key={i} style={[styles.logEntry, isIndented && { marginLeft: 16 }]}>
-                {!isIndented && <View style={[styles.logDot, { backgroundColor: eventColor(text) }]} />}
-                <Text style={[styles.logText, { color: eventColor(text) }]}>{text}</Text>
-              </View>
-            );
-          })}
-      </View>
-    );
-  }
-
-  function renderCompletedExplorations() {
-    if (data.completed.length === 0) return null;
-    return (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>✅ Ready to Claim</Text>
-        {data.completed.map((e) => {
-          const res = e.resources_found || {};
-          const survived = res.survivors != null ? res.survivors : e.quantity;
-          const allSurvived = survived >= e.quantity;
-          const isFailed = (e.events || []).some((ev) => typeof ev === "string" && ev.includes("FAILURE"));
-          return (
-            <View key={e.id} style={[styles.completedCard, isFailed && { borderColor: "#e74c3c" }]}>
-              {/* Outcome banner */}
-              <View style={[styles.outcomeBanner, { backgroundColor: isFailed ? "#e74c3c22" : "#2ecc7122" }]}>
-                <Text style={[styles.outcomeText, { color: isFailed ? "#e74c3c" : "#2ecc71" }]}>
-                  {isFailed ? "💀 Expedition Lost" : "🏆 Expedition Successful"}
-                </Text>
-              </View>
-              <View style={styles.completedHeader}>
-                <Text style={styles.completedUnit}>
-                  {e.unit_name ? `${e.unit_name}` : "Unescorted"}
-                </Text>
-                {e.quantity > 0 && (
-                  <Text
-                    style={[
-                      styles.survivorText,
-                      { color: allSurvived ? "#2ecc71" : "#f39c12" },
-                    ]}
-                  >
-                    {survived}/{e.quantity} survived
-                  </Text>
-                )}
-              </View>
-              <Text style={styles.rewardsText}>{renderRewardsLine(e)}</Text>
-              {renderExpeditionLog(e, true)}
-              <LoadingButton
-                style={styles.claimButton}
-                onPress={() => handleClaim(e.id)}
-              >
-                <Text style={styles.claimText}>Claim & Recover</Text>
-              </LoadingButton>
-            </View>
-          );
-        })}
-      </View>
-    );
-  }
-
-  function renderHistoryButton() {
-    if (!data.claimed || data.claimed.length === 0) return null;
-    return (
-      <TouchableOpacity
-        style={styles.historyBtn}
-        onPress={() => setShowHistory(true)}
-      >
-        <Text style={styles.historyBtnText}>📜  Expedition History ({data.claimed.length})</Text>
-      </TouchableOpacity>
-    );
-  }
-
+  /* ── history bottom sheet ── */
   function renderHistoryModal() {
     return (
-      <Modal
-        visible={showHistory}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowHistory(false)}
-      >
+      <Modal visible={showHistory} animationType="slide" transparent onRequestClose={() => setShowHistory(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -483,312 +521,283 @@ export default function ExplorationsScreen() {
                 <Text style={styles.modalClose}>✕</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView style={styles.modalScroll}>
+            <ScrollView style={{ paddingTop: 8 }}>
               {(data.claimed || []).map((e) => (
                 <View key={e.id} style={styles.historyCard}>
                   <View style={styles.historyHeader}>
                     <Text style={styles.historyUnit}>
-                      {e.unit_name
-                        ? `${e.quantity}× ${e.unit_name}`
-                        : "Unescorted"}
+                      {e.unit_name ? `${e.quantity}× ${e.unit_name}` : "Unescorted"}
                     </Text>
                     <Text style={styles.historyTime}>{timeAgo(e.updated_at || e.started_at)}</Text>
                   </View>
-                  <Text style={styles.historyRewards}>{renderRewardsLine(e)}</Text>
-                  {renderExpeditionLog(e)}
-                  <View style={styles.claimedBadge}>
-                    <Text style={styles.claimedBadgeText}>Claimed</Text>
-                  </View>
+                  <Text style={styles.historyRewards}>{rewardParts(e).join("   ") || "No rewards"}</Text>
                 </View>
               ))}
-              {data.claimed.length === 0 && (
-                <Text style={styles.emptyText}>No expedition history yet.</Text>
-              )}
-              <View style={{ height: 20 }} />
+              {historyCount === 0 && <Text style={styles.emptyText}>No expedition history yet.</Text>}
+              <View style={{ height: 24 }} />
             </ScrollView>
           </View>
         </View>
       </Modal>
     );
   }
-
-  // When dispatching: use flex layout with unit list filling space and bottom panel pinned
-  if (!data.active && data.completed.length === 0) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.sectionTitle}>🗺  Send Exploration Party</Text>
-        {renderUnitList()}
-        {renderBottomPanel()}
-        {renderHistoryModal()}
-      </View>
-    );
-  }
-
-  // Otherwise: scrollable view for active/completed states
-  return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={async () => {
-            setRefreshing(true);
-            await loadData();
-            setRefreshing(false);
-          }}
-          tintColor="#f1c40f"
-        />
-      }
-    >
-      {data.active && renderActiveExploration()}
-      {renderCompletedExplorations()}
-      {renderHistoryButton()}
-      <View style={{ height: 40 }} />
-      {renderHistoryModal()}
-    </ScrollView>
-  );
 }
 
+/* ================================================================
+   STYLES
+   ================================================================ */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
-  loading: { color: "#666", textAlign: "center", marginTop: 60 },
-  section: { marginTop: 8 },
-  sectionTitle: {
-    color: "#f1c40f",
-    fontSize: 17,
-    fontWeight: "700",
+  container: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    ...(Platform.OS === "web" ? { maxWidth: 480, width: "100%", alignSelf: "center" } : {}),
+  },
+
+  /* hero */
+  hero: {
+    height: "34%",
+    overflow: "hidden",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  heroTint: { ...StyleSheet.absoluteFillObject, backgroundColor: alpha(colors.bg, "33") },
+  heroScrim: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: alpha(colors.bg, "cc"),
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-
-  // ── Unit selection cards (vertical scroll) ──
-  unitList: { flex: 1 },
-  unitListContent: { paddingHorizontal: 12, paddingBottom: 8 },
-  unitCard: {
-    backgroundColor: "#1a1a2e",
-    marginBottom: 8,
-    padding: 14,
-    borderRadius: 10,
-    flexDirection: "row",
+  heroTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    textShadowColor: colors.black,
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  heroSub: { color: colors.textDim, fontSize: 12, marginTop: 2 },
+  historyFab: {
+    position: "absolute",
+    top: 10,
+    right: 12,
+    zIndex: 5,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: alpha(colors.bg, "aa"),
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: "#2a2a4a",
+    justifyContent: "center",
   },
-  unitCardSelected: {
-    borderColor: "#f1c40f",
-    backgroundColor: "#1f1a30",
-  },
-  unitName: { color: "#e0e0e0", fontSize: 15, fontWeight: "700" },
-  unitSub: { color: "#888", fontSize: 12, marginTop: 2 },
-  unitStatsRow: { flexDirection: "row", marginTop: 4, gap: 12 },
-  unitStat: { color: "#aaa", fontSize: 12 },
-  unitRight: { alignItems: "center", marginLeft: 12 },
-  unitAvail: { color: "#f1c40f", fontSize: 18, fontWeight: "700" },
-  unitAvailLabel: { color: "#888", fontSize: 10 },
-  emptyText: { color: "#666", textAlign: "center", padding: 20 },
+  historyFabTxt: { fontSize: 16 },
 
-  // ── Bottom panel (pinned) ──
-  bottomPanel: {
-    borderTopWidth: 1,
-    borderTopColor: "#2a2a4a",
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
+  /* content zone */
+  content: { flex: 1, paddingHorizontal: 12, paddingTop: 10 },
 
-  // ── Slider ──
-  sliderBox: {
-    backgroundColor: "#1a1a2e",
-    marginHorizontal: 12,
-    marginTop: 4,
-    marginBottom: 8,
-    padding: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#2a2a4a",
-  },
-  sliderHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  sliderLabel: { color: "#ccc", fontSize: 14, fontWeight: "600" },
-  maxBtn: {
-    color: "#f1c40f",
-    fontSize: 13,
+  /* inventory grid */
+  gridLabel: {
+    color: colors.muted,
+    fontSize: 11,
     fontWeight: "700",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: "#f1c40f",
-    borderRadius: 4,
-  },
-  sliderBigNum: {
-    color: "#f1c40f",
-    fontSize: 36,
-    fontWeight: "700",
-    textAlign: "center",
-    marginVertical: 4,
-  },
-  slider: { width: "100%", height: 40 },
-  sliderRange: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 4,
-  },
-  sliderRangeText: { color: "#666", fontSize: 12 },
-
-  // ── Preview panel ──
-  previewPanel: {
-    backgroundColor: "#1a1a2e",
-    marginHorizontal: 12,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#2a2a4a",
-  },
-  previewTitle: {
-    color: "#aaa",
-    fontSize: 13,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 12,
     textTransform: "uppercase",
     letterSpacing: 1,
-  },
-  previewRow: { flexDirection: "row", justifyContent: "space-around" },
-  previewStat: { alignItems: "center", flex: 1 },
-  previewStatCenter: {
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: "#2a2a4a",
-  },
-  previewEmoji: { fontSize: 22, marginBottom: 4 },
-  previewValue: { color: "#e0e0e0", fontSize: 22, fontWeight: "700" },
-  previewLabel: { color: "#888", fontSize: 11, marginTop: 2 },
-
-  // ── Dispatch button ──
-  dispatchBtn: {
-    backgroundColor: "#f1c40f",
-    marginHorizontal: 12,
-    marginBottom: 12,
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  dispatchText: { color: "#0f0f1a", fontSize: 16, fontWeight: "700" },
-
-  // ── Active exploration card ──
-  activeCard: {
-    backgroundColor: "#1a1a2e",
-    marginHorizontal: 12,
-    marginTop: 12,
     marginBottom: 8,
-    padding: 18,
+  },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: GRID_GAP,
+    paddingBottom: 10,
+  },
+  tile: {
+    width: TILE_W,
+    height: TILE_W + 16,
     borderRadius: 12,
+    backgroundColor: colors.card,
     borderWidth: 1.5,
-    borderColor: "#f1c40f",
-  },
-  activeBadgeRow: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
-  pulseDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#f1c40f",
-    marginRight: 8,
-  },
-  activeBadge: {
-    color: "#f1c40f",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  activeUnit: { color: "#e0e0e0", fontSize: 16, fontWeight: "600", marginBottom: 8 },
-  countdownText: {
-    color: "#f1c40f",
-    fontSize: 38,
-    fontWeight: "700",
-    textAlign: "center",
-    marginVertical: 8,
-    fontVariant: ["tabular-nums"],
-  },
-  activeStatsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
-  activeStat: { color: "#aaa", fontSize: 13 },
-
-  // ── Completed cards ──
-  completedCard: {
-    backgroundColor: "#1a1a2e",
-    marginHorizontal: 12,
-    marginBottom: 10,
-    padding: 16,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: "#2ecc71",
-  },
-  outcomeBanner: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    alignSelf: "flex-start",
-    marginBottom: 10,
-  },
-  outcomeText: { fontSize: 14, fontWeight: "700" },
-  completedHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    borderColor: colors.border,
     alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 4,
+  },
+  tileSelected: {
+    borderColor: colors.gold,
+    backgroundColor: alpha(colors.gold, "14"),
+  },
+  tileArt: { width: TILE_W * 0.62, height: TILE_W * 0.62 },
+  tileEmoji: { fontSize: TILE_W * 0.4, height: TILE_W * 0.62, textAlignVertical: "center" },
+  tileName: { color: colors.textDim, fontSize: 10, marginTop: 3, paddingHorizontal: 3 },
+  tileCount: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: alpha(colors.bg, "dd"),
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  tileCountTxt: { color: colors.gold, fontSize: 10, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  tileCheck: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.gold,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tileCheckTxt: { color: colors.bg, fontSize: 10, fontWeight: "900" },
+
+  /* party size row */
+  sizeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     marginBottom: 8,
   },
-  completedUnit: { color: "#e0e0e0", fontSize: 15, fontWeight: "600" },
-  survivorText: { fontSize: 13, fontWeight: "600" },
-  rewardsText: { color: "#e0e0e0", fontSize: 14, marginBottom: 8 },
-  claimButton: {
-    backgroundColor: "#2ecc71",
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 6,
-  },
-  claimText: { color: "#fff", fontSize: 15, fontWeight: "700" },
-
-  // ── Expedition log ──
-  logSection: { marginTop: 4, marginBottom: 4 },
-  logToggle: { paddingVertical: 6 },
-  logToggleText: { color: "#888", fontSize: 13, fontWeight: "600" },
-  logEntry: { flexDirection: "row", alignItems: "flex-start", paddingVertical: 3, paddingLeft: 4 },
-  logDot: { width: 6, height: 6, borderRadius: 3, marginTop: 5, marginRight: 8 },
-  logText: { fontSize: 13, flex: 1, lineHeight: 18 },
-
-  // ── History button ──
-  historyBtn: {
-    marginHorizontal: 12,
-    marginTop: 8,
-    paddingVertical: 12,
-    borderRadius: 8,
+  sizeValue: { color: colors.gold, fontSize: 20, fontWeight: "800", minWidth: 44, textAlign: "center", fontVariant: ["tabular-nums"] },
+  maxBtn: {
+    color: colors.gold,
+    fontSize: 12,
+    fontWeight: "800",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
-    backgroundColor: "#1a1a2e",
+    borderColor: colors.gold,
+    borderRadius: 6,
+  },
+
+  /* underway */
+  badgeRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 6 },
+  pulseDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.gold, marginRight: 8 },
+  badgeTxt: { color: colors.gold, fontSize: 12, fontWeight: "800", letterSpacing: 2 },
+  countdown: {
+    color: colors.text,
+    fontSize: 52,
+    fontWeight: "800",
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+    marginBottom: 14,
+  },
+  trailBox: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    marginBottom: 12,
+  },
+  trailRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  trailEnd: { fontSize: 20 },
+  trailBarWrap: { flex: 1, justifyContent: "center" },
+  trailMarker: {
+    position: "absolute",
+    top: -14,
+    fontSize: 16,
+    marginLeft: -8,
+  },
+  trailPct: { color: colors.muted, fontSize: 11, textAlign: "center", marginTop: 10 },
+  statChipRow: { flexDirection: "row", justifyContent: "center", gap: 8 },
+  statChip: {
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  statChipTxt: { color: colors.textDim, fontSize: 12, fontWeight: "600" },
+
+  /* returned */
+  rewardRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },
+  rewardChip: {
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: alpha(colors.success, "55"),
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  rewardChipTxt: { color: colors.text, fontSize: 13, fontWeight: "700" },
+  survivorLine: { fontSize: 12, fontWeight: "600", marginBottom: 10 },
+  journal: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    marginBottom: 4,
+  },
+  journalTitle: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  logEntry: { flexDirection: "row", alignItems: "flex-start", paddingVertical: 3 },
+  logDot: { width: 6, height: 6, borderRadius: 3, marginTop: 5, marginRight: 8 },
+  logText: { fontSize: 12, flex: 1, lineHeight: 17 },
+
+  /* pinned action bar */
+  actionBar: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  missionStrip: {
+    flexDirection: "row",
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  missionStat: { flex: 1, alignItems: "center" },
+  missionValue: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  missionLabel: { color: colors.muted, fontSize: 9, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.5 },
+  missionDivider: { width: 1, backgroundColor: colors.border },
+  actionBtn: {
+    borderRadius: 12,
+    paddingVertical: 14,
     alignItems: "center",
   },
-  historyBtnText: { color: "#aaa", fontSize: 14, fontWeight: "600" },
-
-  // ── History modal ──
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "flex-end",
+  actionBtnTxt: { color: colors.white, fontSize: 15, fontWeight: "800" },
+  actionBtnGhost: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
+  actionGhostTxt: { color: colors.textDim, fontSize: 14, fontWeight: "600" },
+  moreWaiting: { color: colors.gold, fontSize: 12, textAlign: "center", marginBottom: 6, fontWeight: "600" },
+
+  /* history sheet */
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
   modalContent: {
-    backgroundColor: "#0f0f1a",
+    backgroundColor: colors.bg,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    maxHeight: "80%",
-    paddingBottom: 20,
+    maxHeight: "75%",
+    paddingBottom: 12,
   },
   modalHeader: {
     flexDirection: "row",
@@ -797,38 +806,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#2a2a4a",
+    borderBottomColor: colors.border,
   },
-  modalTitle: { color: "#f1c40f", fontSize: 17, fontWeight: "700" },
-  modalClose: { color: "#888", fontSize: 22, padding: 4 },
-  modalScroll: { paddingTop: 8 },
-
-  // ── Claimed history cards ──
+  modalTitle: { color: colors.gold, fontSize: 17, fontWeight: "700" },
+  modalClose: { color: colors.muted, fontSize: 22, padding: 4 },
   historyCard: {
-    backgroundColor: "#151528",
+    backgroundColor: colors.card,
     marginHorizontal: 12,
     marginBottom: 8,
     padding: 14,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#222240",
+    borderColor: colors.cardAlt,
   },
-  historyHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  historyUnit: { color: "#aaa", fontSize: 14, fontWeight: "600" },
-  historyTime: { color: "#666", fontSize: 12 },
-  historyRewards: { color: "#999", fontSize: 13, marginBottom: 4 },
-  claimedBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: "#2a2a4a",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-    marginTop: 4,
-  },
-  claimedBadgeText: { color: "#888", fontSize: 11, fontWeight: "600" },
+  historyHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
+  historyUnit: { color: colors.textDim, fontSize: 14, fontWeight: "600" },
+  historyTime: { color: colors.faint, fontSize: 12 },
+  historyRewards: { color: colors.muted, fontSize: 13 },
+  emptyText: { color: colors.faint, textAlign: "center", padding: 20 },
 });

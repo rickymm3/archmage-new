@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
+import { colors, alpha } from "../theme";
 
 export default function AttackSetupScreen({ route, navigation }) {
   const { targetId, targetName } = route.params;
@@ -118,7 +119,7 @@ export default function AttackSetupScreen({ route, navigation }) {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color="#e0e0e0" size="large" />
+        <ActivityIndicator color={colors.text} size="large" />
         <Text style={styles.loadingText}>Preparing battle plan...</Text>
       </View>
     );
@@ -276,7 +277,7 @@ export default function AttackSetupScreen({ route, navigation }) {
           disabled={sending || totalSending === 0}
         >
           {sending ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.white} />
           ) : (
             <Text style={styles.attackText}>
               ⚔️ Attack with {totalSending} units
@@ -289,94 +290,94 @@ export default function AttackSetupScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#0f0f1a" },
-  loadingText: { color: "#888", marginTop: 12 },
+  container: { flex: 1, backgroundColor: colors.bg },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.bg },
+  loadingText: { color: colors.muted, marginTop: 12 },
   scroll: { flex: 1 },
   targetCard: {
-    backgroundColor: "#2a1a1a",
+    backgroundColor: alpha(colors.danger, "18"),
     margin: 12,
     padding: 14,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e74c3c44",
+    borderColor: alpha(colors.danger, "44"),
   },
-  targetLabel: { color: "#e74c3c", fontSize: 11, fontWeight: "700", letterSpacing: 1 },
-  targetName: { color: "#e0e0e0", fontSize: 18, fontWeight: "bold", marginTop: 2 },
+  targetLabel: { color: colors.danger, fontSize: 11, fontWeight: "700", letterSpacing: 1 },
+  targetName: { color: colors.text, fontSize: 18, fontWeight: "bold", marginTop: 2 },
   targetStats: { flexDirection: "row", gap: 16, marginTop: 6 },
-  stat: { color: "#aaa", fontSize: 13 },
+  stat: { color: colors.textDim, fontSize: 13 },
   quickActions: { flexDirection: "row", gap: 8, marginHorizontal: 12, marginBottom: 8 },
   quickBtn: {
-    backgroundColor: "#2a2a4a",
+    backgroundColor: colors.border,
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: 6,
   },
-  quickBtnText: { color: "#8888cc", fontSize: 13, fontWeight: "600" },
-  emptyText: { color: "#666", textAlign: "center", padding: 24 },
+  quickBtnText: { color: colors.accentDim, fontSize: 13, fontWeight: "600" },
+  emptyText: { color: colors.faint, textAlign: "center", padding: 24 },
   unitCard: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     marginHorizontal: 12,
     marginBottom: 8,
     padding: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
   unitHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  unitName: { color: "#e0e0e0", fontSize: 15, fontWeight: "600" },
-  unitMeta: { color: "#888", fontSize: 11, marginTop: 2 },
-  available: { color: "#888", fontSize: 12 },
+  unitName: { color: colors.text, fontSize: 15, fontWeight: "600" },
+  unitMeta: { color: colors.muted, fontSize: 11, marginTop: 2 },
+  available: { color: colors.muted, fontSize: 12 },
   qtyRow: { flexDirection: "row", alignItems: "center", marginTop: 10, gap: 6 },
   qtyBtn: {
-    backgroundColor: "#2a2a4a",
+    backgroundColor: colors.border,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 4,
   },
-  qtyBtnText: { color: "#aaa", fontSize: 13, fontWeight: "600" },
-  qtyValue: { color: "#666", fontSize: 18, fontWeight: "bold", minWidth: 40, textAlign: "center" },
-  qtyActive: { color: "#f1c40f" },
+  qtyBtnText: { color: colors.textDim, fontSize: 13, fontWeight: "600" },
+  qtyValue: { color: colors.faint, fontSize: 18, fontWeight: "bold", minWidth: 40, textAlign: "center" },
+  qtyActive: { color: colors.gold },
   maxBtn: {
-    backgroundColor: "#3a3a5a",
+    backgroundColor: colors.border,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 4,
     marginLeft: "auto",
   },
-  maxBtnText: { color: "#8888cc", fontSize: 12, fontWeight: "700" },
+  maxBtnText: { color: colors.accentDim, fontSize: 12, fontWeight: "700" },
   heroRow: { flexDirection: "row", alignItems: "center", marginTop: 8, gap: 6, flexWrap: "wrap" },
-  heroLabel: { color: "#888", fontSize: 12 },
+  heroLabel: { color: colors.muted, fontSize: 12 },
   heroPill: {
-    backgroundColor: "#2a2a4a",
+    backgroundColor: colors.border,
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#3a3a5a",
+    borderColor: colors.border,
   },
-  heroPillActive: { backgroundColor: "#f1c40f22", borderColor: "#f1c40f" },
+  heroPillActive: { backgroundColor: alpha(colors.gold, "22"), borderColor: colors.gold },
   heroPillTaken: { opacity: 0.3 },
-  heroPillText: { color: "#aaa", fontSize: 11 },
-  heroPillTextActive: { color: "#f1c40f" },
-  heroPillTextTaken: { color: "#666" },
-  heroAssigned: { color: "#f1c40f", fontSize: 12, marginTop: 4 },
+  heroPillText: { color: colors.textDim, fontSize: 11 },
+  heroPillTextActive: { color: colors.gold },
+  heroPillTextTaken: { color: colors.faint },
+  heroAssigned: { color: colors.gold, fontSize: 12, marginTop: 4 },
   footer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
     padding: 12,
-    backgroundColor: "#0f0f1aee",
+    backgroundColor: alpha(colors.bg, "ee"),
     borderTopWidth: 1,
-    borderTopColor: "#2a2a4a",
+    borderTopColor: colors.border,
   },
   attackButton: {
-    backgroundColor: "#e74c3c",
+    backgroundColor: colors.danger,
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: "center",
   },
   disabled: { opacity: 0.4 },
-  attackText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  attackText: { color: colors.white, fontSize: 16, fontWeight: "bold" },
 });

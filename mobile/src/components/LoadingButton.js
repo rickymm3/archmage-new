@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from "react";
 import { TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native";
+import { colors } from "../theme";
 
 /**
  * Drop-in replacement for TouchableOpacity that shows a spinner
@@ -12,7 +13,7 @@ import { TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native";
  *
  * Props:
  *   onPress  – async function (awaited automatically)
- *   spinnerColor – ActivityIndicator color (default "#fff")
+ *   spinnerColor – ActivityIndicator color (default colors.white)
  *   disabled – externally controlled disabled state
  *   ...rest – forwarded to TouchableOpacity
  */
@@ -21,7 +22,7 @@ export default function LoadingButton({
   children,
   style,
   disabled,
-  spinnerColor = "#fff",
+  spinnerColor = colors.white,
   spinnerSize = "small",
   ...rest
 }) {

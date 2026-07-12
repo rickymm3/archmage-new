@@ -11,6 +11,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
+import { LoadingState, EmptyState } from "../components/ui";
+import { colors } from "../theme";
 
 export default function ActiveSpellsScreen() {
   const { showAlert } = useModal();
@@ -38,7 +40,7 @@ export default function ActiveSpellsScreen() {
   }
 
   if (!data) {
-    return <View style={styles.container}><Text style={styles.loading}>Loading...</Text></View>;
+    return <View style={styles.container}><LoadingState /></View>;
   }
 
   return (
@@ -78,31 +80,31 @@ export default function ActiveSpellsScreen() {
       ))}
 
       {data.active_spells.length === 0 && data.sustained_spells.length === 0 && (
-        <Text style={styles.emptyText}>No active spells</Text>
+        <EmptyState icon="✨" title="No active spells" subtitle="Cast enchantments from the Spells tab to empower your kingdom." />
       )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
-  loading: { color: "#666", textAlign: "center", marginTop: 60 },
-  sectionTitle: { color: "#7c5cbf", fontSize: 16, fontWeight: "600", padding: 14, paddingBottom: 6 },
+  container: { flex: 1, backgroundColor: colors.bg },
+  loading: { color: colors.faint, textAlign: "center", marginTop: 60 },
+  sectionTitle: { color: colors.accent, fontSize: 16, fontWeight: "600", padding: 14, paddingBottom: 6 },
   card: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     marginHorizontal: 12,
     marginBottom: 8,
     padding: 14,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  name: { color: "#e0e0e0", fontSize: 16, fontWeight: "600" },
-  stack: { color: "#7c5cbf", fontSize: 16, fontWeight: "bold" },
-  sustained: { color: "#2ecc71", fontSize: 13 },
-  meta: { color: "#888", fontSize: 12, marginTop: 4 },
-  cancelBtn: { borderWidth: 1, borderColor: "#e74c3c", paddingVertical: 6, borderRadius: 6, alignItems: "center", marginTop: 10 },
-  cancelText: { color: "#e74c3c", fontSize: 13 },
-  emptyText: { color: "#666", textAlign: "center", padding: 24 },
+  name: { color: colors.text, fontSize: 16, fontWeight: "600" },
+  stack: { color: colors.accent, fontSize: 16, fontWeight: "bold" },
+  sustained: { color: colors.success, fontSize: 13 },
+  meta: { color: colors.muted, fontSize: 12, marginTop: 4 },
+  cancelBtn: { borderWidth: 1, borderColor: colors.danger, paddingVertical: 6, borderRadius: 6, alignItems: "center", marginTop: 10 },
+  cancelText: { color: colors.danger, fontSize: 13 },
+  emptyText: { color: colors.faint, textAlign: "center", padding: 24 },
 });

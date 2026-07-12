@@ -1,9 +1,13 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { colors } from "../theme";
+import { ArtPlaceholder } from "../components/ui";
+import { ui as art } from "../assets";
 
 export default function WelcomeScreen({ navigation }) {
   return (
     <View style={styles.container}>
+      <ArtPlaceholder emoji="🧙" label="Game logo" size={120} source={art.logo} style={styles.logo} />
       <Text style={styles.title}>⚡ Archmage</Text>
       <Text style={styles.subtitle}>Build your empire. Master the arcane.</Text>
 
@@ -29,24 +33,25 @@ export default function WelcomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0f0f1a",
+    backgroundColor: colors.bg,
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
   },
+  logo: { marginBottom: 24 },
   title: {
     fontSize: 48,
     fontWeight: "bold",
-    color: "#7c5cbf",
+    color: colors.accent,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: "#999",
+    color: colors.muted,
     marginBottom: 48,
   },
   button: {
-    backgroundColor: "#7c5cbf",
+    backgroundColor: colors.accent,
     paddingVertical: 14,
     paddingHorizontal: 48,
     borderRadius: 8,
@@ -57,14 +62,14 @@ const styles = StyleSheet.create({
   secondaryButton: {
     backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: "#7c5cbf",
+    borderColor: colors.accent,
   },
   buttonText: {
-    color: "#fff",
+    color: colors.white,
     fontSize: 18,
     fontWeight: "600",
   },
   secondaryText: {
-    color: "#7c5cbf",
+    color: colors.accent,
   },
 });

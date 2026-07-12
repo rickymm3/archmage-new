@@ -11,6 +11,9 @@ import {
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { LoadingState, ArtPlaceholder } from "../components/ui";
+import { ui as art } from "../assets";
+import { colors, alpha } from "../theme";
 
 export default function HomeScreen() {
   const { logout } = useAuth();
@@ -48,7 +51,7 @@ export default function HomeScreen() {
   if (!data) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loadingText}>Loading...</Text>
+        <LoadingState />
       </View>
     );
   }
@@ -66,6 +69,7 @@ export default function HomeScreen() {
     >
       {/* Player Stats */}
       <View style={styles.card}>
+        <ArtPlaceholder emoji="🏰" label="Kingdom banner" aspect={3} source={art.kingdomBanner} style={styles.bannerArt} />
         <Text style={styles.cardTitle}>{p.kingdom_name || p.username}</Text>
         <Text style={styles.affinity}>{p.affinity}</Text>
         {p.under_protection && (
@@ -207,7 +211,7 @@ function RecruitOrderWidget({ order, collecting, onCollect }) {
             disabled={collecting}
           >
             {collecting ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color={colors.white} />
             ) : (
               <Text style={styles.collectText}>Collect {available}</Text>
             )}
@@ -324,7 +328,7 @@ function ExplorationWidget({ exploration, navigation, claimingId, onClaim }) {
                   <Text style={styles.explorationRewardText}>🔮 {exp.mana_reward} mana</Text>
                 )}
                 {casualties > 0 && (
-                  <Text style={[styles.explorationRewardText, { color: "#e74c3c" }]}>
+                  <Text style={[styles.explorationRewardText, { color: colors.danger }]}>
                     💀 {casualties} lost
                   </Text>
                 )}
@@ -336,7 +340,7 @@ function ExplorationWidget({ exploration, navigation, claimingId, onClaim }) {
               disabled={claimingId === exp.id}
             >
               {claimingId === exp.id ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={colors.white} />
               ) : (
                 <Text style={styles.explorationClaimText}>🎁 Claim</Text>
               )}
@@ -359,28 +363,29 @@ function StatItem({ label, value, icon }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
-  loadingText: { color: "#666", textAlign: "center", marginTop: 60 },
+  container: { flex: 1, backgroundColor: colors.bg },
+  loadingText: { color: colors.faint, textAlign: "center", marginTop: 60 },
   card: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     margin: 12,
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2a2a4a",
+    borderColor: colors.border,
   },
-  cardTitle: { color: "#e0e0e0", fontSize: 24, fontWeight: "bold" },
-  affinity: { color: "#7c5cbf", fontSize: 14, marginTop: 2 },
+  bannerArt: { marginBottom: 12 },
+  cardTitle: { color: colors.text, fontSize: 24, fontWeight: "bold" },
+  affinity: { color: colors.accent, fontSize: 14, marginTop: 2 },
   protectionBadge: {
-    backgroundColor: "#2ecc7133",
+    backgroundColor: alpha(colors.success, "33"),
     padding: 6,
     borderRadius: 6,
     marginTop: 8,
     alignSelf: "flex-start",
   },
-  protectionText: { color: "#2ecc71", fontSize: 12 },
+  protectionText: { color: colors.success, fontSize: 12 },
   sectionTitle: {
-    color: "#7c5cbf",
+    color: colors.accent,
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 12,
@@ -392,49 +397,49 @@ const styles = StyleSheet.create({
   },
   statItem: { alignItems: "center", flex: 1 },
   statIcon: { fontSize: 20, marginBottom: 2 },
-  statValue: { color: "#e0e0e0", fontSize: 16, fontWeight: "bold" },
-  statLabel: { color: "#888", fontSize: 11, marginTop: 2 },
+  statValue: { color: colors.text, fontSize: 16, fontWeight: "bold" },
+  statLabel: { color: colors.muted, fontSize: 11, marginTop: 2 },
   spellRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: "#2a2a4a",
+    borderBottomColor: colors.border,
   },
-  spellName: { color: "#e0e0e0", fontSize: 14 },
-  spellMeta: { color: "#7c5cbf", fontSize: 14 },
+  spellName: { color: colors.text, fontSize: 14 },
+  spellMeta: { color: colors.accent, fontSize: 14 },
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#252545",
+    backgroundColor: colors.cardAlt,
     padding: 14,
     borderRadius: 10,
     marginBottom: 8,
   },
   actionIcon: { fontSize: 24, marginRight: 12 },
-  actionText: { color: "#e0e0e0", fontSize: 15, fontWeight: "600" },
-  actionSub: { color: "#888", fontSize: 12, marginTop: 2 },
-  actionArrow: { color: "#7c5cbf", fontSize: 24, fontWeight: "bold" },
+  actionText: { color: colors.text, fontSize: 15, fontWeight: "600" },
+  actionSub: { color: colors.muted, fontSize: 12, marginTop: 2 },
+  actionArrow: { color: colors.accent, fontSize: 24, fontWeight: "bold" },
   notificationBadge: {
-    backgroundColor: "#e74c3c33",
+    backgroundColor: alpha(colors.danger, "33"),
     margin: 12,
     padding: 12,
     borderRadius: 8,
     alignItems: "center",
   },
-  notificationText: { color: "#e74c3c", fontSize: 14 },
+  notificationText: { color: colors.danger, fontSize: 14 },
   logoutButton: {
     margin: 12,
     padding: 14,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#555",
+    borderColor: colors.faint,
     alignItems: "center",
     marginBottom: 32,
   },
-  logoutText: { color: "#999", fontSize: 16 },
+  logoutText: { color: colors.muted, fontSize: 16 },
   recruitOrder: {
-    backgroundColor: "#252545",
+    backgroundColor: colors.cardAlt,
     borderRadius: 10,
     padding: 12,
     marginBottom: 8,
@@ -445,18 +450,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
-  recruitUnit: { color: "#e0e0e0", fontSize: 14, fontWeight: "600" },
-  recruitCount: { color: "#888", fontSize: 13 },
+  recruitUnit: { color: colors.text, fontSize: 14, fontWeight: "600" },
+  recruitCount: { color: colors.muted, fontSize: 13 },
   progressBarBg: {
     height: 6,
-    backgroundColor: "#1a1a2e",
+    backgroundColor: colors.card,
     borderRadius: 3,
     overflow: "hidden",
     marginBottom: 8,
   },
   progressBarFill: {
     height: "100%",
-    backgroundColor: "#7c5cbf",
+    backgroundColor: colors.accent,
     borderRadius: 3,
   },
   recruitFooter: {
@@ -464,16 +469,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  recruitTime: { color: "#888", fontSize: 12 },
+  recruitTime: { color: colors.muted, fontSize: 12 },
   collectButton: {
-    backgroundColor: "#2ecc71",
+    backgroundColor: colors.success,
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 6,
   },
-  collectText: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  collectText: { color: colors.white, fontSize: 13, fontWeight: "600" },
   explorationActive: {
-    backgroundColor: "#252545",
+    backgroundColor: colors.cardAlt,
     borderRadius: 10,
     padding: 12,
     marginBottom: 8,
@@ -485,34 +490,34 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   explorationBadge: {
-    backgroundColor: "#3498db22",
+    backgroundColor: alpha(colors.info, "22"),
     borderWidth: 1,
-    borderColor: "#3498db",
+    borderColor: colors.info,
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  explorationBadgeText: { color: "#3498db", fontSize: 10, fontWeight: "bold" },
-  explorationCountdown: { color: "#e0e0e0", fontSize: 18, fontWeight: "bold" },
+  explorationBadgeText: { color: colors.info, fontSize: 10, fontWeight: "bold" },
+  explorationCountdown: { color: colors.text, fontSize: 18, fontWeight: "bold" },
   explorationDetails: {
     flexDirection: "row",
     justifyContent: "space-around",
     marginBottom: 10,
   },
-  explorationDetailText: { color: "#888", fontSize: 13 },
+  explorationDetailText: { color: colors.muted, fontSize: 13 },
   explorationViewBtn: {
-    backgroundColor: "#3498db22",
+    backgroundColor: alpha(colors.info, "22"),
     borderWidth: 1,
-    borderColor: "#3498db",
+    borderColor: colors.info,
     borderRadius: 8,
     paddingVertical: 8,
     alignItems: "center",
   },
-  explorationViewBtnText: { color: "#3498db", fontSize: 14, fontWeight: "600" },
+  explorationViewBtnText: { color: colors.info, fontSize: 14, fontWeight: "600" },
   explorationCompleted: {
-    backgroundColor: "#2ecc7115",
+    backgroundColor: alpha(colors.success, "15"),
     borderWidth: 1,
-    borderColor: "#2ecc7144",
+    borderColor: alpha(colors.success, "44"),
     borderRadius: 10,
     padding: 12,
     marginBottom: 8,
@@ -520,15 +525,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   explorationCompletedHeader: { marginBottom: 4 },
-  explorationCompletedTitle: { color: "#2ecc71", fontSize: 14, fontWeight: "bold" },
+  explorationCompletedTitle: { color: colors.success, fontSize: 14, fontWeight: "bold" },
   explorationRewards: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
-  explorationRewardText: { color: "#ccc", fontSize: 12 },
+  explorationRewardText: { color: colors.textDim, fontSize: 12 },
   explorationClaimBtn: {
-    backgroundColor: "#2ecc71",
+    backgroundColor: colors.success,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
     marginLeft: 10,
   },
-  explorationClaimText: { color: "#fff", fontSize: 14, fontWeight: "bold" },
+  explorationClaimText: { color: colors.white, fontSize: 14, fontWeight: "bold" },
 });
