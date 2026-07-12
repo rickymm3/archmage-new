@@ -518,6 +518,40 @@ module Battle
            @speed += 5
            @hero[:active_buff] = "Swift Strike (+10% ATK, +5 SPD)"
         end
+
+        # 4. Generic data-driven passives (from the hero unit's abilities JSON).
+        # Keys: buff_type / buff_element (stack filters), buff_attack_pct,
+        # buff_defense_pct, buff_speed.
+        apply_generic_hero_passive
+      end
+
+      def apply_generic_hero_passive
+        abilities = @hero_unit&.abilities
+        return unless abilities.is_a?(Hash)
+
+        type_filter = abilities['buff_type']
+        element_filter = abilities['buff_element']
+        return if type_filter && @unit_type != type_filter.to_s.downcase
+        return if element_filter && @element != element_filter.to_s.downcase
+
+        applied = []
+        if (pct = abilities['buff_attack_pct'].to_f) > 0
+          @attack = (@attack * (1.0 + pct)).ceil
+          applied << "+#{(pct * 100).to_i}% ATK"
+        end
+        if (pct = abilities['buff_defense_pct'].to_f) > 0
+          @defense = (@defense * (1.0 + pct)).ceil
+          applied << "+#{(pct * 100).to_i}% DEF"
+        end
+        if (bonus = abilities['buff_speed'].to_i) > 0
+          @speed += bonus
+          applied << "+#{bonus} SPD"
+        end
+
+        if applied.any?
+          passive_name = abilities['passive'] || "Hero Aura"
+          @hero[:active_buff] = "#{passive_name.to_s.split(' (').first} (#{applied.join(', ')})"
+        end
       end
 
       def dead?

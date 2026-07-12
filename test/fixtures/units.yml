@@ -1,19 +1,47 @@
-# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
-
 one:
-  name: MyString
-  slug: MyString
-  description: MyText
-  requirements: 
+  name: Militia
+  slug: militia
+  description: Basic conscripts.
+  requirements: {"gold": 10, "barracks_level": 1}
   upkeep_cost: 1
-  attack: 1
-  defense: 1
+  mana_upkeep: 0
+  attack: 3
+  defense: 2
+  speed: 5
+  power: 3
+  unit_type: infantry
+  element: physical
+  recruitable: true
+  rarity: 0
 
 two:
-  name: MyString
-  slug: MyString
-  description: MyText
-  requirements: 
-  upkeep_cost: 1
-  attack: 1
-  defense: 1
+  name: Archer
+  slug: archer
+  description: Ranged fighters.
+  requirements: {"gold": 25, "barracks_level": 2}
+  upkeep_cost: 2
+  mana_upkeep: 0
+  attack: 6
+  defense: 2
+  speed: 8
+  power: 6
+  unit_type: ranged
+  element: physical
+  recruitable: true
+  rarity: 0
+
+hero_kael:
+  name: General Kael
+  slug: general_kael
+  description: A grizzled veteran of a hundred sieges.
+  requirements: {}
+  upkeep_cost: 200
+  mana_upkeep: 0
+  attack: 100
+  defense: 120
+  speed: 12
+  power: 500
+  unit_type: hero
+  element: physical
+  recruitable: false
+  rarity: 3

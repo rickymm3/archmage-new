@@ -1,8 +1,9 @@
-
-puts "Cleaning up Spells..."
-ActiveSpell.delete_all
-UserSpell.delete_all
-Spell.delete_all
+# Idempotent spell seeding — safe to run repeatedly (upserts by name,
+# never destroys player spell progress).
+def upsert_spell(attrs)
+  spell = Spell.find_or_initialize_by(name: attrs[:name])
+  spell.update!(attrs)
+end
 
 puts "Seeding Spells..."
 
@@ -10,7 +11,7 @@ puts "Seeding Spells..."
 # GENERAL SPELLS (Everyone can learn)
 # ═══════════════════════════════════════════════════════════════════
 
-Spell.create!(
+upsert_spell(
   name: "Serenity",
   description: "Calms the populace. +5 Morale per hour for 4 hours.",
   rank: 1, affinity: "general", mana_cost: 20, research_cost: 100,
@@ -18,7 +19,7 @@ Spell.create!(
   configuration: { stat_target: "morale", base_magnitude: 5, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Minor Heal",
   description: "Divine energy restores 10 Morale instantly.",
   rank: 1, affinity: "general", mana_cost: 20, research_cost: 200,
@@ -26,7 +27,7 @@ Spell.create!(
   configuration: { stat_target: "morale", base_magnitude: 10, duration: 3600 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Arcane Bolt",
   description: "Blasts enemy army. +3 attack bonus when attacking for 4 hours.",
   rank: 1, affinity: "general", mana_cost: 30, research_cost: 300,
@@ -34,7 +35,7 @@ Spell.create!(
   configuration: { stat_target: "army_attack", base_magnitude: 3, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Detect Magic",
   description: "Reveals active spells and enchantments on a target enemy kingdom.",
   rank: 1, affinity: "general", mana_cost: 15, research_cost: 150,
@@ -42,7 +43,7 @@ Spell.create!(
   configuration: { stat_target: "intel", base_magnitude: 1, duration: 0 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Mage Armor",
   description: "Protective ward. +4 Army Defense for 4 hours.",
   rank: 2, affinity: "general", mana_cost: 40, research_cost: 500,
@@ -50,7 +51,7 @@ Spell.create!(
   configuration: { stat_target: "army_defense", base_magnitude: 4, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Magic Missile",
   description: "Barrage of force. +5 attack bonus when attacking for 4 hours.",
   rank: 2, affinity: "general", mana_cost: 45, research_cost: 600,
@@ -58,7 +59,7 @@ Spell.create!(
   configuration: { stat_target: "army_attack", base_magnitude: 5, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Focus",
   description: "Channeling trance. Increases Mana production by 20% for 2 hours.",
   rank: 2, affinity: "general", mana_cost: 10, research_cost: 400,
@@ -66,7 +67,7 @@ Spell.create!(
   configuration: { stat_target: "mana_production", base_magnitude: 20, duration: 7200 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Web",
   description: "Ensnares invaders. +6 defense bonus when defending for 4 hours.",
   rank: 3, affinity: "general", mana_cost: 60, research_cost: 800,
@@ -74,7 +75,7 @@ Spell.create!(
   configuration: { stat_target: "army_defense", base_magnitude: 6, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Dispel Magic",
   description: "Removes one positive enchantment from an enemy kingdom.",
   rank: 4, affinity: "general", mana_cost: 80, research_cost: 1200,
@@ -82,7 +83,7 @@ Spell.create!(
   configuration: { stat_target: "dispel", base_magnitude: 1, duration: 0 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Phantom Steed",
   description: "Summons a magical mount to join your ranks.",
   rank: 3, affinity: "general", mana_cost: 50, research_cost: 900,
@@ -90,7 +91,7 @@ Spell.create!(
   configuration: { unit_slug: "phantom_steed", quantity: 1 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Dimension Door",
   description: "Shortens the duration of current Exploration by 50%.",
   rank: 5, affinity: "general", mana_cost: 150, research_cost: 2500,
@@ -98,7 +99,7 @@ Spell.create!(
   configuration: { stat_target: "exploration_speed", base_magnitude: 50, duration: 3600 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Wall of Force",
   description: "Impenetrable barrier. +15 defense bonus when defending for 2 hours.",
   rank: 6, affinity: "general", mana_cost: 200, research_cost: 4000,
@@ -106,7 +107,7 @@ Spell.create!(
   configuration: { stat_target: "army_defense", base_magnitude: 15, duration: 7200 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "True Seeing",
   description: "Reveals exact unit counts and building levels of a target kingdom.",
   rank: 7, affinity: "general", mana_cost: 250, research_cost: 6000,
@@ -114,7 +115,7 @@ Spell.create!(
   configuration: { stat_target: "intel", base_magnitude: 2, duration: 0 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Time Stop",
   description: "Chronal Shift. Instantly completes all active building constructions.",
   rank: 9, affinity: "general", mana_cost: 500, research_cost: 15000,
@@ -122,7 +123,7 @@ Spell.create!(
   configuration: { stat_target: "build_speed", base_magnitude: 100, duration: 0 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Wish",
   description: "Reality bending. Grants a massive amount of Gold, Mana, and Population.",
   rank: 10, affinity: "general", mana_cost: 1000, research_cost: 50000,
@@ -134,7 +135,7 @@ Spell.create!(
 # PYROMANCER (Red/Fire) — Aggressive, high damage, glass cannon
 # ═══════════════════════════════════════════════════════════════════
 
-Spell.create!(
+upsert_spell(
   name: "Flame Lance",
   description: "Searing blast. +4 attack bonus when attacking for 4 hours.",
   rank: 1, affinity: "pyromancer", mana_cost: 25, research_cost: 200,
@@ -142,7 +143,7 @@ Spell.create!(
   configuration: { stat_target: "army_attack", base_magnitude: 4, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Fireball",
   description: "Explosive destruction. +8 attack bonus when attacking for 4 hours.",
   rank: 2, affinity: "pyromancer", mana_cost: 50, research_cost: 800,
@@ -150,7 +151,7 @@ Spell.create!(
   configuration: { stat_target: "army_attack", base_magnitude: 8, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Summon Fire Elemental",
   description: "Conjures a living inferno to serve you.",
   rank: 2, affinity: "pyromancer", mana_cost: 80, research_cost: 1000,
@@ -158,7 +159,7 @@ Spell.create!(
   configuration: { unit_slug: "fire_elemental", quantity: 1 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Summon Phoenix",
   description: "Summons a being of living flame.",
   rank: 4, affinity: "pyromancer", mana_cost: 150, research_cost: 2500,
@@ -166,7 +167,7 @@ Spell.create!(
   configuration: { unit_slug: "phoenix", quantity: 1 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Molten Shield",
   description: "Magma barrier. +5 defense bonus for 3 hours. Burns attackers.",
   rank: 3, affinity: "pyromancer", mana_cost: 70, research_cost: 1200,
@@ -174,7 +175,7 @@ Spell.create!(
   configuration: { stat_target: "army_defense", base_magnitude: 5, duration: 10800 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Inferno",
   description: "Devastating firestorm. +15 attack bonus when attacking for 2 hours.",
   rank: 5, affinity: "pyromancer", mana_cost: 200, research_cost: 3500,
@@ -186,7 +187,7 @@ Spell.create!(
 # MINDWEAVER (Blue/Illusion) — Control, deception, intel
 # ═══════════════════════════════════════════════════════════════════
 
-Spell.create!(
+upsert_spell(
   name: "Confusion",
   description: "Sows chaos. +5 defense bonus for 4 hours (enemy miscoordinates).",
   rank: 1, affinity: "mindweaver", mana_cost: 30, research_cost: 300,
@@ -194,7 +195,7 @@ Spell.create!(
   configuration: { stat_target: "army_defense", base_magnitude: 5, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Mind Blast",
   description: "Psychic assault. +6 attack bonus when attacking for 4 hours.",
   rank: 2, affinity: "mindweaver", mana_cost: 50, research_cost: 800,
@@ -202,7 +203,7 @@ Spell.create!(
   configuration: { stat_target: "army_attack", base_magnitude: 6, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Mirror Image",
   description: "Illusory doubles. +8 defense bonus for 4 hours.",
   rank: 3, affinity: "mindweaver", mana_cost: 80, research_cost: 1500,
@@ -210,7 +211,7 @@ Spell.create!(
   configuration: { stat_target: "army_defense", base_magnitude: 8, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Summon Mirror Knight",
   description: "Conjures an illusory warrior that reflects damage.",
   rank: 3, affinity: "mindweaver", mana_cost: 100, research_cost: 1800,
@@ -218,7 +219,7 @@ Spell.create!(
   configuration: { unit_slug: "mirror_knight", quantity: 1 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Dominate",
   description: "Seize control. +12 attack bonus when attacking for 2 hours.",
   rank: 4, affinity: "mindweaver", mana_cost: 150, research_cost: 2500,
@@ -226,7 +227,7 @@ Spell.create!(
   configuration: { stat_target: "army_attack", base_magnitude: 12, duration: 7200 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Mass Hysteria",
   description: "Panic grips the enemy. +10 defense bonus for 3 hours.",
   rank: 5, affinity: "mindweaver", mana_cost: 180, research_cost: 3500,
@@ -238,7 +239,7 @@ Spell.create!(
 # GEOMANCER (Green/Nature) — Defensive, tanky, sustain
 # ═══════════════════════════════════════════════════════════════════
 
-Spell.create!(
+upsert_spell(
   name: "Barkskin",
   description: "Toughens armor with bark. +4 defense bonus for 4 hours.",
   rank: 1, affinity: "geomancer", mana_cost: 25, research_cost: 200,
@@ -246,7 +247,7 @@ Spell.create!(
   configuration: { stat_target: "army_defense", base_magnitude: 4, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Stone Skin",
   description: "Hardens unit armor. +8 defense bonus for 4 hours.",
   rank: 2, affinity: "geomancer", mana_cost: 50, research_cost: 800,
@@ -254,7 +255,7 @@ Spell.create!(
   configuration: { stat_target: "army_defense", base_magnitude: 8, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Earthquake",
   description: "Shakes the battlefield. +6 attack bonus when attacking for 4 hours.",
   rank: 2, affinity: "geomancer", mana_cost: 60, research_cost: 1000,
@@ -262,7 +263,7 @@ Spell.create!(
   configuration: { stat_target: "army_attack", base_magnitude: 6, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Summon Treant",
   description: "Animates a protector of the forest.",
   rank: 3, affinity: "geomancer", mana_cost: 100, research_cost: 1500,
@@ -270,7 +271,7 @@ Spell.create!(
   configuration: { unit_slug: "treant", quantity: 1 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Summon Earth Golem",
   description: "Forges an indestructible stone guardian.",
   rank: 5, affinity: "geomancer", mana_cost: 200, research_cost: 3500,
@@ -278,7 +279,7 @@ Spell.create!(
   configuration: { unit_slug: "earth_golem", quantity: 1 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Ironwood Fortress",
   description: "Nature's bulwark. +18 defense bonus for 2 hours.",
   rank: 5, affinity: "geomancer", mana_cost: 180, research_cost: 3000,
@@ -290,7 +291,7 @@ Spell.create!(
 # TEMPEST (Yellow/Air) — Speed, evasion, lightning
 # ═══════════════════════════════════════════════════════════════════
 
-Spell.create!(
+upsert_spell(
   name: "Call Storm Wisp",
   description: "Congregate static electricity into a sentient wisp.",
   rank: 1, affinity: "tempest", mana_cost: 40, research_cost: 150,
@@ -298,7 +299,7 @@ Spell.create!(
   configuration: { unit_slug: "storm_wisp", quantity: 1 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Tailwind",
   description: "Favorable winds. +4 attack bonus for 4 hours.",
   rank: 1, affinity: "tempest", mana_cost: 25, research_cost: 200,
@@ -306,7 +307,7 @@ Spell.create!(
   configuration: { stat_target: "army_attack", base_magnitude: 4, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Fog",
   description: "Dense fog hides your army size from rankings.",
   rank: 2, affinity: "tempest", mana_cost: 60, research_cost: 500,
@@ -319,7 +320,7 @@ Spell.create!(
   }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Chain Lightning",
   description: "Strikes multiple targets. +10 attack bonus when attacking for 3 hours.",
   rank: 3, affinity: "tempest", mana_cost: 70, research_cost: 1200,
@@ -327,7 +328,7 @@ Spell.create!(
   configuration: { stat_target: "army_attack", base_magnitude: 10, duration: 10800 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Haste",
   description: "Swift marches. +6 attack and speed bonus for 4 hours.",
   rank: 3, affinity: "tempest", mana_cost: 80, research_cost: 1500,
@@ -335,7 +336,7 @@ Spell.create!(
   configuration: { stat_target: "army_attack", base_magnitude: 6, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Summon Thunderbird",
   description: "Calls a massive storm-born raptor from the clouds.",
   rank: 4, affinity: "tempest", mana_cost: 160, research_cost: 2500,
@@ -343,7 +344,7 @@ Spell.create!(
   configuration: { unit_slug: "thunderbird", quantity: 1 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Static Field",
   description: "Crackling barrier. +7 defense bonus for 4 hours.",
   rank: 3, affinity: "tempest", mana_cost: 65, research_cost: 1000,
@@ -355,7 +356,7 @@ Spell.create!(
 # VOIDWALKER (Black/Dark) — Necromancy, drain, swarm
 # ═══════════════════════════════════════════════════════════════════
 
-Spell.create!(
+upsert_spell(
   name: "Raise Dead",
   description: "Raises a Ghoul from the earth to serve you.",
   rank: 1, affinity: "voidwalker", mana_cost: 35, research_cost: 150,
@@ -363,7 +364,7 @@ Spell.create!(
   configuration: { unit_slug: "ghoul", quantity: 2 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Dark Pact",
   description: "Unholy strength. +5 attack bonus for 4 hours.",
   rank: 1, affinity: "voidwalker", mana_cost: 30, research_cost: 250,
@@ -371,7 +372,7 @@ Spell.create!(
   configuration: { stat_target: "army_attack", base_magnitude: 5, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Life Drain",
   description: "Vampiric rite. +7 attack bonus and steals life for 4 hours.",
   rank: 2, affinity: "voidwalker", mana_cost: 60, research_cost: 1000,
@@ -379,7 +380,7 @@ Spell.create!(
   configuration: { stat_target: "army_attack", base_magnitude: 7, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Summon Shade",
   description: "Call forth a shadow from the void.",
   rank: 3, affinity: "voidwalker", mana_cost: 100, research_cost: 1500,
@@ -387,7 +388,7 @@ Spell.create!(
   configuration: { unit_slug: "shade", quantity: 1 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Bone Armor",
   description: "Shield of the dead. +6 defense bonus for 4 hours.",
   rank: 2, affinity: "voidwalker", mana_cost: 45, research_cost: 800,
@@ -395,7 +396,7 @@ Spell.create!(
   configuration: { stat_target: "army_defense", base_magnitude: 6, duration: 14400 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Summon Wraith",
   description: "Binds a tormented spirit to your service.",
   rank: 5, affinity: "voidwalker", mana_cost: 200, research_cost: 3500,
@@ -403,7 +404,7 @@ Spell.create!(
   configuration: { unit_slug: "wraith", quantity: 1 }
 )
 
-Spell.create!(
+upsert_spell(
   name: "Soul Harvest",
   description: "Reap the battlefield. +14 attack bonus when attacking for 2 hours.",
   rank: 4, affinity: "voidwalker", mana_cost: 150, research_cost: 2500,
@@ -411,4 +412,4 @@ Spell.create!(
   configuration: { stat_target: "army_attack", base_magnitude: 14, duration: 7200 }
 )
 
-puts "Spells seeded successfully. Total: #{Spell.count}"
+puts "Spells seeded: #{Spell.count}"

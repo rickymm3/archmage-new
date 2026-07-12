@@ -15,9 +15,14 @@ module Api
             total_attack: holdings.sum { |uu| uu.quantity * uu.unit.attack },
             total_defense: holdings.sum { |uu| uu.quantity * uu.unit.defense },
             daily_upkeep: morale_service.daily_upkeep,
-            morale: current_user.respond_to?(:current_morale) ? current_user.current_morale : current_user.morale
+            morale: current_user.respond_to?(:current_morale) ? current_user.current_morale : current_user.morale,
+            base_morale: current_user.current_base_morale,
+            army_capacity: current_user.army_capacity,
+            morale_decay_per_hour: (current_user.current_morale_decay_rate_per_second * 3600).round(1),
+            morale_penalty_multiplier: current_user.morale_penalty_multiplier.round(2)
           },
-          gold: current_user.gold
+          gold: current_user.gold,
+          mana: current_user.mana
         }
       end
 

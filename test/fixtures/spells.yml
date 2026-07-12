@@ -1,19 +1,19 @@
-# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
-
 one:
-  name: MyString
-  description: MyText
+  name: Serenity
+  description: Calms the populace.
   rank: 1
-  affinity: MyString
-  mana_cost: 1
-  research_cost: 1
-  spell_type: MyString
+  affinity: general
+  mana_cost: 20
+  research_cost: 100
+  spell_type: self
+  configuration: {"stat_target": "morale", "base_magnitude": 5, "duration": 14400}
 
 two:
-  name: MyString
-  description: MyText
+  name: Arcane Bolt
+  description: Blasts enemy army.
   rank: 1
-  affinity: MyString
-  mana_cost: 1
-  research_cost: 1
-  spell_type: MyString
+  affinity: general
+  mana_cost: 30
+  research_cost: 300
+  spell_type: attack
+  configuration: {"stat_target": "army_attack", "base_magnitude": 3, "duration": 14400}

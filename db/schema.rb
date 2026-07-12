@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_03_20_100002) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_11_173155) do
   create_table "active_spells", force: :cascade do |t|
     t.integer "user_id", null: false
     t.integer "spell_id", null: false
@@ -315,6 +315,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_03_20_100002) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "level", default: 1
+    t.boolean "burning", default: false, null: false
+    t.json "damage_info"
     t.index ["structure_id"], name: "index_user_structures_on_structure_id"
     t.index ["user_id"], name: "index_user_structures_on_user_id"
   end

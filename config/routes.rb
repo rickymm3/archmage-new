@@ -97,10 +97,11 @@ Rails.application.routes.draw do
       get "dashboard", to: "dashboard#show"
 
       # Town / Structures
-      get  "town",          to: "town#show"
-      post "town/build",    to: "town#build"
-      post "town/demolish", to: "town#demolish"
-      post "town/recruit",  to: "town#recruit"
+      get  "town",           to: "town#show"
+      post "town/build",     to: "town#build"
+      post "town/demolish",  to: "town#demolish"
+      post "town/extinguish", to: "town#extinguish"
+      post "town/recruit",   to: "town#recruit"
 
       # Army
       get   "army",              to: "army#show"

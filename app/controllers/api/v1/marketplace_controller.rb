@@ -73,6 +73,7 @@ module Api
         base = { id: item.id, name: item.name }
         if item.is_a?(Unit)
           base.merge(
+            slug: item.slug,
             unit_type: item.unit_type,
             attack: item.attack,
             defense: item.defense,

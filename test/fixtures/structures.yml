@@ -1,13 +1,18 @@
-# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
-
 one:
-  name: MyString
-  slug: MyString
-  description: MyText
-  requirements: 
+  name: Farm
+  slug: farm
+  description: Generates gold.
+  requirements: {"gold": 50}
+  level_based: false
+  land_cost: 1
+  base_income_gold: 5
 
 two:
-  name: MyString
-  slug: MyString
-  description: MyText
-  requirements: 
+  name: Barracks
+  slug: barracks
+  description: Training grounds.
+  requirements: {"gold": 300}
+  level_based: true
+  max_level: 10
+  land_cost: 0
+  production: {"army_capacity": 100}

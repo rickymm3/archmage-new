@@ -84,6 +84,14 @@ puts "Loading Units..."
 load File.join(Rails.root, 'db', 'seeds', 'units.rb')
 puts "Units Loaded."
 
+puts "Loading Heroes..."
+load File.join(Rails.root, 'db', 'seeds', 'heroes.rb')
+puts "Heroes Loaded."
+
+puts "Loading Spells..."
+load File.join(Rails.root, 'db', 'seeds', 'spells.rb')
+puts "Spells Loaded."
+
 puts "Loading Production Balance..."
 load File.join(Rails.root, 'db', 'seeds', 'balance_production.rb')
 puts "Done."

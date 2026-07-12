@@ -57,6 +57,18 @@ module Api
         end
       end
 
+      def extinguish
+        structure = Structure.find(params[:structure_id])
+        us = current_user.user_structures.find_by(structure: structure)
+
+        if us&.burning?
+          us.extinguish!
+          render json: { message: "The fire at your #{structure.name} has been put out.", user_structure: serialize_user_structure(us) }
+        else
+          render json: { error: "That structure is not on fire." }, status: :unprocessable_entity
+        end
+      end
+
       def recruit
         unit = Unit.find(params[:unit_id])
         tier = params[:tier] || "standard"
@@ -102,7 +114,9 @@ module Api
           structure_id: us.structure_id,
           level: us.level,
           quantity: us.quantity,
-          can_upgrade: us.respond_to?(:can_upgrade?) ? us.can_upgrade? : nil
+          can_upgrade: us.respond_to?(:can_upgrade?) ? us.can_upgrade? : nil,
+          burning: us.burning?,
+          damage_info: us.damage_info
         }
       end
     end

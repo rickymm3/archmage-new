@@ -25,6 +25,7 @@ module Api
             {
               unit_id: uu.unit_id,
               name: uu.unit.name,
+              slug: uu.unit.slug,
               available: uu.available_quantity,
               speed: uu.unit.speed,
               attack: uu.unit.attack,
@@ -73,6 +74,7 @@ module Api
           status: exploration.status,
           unit_id: exploration.unit_id,
           unit_name: exploration.unit&.name,
+          unit_slug: exploration.unit&.slug,
           quantity: exploration.quantity,
           started_at: exploration.started_at,
           finishes_at: exploration.finishes_at,

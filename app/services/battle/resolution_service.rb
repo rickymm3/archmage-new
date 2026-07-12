@@ -156,11 +156,20 @@ module Battle
         stacks: army.stacks.map do |s|
           {
             name: s.name,
+            unit_id: s.unit_id,
+            unit_type: s.unit_type,
+            element: s.element,
+            attack: s.attack,
+            defense: s.defense,
+            speed: s.speed,
+            initial: s.initial_quantity,
+            remaining: s.quantity,
+            # Legacy keys kept for older stored notifications
             initial_quantity: s.initial_quantity,
             remaining_quantity: s.quantity,
             lost: s.initial_quantity - s.quantity,
             hero: s.hero,
-            hero_alive: (s.hero_hp || 0) > 0
+            hero_alive: s.hero ? (s.hero_hp || 0) > 0 : nil
           }
         end
       }
@@ -194,26 +203,33 @@ module Battle
             @attacker.increment!(:land, land_seized)
             @defender.decrement!(:land, land_seized)
           end
-          
+
           battle_data[:land_seized] = land_seized
-          
+
+          # Raze some of the defender's structures. A decisive rout (defender
+          # annihilated) razes more than a narrow win.
+          decisive = (result.defender_remaining.to_i <= 0)
+          razed = raze_structures(decisive: decisive)
+          battle_data[:razed] = razed
+          razed_summary = razed.map { |r| r[:summary] }.join(", ")
+
           # Apply Protection to Defender (8 hours)
           @defender.update!(protection_expires_at: 8.hours.from_now)
-          
+
           # Notify Defender (Defeat)
           Notification.create!(
             user: @defender,
             title: "Defeat: Land Lost!",
-            content: "You were attacked by #{@attacker.username}. You lost #{land_seized} acres of land and your forces suffered casualties. You are now under protection for 8 hours.",
+            content: "You were attacked by #{@attacker.username}. You lost #{land_seized} acres of land#{razed.any? ? " and your buildings were set ablaze (#{razed_summary})" : ""} and your forces suffered casualties. You are now under protection for 8 hours.",
             category: "battle",
             data: battle_data
           )
-          
+
           # Notify Attacker (Victory)
           Notification.create!(
             user: @attacker,
             title: "Victory: Land Seized!",
-            content: "You successfully attacked #{@defender.username} and seized #{land_seized} acres. Your forces suffered casualties.",
+            content: "You successfully attacked #{@defender.username} and seized #{land_seized} acres#{razed.any? ? ", razing #{razed_summary}" : ""}. Your forces suffered casualties.",
             category: "battle",
             data: battle_data
           )
@@ -249,6 +265,46 @@ module Battle
            attacker_army: result.attacker_army,
            defender_army: result.defender_army
         )
+    end
+
+    # Raze a couple of the defender's structures on a victory. Level-based
+    # buildings lose a level (never below 1); quantity-based buildings lose a
+    # chunk of their count. Each razed structure is set "burning" with a record
+    # of who did it, which the defender must acknowledge in the Town screen.
+    def raze_structures(decisive:)
+      razed = []
+
+      eligible = @defender.user_structures.includes(:structure).select do |us|
+        if us.structure.level_based?
+          # Protect the town center's final level; other cores can drop.
+          us.level > 1
+        else
+          (us.quantity || 0) > 0
+        end
+      end
+      return razed if eligible.empty?
+
+      # Decisive routs raze up to 2 buildings; narrow wins sometimes raze 1.
+      target_count = decisive ? [2, eligible.size].min : (rand < 0.6 ? 1 : 0)
+      return razed if target_count <= 0
+
+      eligible.sample(target_count).each do |us|
+        structure = us.structure
+
+        if structure.level_based?
+          us.decrement!(:level)
+          us.record_raze!(kind: "level", amount: 1, attacker_name: @attacker.username)
+          razed << { structure_id: structure.id, slug: structure.slug, kind: "level", amount: 1, summary: "#{structure.name} (−1 level)" }
+        else
+          current = us.quantity.to_i
+          lost = [[(current * rand(0.15..0.40)).ceil, 1].max, current].min
+          us.decrement!(:quantity, lost)
+          us.record_raze!(kind: "quantity", amount: lost, attacker_name: @attacker.username)
+          razed << { structure_id: structure.id, slug: structure.slug, kind: "quantity", amount: lost, summary: "#{lost} #{structure.name.pluralize(lost)}" }
+        end
+      end
+
+      razed
     end
 
     def apply_morale_desertion(user, stacks)

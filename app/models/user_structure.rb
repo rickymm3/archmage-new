@@ -5,6 +5,37 @@ class UserStructure < ApplicationRecord
   # Level-based validation
   validates :level, numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 10 }, if: -> { structure.level_based? }
 
+  # A structure is "on fire" after being razed in an attack, until the
+  # player acknowledges the loss (puts out the fire).
+  def burning?
+    burning == true
+  end
+
+  # Record damage from a raid. `kind` is "level" or "quantity"; `amount` is how
+  # much was lost. If already burning, the losses accumulate under the newest
+  # attacker so a fresh raid doesn't erase the memory of an unacknowledged one.
+  def record_raze!(kind:, amount:, attacker_name:)
+    info = (damage_info || {}).dup
+    prior = info["kind"] == kind ? info["amount"].to_i : 0
+
+    update!(
+      burning: true,
+      damage_info: {
+        "attacker_name" => attacker_name,
+        "structure_name" => structure.name,
+        "kind" => kind,
+        "amount" => prior + amount,
+        "occurred_at" => Time.current.iso8601
+      }
+    )
+  end
+
+  # Put out the fire — clears the visual/alert. The lost levels/buildings
+  # stay lost; this is acknowledgment only.
+  def extinguish!
+    update!(burning: false, damage_info: nil)
+  end
+
   def can_upgrade?
     return false if structure.level_based? && level >= structure.max_level
     

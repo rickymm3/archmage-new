@@ -64,6 +64,8 @@ group :test do
   # Use system testing [https://guides.rubyonrails.org/testing.html#system-testing]
   gem "capybara"
   gem "selenium-webdriver"
+  # Rails 8.0's test runner is not compatible with minitest 6
+  gem "minitest", "< 6"
 end
 
 gem "dockerfile-rails", ">= 1.7", group: :development

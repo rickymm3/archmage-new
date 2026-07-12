@@ -3,7 +3,21 @@
 one:
   email_address: one@example.com
   password_digest: <%= password_digest %>
+  username: PlayerOne
+  kingdom_name: Firstholm
+  color: pyromancer
+  gold: 10000
+  mana: 500
+  land: 20
+  morale: 100.0
 
 two:
   email_address: two@example.com
   password_digest: <%= password_digest %>
+  username: PlayerTwo
+  kingdom_name: Secondia
+  color: geomancer
+  gold: 10000
+  mana: 500
+  land: 20
+  morale: 100.0
