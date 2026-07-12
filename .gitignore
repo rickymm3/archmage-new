@@ -37,3 +37,7 @@
 # Mobile app
 /mobile/node_modules
 .DS_Store
+art_originals/
+mobile.zip
+mobile.zip:Zone.Identifier
+*.Zone.Identifier
