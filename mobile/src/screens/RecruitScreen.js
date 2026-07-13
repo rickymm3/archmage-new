@@ -89,12 +89,13 @@ function PulsingStrip() {
   );
 }
 
-export default function RecruitScreen() {
+export default function RecruitScreen({ route }) {
   const { showAlert, showConfirm } = useModal();
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [recruiting, setRecruiting] = useState(false);
   const [tierModal, setTierModal] = useState(null); // unit whose tier is being picked
+  const autoOpenedRef = useRef(false);
 
   const activeOrders = data?.active_orders || [];
 
@@ -115,6 +116,16 @@ export default function RecruitScreen() {
   }
 
   useFocusEffect(useCallback(() => { loadData(); }, []));
+
+  // Deep link from Army: auto-open the tier picker for the requested unit.
+  useEffect(() => {
+    const wantedId = route?.params?.unitId;
+    if (!wantedId || !data || autoOpenedRef.current) return;
+    autoOpenedRef.current = true;
+    const unit = (data.units || []).find((u) => u.id === wantedId && u.unlocked);
+    const hasOrder = (data.active_orders || []).some((o) => o.unit.id === wantedId);
+    if (unit && !hasOrder) setTierModal(unit);
+  }, [route?.params?.unitId, data]);
 
   // Tap "Recruit" → pick a tier (batch size), then start the order.
   async function startWithTier(unit, tierKey) {
@@ -441,7 +452,7 @@ export default function RecruitScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: "transparent" },
   loading: { color: colors.faint, textAlign: "center", marginTop: 60 },
 
   // Header

@@ -203,8 +203,8 @@ export async function getBattles() {
   return apiRequest("/battles");
 }
 
-export async function scout() {
-  return apiRequest("/battles/scout", { method: "POST" });
+export async function searchTargets(q) {
+  return apiRequest(`/battles/search?q=${encodeURIComponent(q)}`);
 }
 
 export async function getBattleSetup(targetId) {

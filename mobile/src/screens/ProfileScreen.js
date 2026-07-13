@@ -16,7 +16,7 @@ import { ui as art } from "../assets";
 import { colors } from "../theme";
 
 export default function ProfileScreen() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const { showAlert, showConfirm } = useModal();
   const [kingdomName, setKingdomName] = useState(
     user?.has_kingdom_name ? user.kingdom_name : ""
@@ -104,6 +104,17 @@ export default function ProfileScreen() {
           </Text>
         </LoadingButton>
       </View>
+
+      {/* Sign Out */}
+      <TouchableOpacity
+        style={styles.signOutBtn}
+        onPress={async () => {
+          const confirmed = await showConfirm("Sign Out", "Leave your kingdom for now?", { confirmText: "Sign Out" });
+          if (confirmed) logout();
+        }}
+      >
+        <Text style={styles.signOutTxt}>Sign Out</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -169,4 +180,13 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   saveText: { color: colors.white, fontWeight: "700", fontSize: 15 },
+  signOutBtn: {
+    marginTop: 4,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+  },
+  signOutTxt: { color: colors.muted, fontSize: 14, fontWeight: "600" },
 });

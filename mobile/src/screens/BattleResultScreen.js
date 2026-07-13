@@ -27,6 +27,72 @@ const ELEM_COLORS = {
   physical: colors.textDim,
 };
 
+// Victory is decided by power destroyed: the attacker must out-damage the
+// defender's losses × the defender bonus. This panel shows that math.
+function VerdictPanel({ verdict, viewer, isVictory }) {
+  const mine = verdict[viewer] || {};
+  const theirs = verdict[viewer === "attacker" ? "defender" : "attacker"] || {};
+  const iAmAttacker = viewer === "attacker";
+  const bonus = verdict.defender_bonus || 1.25;
+
+  // "Damage dealt" score for each side (defender's includes the bonus).
+  const myScore = iAmAttacker ? verdict.attacker_score : verdict.defender_score;
+  const theirScore = iAmAttacker ? verdict.defender_score : verdict.attacker_score;
+  const maxScore = Math.max(myScore || 0, theirScore || 0, 1);
+
+  let summary;
+  switch (verdict.decided_by) {
+    case "annihilation":
+      summary = isVictory
+        ? "You wiped the enemy from the field entirely."
+        : "Your entire force was annihilated.";
+      break;
+    case "rout":
+      summary = isVictory
+        ? "The enemy's morale shattered — they fled the field."
+        : "Your army's morale broke and they fled the field.";
+      break;
+    case "mutual":
+      summary = "Mutual destruction — the field belongs to the crows.";
+      break;
+    default:
+      summary = isVictory
+        ? iAmAttacker
+          ? `You destroyed more power than you lost — enough to overcome the defender's ×${bonus} bonus.`
+          : `The defense held: with your ×${bonus} defender bonus, their losses outweighed the damage they dealt.`
+        : iAmAttacker
+          ? `You lost more than you destroyed — the defender's ×${bonus} bonus sealed it. Hit harder or bleed less.`
+          : `The raiders out-damaged you despite your ×${bonus} defender bonus.`;
+  }
+
+  const Row = ({ label, side, color, hasBonus, score }) => (
+    <View style={styles.vRow}>
+      <View style={styles.vRowHead}>
+        <Text style={[styles.vRowLabel, { color }]}>{label}</Text>
+        <Text style={styles.vRowNums}>
+          {Number(side.power_start || 0).toLocaleString()} → {Number(side.power_end || 0).toLocaleString()}
+          <Text style={{ color: colors.dangerSoft }}>  (−{Number(side.power_lost || 0).toLocaleString()} · {side.lost_pct || 0}%)</Text>
+        </Text>
+      </View>
+      <View style={styles.vBarBg}>
+        <View style={[styles.vBarFill, { width: `${Math.round(((score || 0) / maxScore) * 100)}%`, backgroundColor: color }]} />
+      </View>
+      <Text style={styles.vScore}>
+        ⚔️ damage dealt: {Number(score || 0).toLocaleString()}{hasBonus ? `  (incl. ×${bonus} defender bonus)` : ""}
+      </Text>
+    </View>
+  );
+
+  return (
+    <View style={styles.verdictCard}>
+      <Text style={styles.verdictTitle}>⚖️ THE VERDICT</Text>
+      <Row label="YOUR FORCES" side={mine} color={colors.info} hasBonus={!iAmAttacker} score={myScore} />
+      <Row label="ENEMY FORCES" side={theirs} color={colors.danger} hasBonus={iAmAttacker} score={theirScore} />
+      <Text style={styles.verdictSummary}>{summary}</Text>
+    </View>
+  );
+}
+
 export default function BattleResultScreen({ route, navigation }) {
   // `viewer` is "attacker" (default, post-attack flow) or "defender"
   // (viewing a battle report from a notification).
@@ -187,6 +253,11 @@ export default function BattleResultScreen({ route, navigation }) {
         )}
       </View>
 
+      {/* The Verdict — why you won or lost, in plain power math */}
+      {result.verdict && (
+        <VerdictPanel verdict={result.verdict} viewer={viewer} isVictory={isVictory} />
+      )}
+
       {/* Army Summaries */}
       {renderArmySummary(yourLabel, yourArmy, colors.info)}
       {renderArmySummary(enemyLabel, enemyArmy, colors.danger)}
@@ -233,9 +304,9 @@ export default function BattleResultScreen({ route, navigation }) {
       {/* Back Button */}
       <TouchableOpacity
         style={styles.backButton}
-        onPress={() => navigation.navigate("Battles")}
+        onPress={() => navigation.popToTop()}
       >
-        <Text style={styles.backText}>Return to Targets</Text>
+        <Text style={styles.backText}>⚔️ Return to the War Room</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -246,6 +317,45 @@ const styles = StyleSheet.create({
   banner: { alignItems: "center", paddingVertical: 28, marginBottom: 4 },
   victory: { backgroundColor: alpha(colors.success, "22") },
   defeat: { backgroundColor: alpha(colors.danger, "18") },
+
+  /* verdict panel */
+  verdictCard: {
+    backgroundColor: colors.card,
+    marginHorizontal: 12,
+    marginBottom: 10,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: alpha(colors.gold, "66"),
+  },
+  verdictTitle: {
+    color: colors.gold,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 2,
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  vRow: { marginBottom: 10 },
+  vRowHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  vRowLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
+  vRowNums: { color: colors.textDim, fontSize: 11, fontVariant: ["tabular-nums"] },
+  vBarBg: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.bg,
+    overflow: "hidden",
+  },
+  vBarFill: { height: "100%", borderRadius: 4 },
+  vScore: { color: colors.muted, fontSize: 10, marginTop: 3, fontVariant: ["tabular-nums"] },
+  verdictSummary: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+    marginTop: 4,
+    fontStyle: "italic",
+  },
   bannerEmoji: { fontSize: 36 },
   bannerTitle: { color: colors.text, fontSize: 28, fontWeight: "bold", letterSpacing: 3, marginTop: 4 },
   bannerSub: { color: colors.textDim, fontSize: 14, marginTop: 4 },

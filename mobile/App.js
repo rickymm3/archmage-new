@@ -4,9 +4,28 @@ import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { ModalProvider, useModal } from "./src/context/ModalContext";
 import AuthStack from "./src/navigation/AuthStack";
 import MainTabs from "./src/navigation/MainTabs";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, View, Platform } from "react-native";
 import { useEffect, useRef } from "react";
 import * as api from "./src/services/api";
+
+// De-webify the web build: no text selection, no tap highlight, no
+// rubber-band overscroll, no I-beam cursors. Inputs stay selectable.
+if (Platform.OS === "web" && typeof document !== "undefined") {
+  const style = document.createElement("style");
+  style.textContent = `
+    * { -webkit-tap-highlight-color: transparent; }
+    body {
+      user-select: none;
+      -webkit-user-select: none;
+      overscroll-behavior: none;
+      touch-action: manipulation;
+      cursor: default;
+    }
+    input, textarea { user-select: text; -webkit-user-select: text; }
+    [role="button"], a { cursor: pointer; }
+  `;
+  document.head.appendChild(style);
+}
 
 const navTheme = {
   ...DarkTheme,

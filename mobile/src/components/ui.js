@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,8 +6,42 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
+  Pressable,
+  Animated,
+  Easing,
+  Platform,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { colors, spacing, radius, type, alpha } from "../theme";
+
+const NATIVE_DRIVER = Platform.OS !== "web";
+
+// ── Scene background ───────────────────────────────────────────────
+// Full-screen building-interior art behind a screen's UI. The image is
+// overscanned (cover-cropped) so it fills any aspect ratio; scrims keep
+// the header zone and the scrolling lower half readable regardless of
+// where the crop lands. Render as the FIRST child of a screen container.
+
+export function SceneBackground({ source }) {
+  if (!source) return null;
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Image source={source} resizeMode="cover" style={StyleSheet.absoluteFill} />
+      {/* top scrim: HUD/header readability */}
+      <LinearGradient
+        colors={[alpha(colors.bg, "99"), alpha(colors.bg, "00")]}
+        style={{ position: "absolute", top: 0, left: 0, right: 0, height: "12%" }}
+      />
+      {/* bottom scrim: fades the floor into the app background under UI,
+          starting low enough to leave the scene's hero band untouched */}
+      <LinearGradient
+        colors={[alpha(colors.bg, "00"), alpha(colors.bg, "8c"), alpha(colors.bg, "e0")]}
+        locations={[0, 0.55, 1]}
+        style={{ position: "absolute", top: "48%", left: 0, right: 0, bottom: 0 }}
+      />
+    </View>
+  );
+}
 
 /**
  * Shared UI primitives. Every screen composes these instead of
@@ -54,15 +88,76 @@ export function EmptyState({ icon = "🌫", title, subtitle }) {
 
 export function ProgressBar({ percent, color = colors.accent, height = 6, style }) {
   const pct = Math.max(0, Math.min(100, percent || 0));
+  const anim = useRef(new Animated.Value(pct)).current;
+
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: pct,
+      duration: 350,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false, // width animation
+    }).start();
+  }, [pct]);
+
   return (
     <View style={[styles.progressBg, { height, borderRadius: height / 2 }, style]}>
-      <View
+      <Animated.View
         style={[
           styles.progressFill,
-          { width: `${pct}%`, backgroundColor: color, borderRadius: height / 2 },
+          {
+            width: anim.interpolate({ inputRange: [0, 100], outputRange: ["0%", "100%"] }),
+            backgroundColor: color,
+            borderRadius: height / 2,
+          },
         ]}
       />
     </View>
+  );
+}
+
+// ── Motion primitives ──────────────────────────────────────────────
+
+// Touchable that springs down on press — the single biggest "this is a
+// game, not a webpage" signal. Drop-in for TouchableOpacity.
+export function PressableScale({ children, style, containerStyle, onPress, disabled, scaleTo = 0.94, ...rest }) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const pressIn = () =>
+    Animated.spring(scale, { toValue: scaleTo, speed: 40, bounciness: 0, useNativeDriver: NATIVE_DRIVER }).start();
+  const pressOut = () =>
+    Animated.spring(scale, { toValue: 1, speed: 24, bounciness: 8, useNativeDriver: NATIVE_DRIVER }).start();
+
+  return (
+    <Pressable
+      style={containerStyle}
+      onPress={onPress}
+      onPressIn={pressIn}
+      onPressOut={pressOut}
+      disabled={disabled}
+      {...rest}
+    >
+      <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
+    </Pressable>
+  );
+}
+
+// Content that fades + slides up on mount. Key it by the active sub-tab
+// so every section switch replays the entrance.
+export function FadeSlideIn({ children, style, duration = 200 }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translate = useRef(new Animated.Value(10)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration, useNativeDriver: NATIVE_DRIVER }),
+      Animated.timing(translate, { toValue: 0, duration, easing: Easing.out(Easing.cubic), useNativeDriver: NATIVE_DRIVER }),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View style={[{ flex: 1, opacity, transform: [{ translateY: translate }] }, style]}>
+      {children}
+    </Animated.View>
   );
 }
 
@@ -100,6 +195,39 @@ export function PrimaryButton({ label, onPress, color = colors.accent, disabled,
     >
       <Text style={styles.primaryButtonText}>{label}</Text>
     </TouchableOpacity>
+  );
+}
+
+// ── Sub-tab bar ────────────────────────────────────────────────────
+// Slim segmented menu pinned to the bottom of a screen, directly above
+// the main tab bar — switches sub-views without pushing new screens.
+
+export function SubTabs({ tabs, active, onChange }) {
+  return (
+    <View style={styles.subTabs}>
+      {tabs.map((t) => {
+        const isActive = t.key === active;
+        return (
+          <PressableScale
+            key={t.key}
+            containerStyle={{ flex: 1 }}
+            style={[styles.subTab, isActive && styles.subTabActive]}
+            onPress={() => onChange(t.key)}
+            scaleTo={0.9}
+          >
+            <Text style={[styles.subTabIcon, !isActive && { opacity: 0.5 }]}>{t.icon}</Text>
+            <Text style={[styles.subTabLabel, isActive && styles.subTabLabelActive]}>
+              {t.label}
+            </Text>
+            {t.badge ? (
+              <View style={styles.subTabBadge}>
+                <Text style={styles.subTabBadgeTxt}>{t.badge}</Text>
+              </View>
+            ) : null}
+          </PressableScale>
+        );
+      })}
+    </View>
   );
 }
 
@@ -236,4 +364,37 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     letterSpacing: 1,
   },
+  subTabs: {
+    flexDirection: "row",
+    backgroundColor: colors.card,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    gap: 4,
+  },
+  subTab: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 7,
+    borderRadius: radius.md,
+  },
+  subTabActive: {
+    backgroundColor: alpha(colors.accent, "26"),
+  },
+  subTabIcon: { fontSize: 13 },
+  subTabLabel: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+  subTabLabelActive: { color: colors.accent },
+  subTabBadge: {
+    backgroundColor: colors.danger,
+    borderRadius: 8,
+    minWidth: 15,
+    height: 15,
+    paddingHorizontal: 3,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  subTabBadgeTxt: { color: colors.white, fontSize: 9, fontWeight: "800" },
 });

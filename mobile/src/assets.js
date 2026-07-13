@@ -5,6 +5,18 @@
 // explicitly here and looked up by key. Missing keys return undefined and the
 // UI falls back to its emoji placeholder.
 
+// Full-screen building interiors ("scenes"). 1024x1536 portrait, rendered
+// with cover-crop; see SceneBackground. Replace these files with real art —
+// composition contract: top 20% calm (HUD), 20-45% hero band, bottom 55%
+// dark/empty floor (UI overlays), key detail within central 80% width.
+const SCENES = {
+  barracks: require("../assets/scenes/barracks.jpg"),
+};
+
+export function sceneImage(key) {
+  return key ? SCENES[key] : undefined;
+}
+
 export const ui = {
   logo: require("../assets/ui/logo.png"),
   townPanorama: require("../assets/ui/town_panorama.png"),

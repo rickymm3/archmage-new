@@ -404,7 +404,7 @@ export default function DefenseScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: "transparent" },
   loading: { color: colors.faint, textAlign: "center", marginTop: 60 },
 
   // Summary bar

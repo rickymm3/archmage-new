@@ -1,10 +1,18 @@
-import React, { useState, useCallback } from "react";
-import { TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native";
+import React, { useState, useCallback, useRef } from "react";
+import {
+  Pressable,
+  Animated,
+  ActivityIndicator,
+  StyleSheet,
+  Platform,
+} from "react-native";
 import { colors } from "../theme";
 
+const NATIVE_DRIVER = Platform.OS !== "web";
+
 /**
- * Drop-in replacement for TouchableOpacity that shows a spinner
- * while an async onPress handler is running.
+ * Drop-in async button: shows a spinner while the onPress promise runs
+ * and springs down on press for game-like touch feedback.
  *
  * Usage:
  *   <LoadingButton style={styles.btn} onPress={handleSave}>
@@ -15,7 +23,6 @@ import { colors } from "../theme";
  *   onPress  – async function (awaited automatically)
  *   spinnerColor – ActivityIndicator color (default colors.white)
  *   disabled – externally controlled disabled state
- *   ...rest – forwarded to TouchableOpacity
  */
 export default function LoadingButton({
   onPress,
@@ -27,6 +34,7 @@ export default function LoadingButton({
   ...rest
 }) {
   const [busy, setBusy] = useState(false);
+  const scale = useRef(new Animated.Value(1)).current;
 
   const handlePress = useCallback(async () => {
     if (busy || !onPress) return;
@@ -38,20 +46,25 @@ export default function LoadingButton({
     }
   }, [busy, onPress]);
 
+  const pressIn = () =>
+    Animated.spring(scale, { toValue: 0.95, speed: 40, bounciness: 0, useNativeDriver: NATIVE_DRIVER }).start();
+  const pressOut = () =>
+    Animated.spring(scale, { toValue: 1, speed: 24, bounciness: 8, useNativeDriver: NATIVE_DRIVER }).start();
+
   return (
-    <TouchableOpacity
-      style={[style, (busy || disabled) && styles.disabled]}
+    <Pressable
       onPress={handlePress}
+      onPressIn={pressIn}
+      onPressOut={pressOut}
       disabled={busy || disabled}
-      activeOpacity={0.7}
       {...rest}
     >
-      {busy ? (
-        <ActivityIndicator size={spinnerSize} color={spinnerColor} />
-      ) : (
-        children
-      )}
-    </TouchableOpacity>
+      <Animated.View
+        style={[style, (busy || disabled) && styles.disabled, { transform: [{ scale }] }]}
+      >
+        {busy ? <ActivityIndicator size={spinnerSize} color={spinnerColor} /> : children}
+      </Animated.View>
+    </Pressable>
   );
 }
 

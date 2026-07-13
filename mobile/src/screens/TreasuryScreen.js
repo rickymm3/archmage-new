@@ -11,19 +11,23 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
-import { LoadingState } from "../components/ui";
+import { LoadingState, SubTabs, FadeSlideIn } from "../components/ui";
 import { colors, alpha } from "../theme";
 
 const TABS = [
-  { key: "tax", label: "💰 Tax Collection" },
-  { key: "mana", label: "🔮 Mana Battery" },
+  { key: "tax", icon: "💰", label: "Tax Collection" },
+  { key: "mana", icon: "🔮", label: "Mana Battery" },
 ];
 
-export default function TreasuryScreen() {
+// When `fixedTab` is provided (embedded in the Kingdom hub), the screen
+// renders just that tab's content with no internal sub-menu.
+export default function TreasuryScreen({ fixedTab }) {
   const { showAlert } = useModal();
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState("tax");
+  const [tabState, setTabState] = useState("tax");
+  const activeTab = fixedTab || tabState;
+  const setActiveTab = setTabState;
   const [cooldownRemaining, setCooldownRemaining] = useState(null);
   const cooldownRef = useRef(null);
 
@@ -322,27 +326,11 @@ export default function TreasuryScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Tab bar */}
-      <View style={styles.tabBar}>
-        {TABS.map((tab) => (
-          <TouchableOpacity
-            key={tab.key}
-            style={[styles.tab, activeTab === tab.key && styles.tabActive]}
-            onPress={() => setActiveTab(tab.key)}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === tab.key && styles.tabTextActive,
-              ]}
-            >
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <FadeSlideIn key={activeTab} style={{ flex: 1 }}>
+        {activeTab === "tax" ? renderTaxTab() : renderManaTab()}
+      </FadeSlideIn>
 
-      {activeTab === "tax" ? renderTaxTab() : renderManaTab()}
+      {!fixedTab && <SubTabs tabs={TABS} active={activeTab} onChange={setActiveTab} />}
     </View>
   );
 }

@@ -1,8 +1,7 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
-  Image,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
@@ -15,9 +14,18 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
-import { LoadingState, EmptyState, ProgressBar, ArtPlaceholder } from "../components/ui";
-import { heroImage, unitImage } from "../assets";
+import { LoadingState, EmptyState, ProgressBar, ArtPlaceholder, SubTabs, FadeSlideIn, SceneBackground } from "../components/ui";
+import { heroImage, unitImage, sceneImage } from "../assets";
 import { colors, alpha } from "../theme";
+import DefenseScreen from "./DefenseScreen";
+import RecruitScreen from "./RecruitScreen";
+
+const SUB_TABS = [
+  { key: "overview", icon: "🏰", label: "Overview" },
+  { key: "units", icon: "⚔️", label: "Units" },
+  { key: "defense", icon: "🛡", label: "Defense" },
+  { key: "recruit", icon: "📯", label: "Recruit" },
+];
 
 // Backend sends abilities as an object (e.g. { passive: "...", trigger: "..." }).
 function heroAbilityText(abilities) {
@@ -27,18 +35,13 @@ function heroAbilityText(abilities) {
   return text || null;
 }
 
-// Morale tiers drive color + flavor + desertion warning.
 function moraleMeta(morale) {
-  if (morale >= 75)
-    return { color: colors.success, label: "High Spirits", msg: "Your army is ready for anything.", warn: null };
-  if (morale >= 20)
-    return { color: colors.gold, label: "Uneasy", msg: "The troops hope you won't forget to pay them.", warn: "10% may desert if you attack" };
-  if (morale > 0)
-    return { color: colors.warning, label: "Furious", msg: "Some soldiers are openly discussing desertion.", warn: "25% may desert if you attack" };
-  return { color: colors.danger, label: "Chaos", msg: "No one remembers why they are fighting.", warn: "50% may desert if you attack" };
+  if (morale >= 75) return { color: colors.success, label: "High Spirits", warn: null };
+  if (morale >= 20) return { color: colors.gold, label: "Uneasy", warn: "10% may desert if you attack" };
+  if (morale > 0) return { color: colors.warning, label: "Furious", warn: "25% may desert if you attack" };
+  return { color: colors.danger, label: "Chaos", warn: "50% may desert if you attack" };
 }
 
-/* ── stat chip ── */
 function Chip({ icon, value, color = colors.textDim }) {
   return (
     <View style={styles.chip}>
@@ -48,12 +51,20 @@ function Chip({ icon, value, color = colors.textDim }) {
   );
 }
 
-export default function ArmyScreen({ navigation }) {
+export default function ArmyScreen({ route }) {
   const { showAlert } = useModal();
+  const [subTab, setSubTab] = useState(route?.params?.subTab || "overview");
+  const [recruitUnitId, setRecruitUnitId] = useState(null);
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [disbandModal, setDisbandModal] = useState(null); // { unit }
+  const [disbandModal, setDisbandModal] = useState(null);
   const [disbandValue, setDisbandValue] = useState(0);
+  const [selectedUnitId, setSelectedUnitId] = useState(null);
+
+  // Deep links (e.g. Home → Recruit sub-tab)
+  useEffect(() => {
+    if (route?.params?.subTab) setSubTab(route.params.subTab);
+  }, [route?.params?.subTab]);
 
   async function loadArmy() {
     try {
@@ -66,37 +77,15 @@ export default function ArmyScreen({ navigation }) {
 
   useFocusEffect(useCallback(() => { loadArmy(); }, []));
 
-  if (!data) {
-    return <View style={styles.container}><LoadingState /></View>;
+  function changeSubTab(key) {
+    setRecruitUnitId(null);
+    setSubTab(key);
+    if (key === "overview" || key === "units") loadArmy();
   }
 
-  const s = data.stats;
-  const heroes = data.units.filter((u) => u.unit_type === "hero");
-  const regularUnits = data.units.filter((u) => u.unit_type !== "hero");
-
-  const morale = Math.round(s.morale);
-  const baseMorale = s.base_morale ?? s.morale;
-  const meta = moraleMeta(morale);
-
-  const capacity = s.army_capacity || 0;
-  const size = s.total_quantity || 0;
-  const overcrowded = capacity > 0 && size > capacity;
-  const capPct = capacity > 0 ? (size / capacity) * 100 : 0;
-
-  // Cost to restore morale to 100: one full day of upkeep buys 100 points.
-  const missingMorale = Math.max(0, 100 - baseMorale);
-  const payCost = Math.ceil((missingMorale / 100) * (s.daily_upkeep || 0));
-  const canPay = payCost > 0 && s.daily_upkeep > 0;
-  const canAfford = data.gold >= payCost;
-
-  async function handlePayTroops() {
-    try {
-      const result = await api.payUpkeep(payCost);
-      showAlert("Troops Paid!", `${result.message}. Morale restored to ${Math.round(result.morale)}%.`);
-      loadArmy();
-    } catch (e) {
-      showAlert("Error", e.message);
-    }
+  function goRecruitUnit(unitId) {
+    setRecruitUnitId(unitId);
+    setSubTab("recruit");
   }
 
   function openDisband(u) {
@@ -123,15 +112,28 @@ export default function ArmyScreen({ navigation }) {
     }
   }
 
-  return (
-    <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: 30 }}
-        {...(Platform.OS !== "web"
-          ? { refreshControl: <RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadArmy(); setRefreshing(false); }} /> }
-          : {})}
-      >
-        {/* ── WAR CHEST ── */}
+  /* ────────────────────────────────────────────────────────────── */
+
+  function renderOverview() {
+    if (!data) return <LoadingState />;
+    const s = data.stats;
+    const morale = Math.round(s.morale);
+    const baseMorale = s.base_morale ?? s.morale;
+    const meta = moraleMeta(morale);
+
+    const capacity = s.army_capacity || 0;
+    const size = s.total_quantity || 0;
+    const overcrowded = capacity > 0 && size > capacity;
+    const capPct = capacity > 0 ? (size / capacity) * 100 : 0;
+
+    const missingMorale = Math.max(0, 100 - baseMorale);
+    const payCost = Math.ceil((missingMorale / 100) * (s.daily_upkeep || 0));
+    const canPay = payCost > 0 && s.daily_upkeep > 0;
+    const canAfford = data.gold >= payCost;
+
+    return (
+      <View style={{ flex: 1 }}>
+        {/* war chest — slim translucent strip in the header zone */}
         <View style={styles.warChest}>
           <View style={styles.warChestItem}>
             <Text style={styles.warChestValue}>💰 {Number(data.gold).toLocaleString()}</Text>
@@ -153,61 +155,60 @@ export default function ArmyScreen({ navigation }) {
           )}
         </View>
 
-        {/* ── ARMY SIZE / CAPACITY ── */}
+        {/* the armory itself breathes here; UI sits on the floor below */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end", paddingBottom: 12 }}
+          {...(Platform.OS !== "web"
+            ? { refreshControl: <RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadArmy(); setRefreshing(false); }} /> }
+            : {})}
+        >
+        {/* single status card: capacity + morale */}
         <View style={styles.card}>
-          <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardTitle}>⚔️ Army Size</Text>
-            <Text style={[styles.capCount, overcrowded && { color: colors.danger }]}>
+          <View style={styles.statusRow}>
+            <Text style={styles.statusLabel}>⚔️ Army Size</Text>
+            <Text style={[styles.statusValue, overcrowded && { color: colors.danger }]}>
               {size} / {capacity}
             </Text>
           </View>
           <ProgressBar
             percent={capPct}
             color={overcrowded ? colors.danger : capPct > 85 ? colors.warning : colors.success}
-            height={8}
+            height={7}
           />
-          {overcrowded ? (
+          {overcrowded && (
             <Text style={styles.capWarn}>
-              ⚠️ Overcrowded! Morale drains {s.morale_penalty_multiplier}× faster. Build Field Camps or Barracks to raise capacity.
-            </Text>
-          ) : (
-            <Text style={styles.capHint}>
-              {capacity - size} slots free · exceeding capacity drains morale faster
+              ⚠️ Overcrowded — morale drains {s.morale_penalty_multiplier}× faster. Build Field Camps or Barracks.
             </Text>
           )}
-          <View style={styles.powerRow}>
-            <Chip icon="⚔️" value={`${Number(s.total_attack).toLocaleString()} ATK`} color={colors.dangerSoft} />
-            <Chip icon="🛡" value={`${Number(s.total_defense).toLocaleString()} DEF`} color={colors.info} />
-          </View>
-        </View>
 
-        {/* ── MORALE ── */}
-        <View style={[styles.card, { borderColor: alpha(meta.color, "66") }]}>
-          <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardTitle}>🎖 Morale</Text>
-            <Text style={[styles.moralePct, { color: meta.color }]}>{morale}%</Text>
+          <View style={[styles.statusRow, { marginTop: 14 }]}>
+            <Text style={styles.statusLabel}>🎖 Morale · <Text style={{ color: meta.color }}>{meta.label}</Text></Text>
+            <Text style={[styles.statusValue, { color: meta.color }]}>{morale}%</Text>
           </View>
-          <ProgressBar percent={morale} color={meta.color} height={10} />
-          <View style={styles.moraleMetaRow}>
-            <Text style={[styles.moraleLabel, { color: meta.color }]}>{meta.label}</Text>
-            <Text style={styles.moraleDecay}>
-              −{s.morale_decay_per_hour || 4.2}/hr{overcrowded ? "  ⚠️" : ""}
-            </Text>
+          <ProgressBar percent={morale} color={meta.color} height={7} />
+          <View style={styles.moraleFootRow}>
+            <Text style={styles.moraleDecay}>−{s.morale_decay_per_hour || 4.2}/hr</Text>
+            {meta.warn && <Text style={styles.moraleWarn}>💀 {meta.warn}</Text>}
           </View>
-          <Text style={styles.moraleMsg}>{meta.msg}</Text>
-          {meta.warn && <Text style={styles.moraleWarn}>💀 {meta.warn}</Text>}
 
           {s.daily_upkeep > 0 && (
             canPay ? (
               <LoadingButton
                 style={[styles.payBtn, !canAfford && styles.btnDisabled]}
-                onPress={handlePayTroops}
+                onPress={async () => {
+                  try {
+                    const result = await api.payUpkeep(payCost);
+                    showAlert("Troops Paid!", `${result.message}. Morale restored to ${Math.round(result.morale)}%.`);
+                    loadArmy();
+                  } catch (e) {
+                    showAlert("Error", e.message);
+                  }
+                }}
                 disabled={!canAfford}
               >
                 <Text style={styles.payBtnTxt}>
-                  {canAfford
-                    ? `Pay Troops — 💰 ${payCost.toLocaleString()}  (restores to 100%)`
-                    : `Need 💰 ${payCost.toLocaleString()} to pay troops`}
+                  {canAfford ? `Pay Troops — 💰 ${payCost.toLocaleString()}` : `Need 💰 ${payCost.toLocaleString()} to pay troops`}
                 </Text>
               </LoadingButton>
             ) : (
@@ -218,36 +219,127 @@ export default function ArmyScreen({ navigation }) {
           )}
         </View>
 
-        {/* ── ACTION TILES ── */}
-        <View style={styles.tileRow}>
-          <TouchableOpacity style={[styles.tile, { borderColor: alpha(colors.info, "88") }]} activeOpacity={0.8} onPress={() => navigation.navigate("Defense")}>
-            <Text style={styles.tileIcon}>🛡</Text>
-            <Text style={styles.tileTitle}>Defense</Text>
-            <Text style={styles.tileSub}>
-              {regularUnits.reduce((n, u) => n + (u.garrison || 0), 0)} garrisoned
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.tile, { borderColor: alpha(colors.success, "88") }]} activeOpacity={0.8} onPress={() => navigation.navigate("Recruit")}>
-            <Text style={styles.tileIcon}>📯</Text>
-            <Text style={styles.tileTitle}>Recruit</Text>
-            <Text style={styles.tileSub}>enlist new soldiers</Text>
-          </TouchableOpacity>
+        {/* strength summary */}
+        <View style={[styles.card, styles.strengthRow]}>
+          <Chip icon="⚔️" value={`${Number(s.total_attack).toLocaleString()} ATK`} color={colors.dangerSoft} />
+          <Chip icon="🛡" value={`${Number(s.total_defense).toLocaleString()} DEF`} color={colors.info} />
+          <Chip icon="🪖" value={`${size} units`} />
         </View>
+        </ScrollView>
+      </View>
+    );
+  }
 
-        {/* ── HEROES ── */}
+  function renderUnits() {
+    if (!data) return <LoadingState />;
+    const heroes = data.units.filter((u) => u.unit_type === "hero");
+    const regularUnits = data.units.filter((u) => u.unit_type !== "hero");
+
+    const selectedId =
+      selectedUnitId != null && regularUnits.some((u) => u.id === selectedUnitId)
+        ? selectedUnitId
+        : regularUnits[0]?.id ?? null;
+    const selUnit = regularUnits.find((u) => u.id === selectedId) || null;
+
+    if (data.units.length === 0) {
+      return <EmptyState icon="🪖" title="No units in your army" subtitle="Recruit soldiers or summon creatures with spells." />;
+    }
+
+    return (
+      <ScrollView contentContainerStyle={{ paddingBottom: 16, paddingTop: 10 }}>
+        {regularUnits.length > 0 && (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
+              {regularUnits.map((u) => {
+                const isSel = u.id === selectedId;
+                return (
+                  <TouchableOpacity
+                    key={u.id}
+                    style={[styles.caroCard, isSel && styles.caroCardSelected]}
+                    onPress={() => setSelectedUnitId(u.id)}
+                    activeOpacity={0.85}
+                  >
+                    <ArtPlaceholder emoji="⚔️" label={null} size={92} source={unitImage(u.slug)} />
+                    <Text style={[styles.caroName, isSel && { color: colors.gold }]} numberOfLines={1}>
+                      {u.name}
+                    </Text>
+                    <View style={[styles.caroCount, isSel && { backgroundColor: colors.gold }]}>
+                      <Text style={[styles.caroCountTxt, isSel && { color: colors.bg }]}>×{u.quantity}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {selUnit && (
+              <View style={styles.detailPanel}>
+                <View style={styles.detailHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailName}>{selUnit.name}</Text>
+                    <Text style={styles.detailType}>
+                      {selUnit.element ? `${selUnit.element} ` : ""}{selUnit.unit_type}
+                      {selUnit.hero ? `  ·  led by ${selUnit.hero.name}` : ""}
+                    </Text>
+                  </View>
+                  <Text style={styles.detailQty}>×{selUnit.quantity}</Text>
+                </View>
+
+                <View style={styles.unitChips}>
+                  <Chip icon="⚔️" value={`${selUnit.attack} ATK`} />
+                  <Chip icon="🛡" value={`${selUnit.defense} DEF`} />
+                  <Chip icon="💨" value={`${selUnit.speed} SPD`} />
+                  <Chip icon="💰" value={`${selUnit.upkeep_cost}/d`} color={colors.warning} />
+                  {selUnit.mana_upkeep > 0 && <Chip icon="🔮" value={`${selUnit.mana_upkeep}/d`} color={colors.info} />}
+                </View>
+
+                <View style={styles.dutyRow}>
+                  {selUnit.garrison > 0 && (
+                    <View style={[styles.dutyBadge, { borderColor: alpha(colors.info, "66") }]}>
+                      <Text style={[styles.dutyTxt, { color: colors.info }]}>🛡 {selUnit.garrison} defending</Text>
+                    </View>
+                  )}
+                  {selUnit.exploring > 0 && (
+                    <View style={[styles.dutyBadge, { borderColor: alpha(colors.success, "66") }]}>
+                      <Text style={[styles.dutyTxt, { color: colors.success }]}>🧭 {selUnit.exploring} exploring</Text>
+                    </View>
+                  )}
+                  <View style={[styles.dutyBadge, { borderColor: colors.border }]}>
+                    <Text style={styles.dutyTxt}>{selUnit.available} free</Text>
+                  </View>
+                </View>
+
+                <View style={styles.detailActions}>
+                  {selUnit.recruitable ? (
+                    <TouchableOpacity
+                      style={styles.recruitMoreBtn}
+                      activeOpacity={0.85}
+                      onPress={() => goRecruitUnit(selUnit.unit_id)}
+                    >
+                      <Text style={styles.recruitMoreTxt}>📯 Recruit More</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={[styles.recruitMoreBtn, styles.summonedNote]}>
+                      <Text style={styles.summonedNoteTxt}>✨ Summoned — bolster via spells</Text>
+                    </View>
+                  )}
+                  <TouchableOpacity style={styles.disbandBtn} onPress={() => openDisband(selUnit)}>
+                    <Text style={styles.disbandTxt}>Disband</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </>
+        )}
+
+        {/* heroes */}
         {heroes.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Heroes</Text>
             {heroes.map((u) => (
               <View key={u.id} style={styles.heroCard}>
-                <ArtPlaceholder emoji="🦸" label="Portrait" size={72} source={heroImage(u.slug)} style={styles.heroArt} />
+                <ArtPlaceholder emoji="🦸" label="Portrait" size={64} source={heroImage(u.slug)} style={styles.heroArt} />
                 <View style={{ flex: 1 }}>
-                  <View style={styles.heroTopRow}>
-                    <Text style={styles.heroName}>{u.name}</Text>
-                    <View style={styles.heroBadge}>
-                      <Text style={styles.heroBadgeTxt}>★ HERO</Text>
-                    </View>
-                  </View>
+                  <Text style={styles.heroName}>{u.name}</Text>
                   {heroAbilityText(u.abilities) && (
                     <Text style={styles.heroAbilities} numberOfLines={2}>{heroAbilityText(u.abilities)}</Text>
                   )}
@@ -261,62 +353,25 @@ export default function ArmyScreen({ navigation }) {
             ))}
           </>
         )}
-
-        {/* ── UNITS ── */}
-        {regularUnits.length > 0 && <Text style={styles.sectionTitle}>Units</Text>}
-        {regularUnits.map((u) => {
-          const busy = (u.garrison || 0) + (u.exploring || 0);
-          return (
-            <View key={u.id} style={styles.unitCard}>
-              <View style={styles.unitRow}>
-                <ArtPlaceholder emoji="⚔️" label={null} size={52} source={unitImage(u.slug)} style={styles.unitArt} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.unitName}>{u.name}</Text>
-                  <Text style={styles.unitType}>
-                    {u.element ? `${u.element} ` : ""}{u.unit_type}
-                    {u.hero ? `  ·  led by ${u.hero.name}` : ""}
-                  </Text>
-                  <View style={styles.unitChips}>
-                    <Chip icon="⚔️" value={u.attack} />
-                    <Chip icon="🛡" value={u.defense} />
-                    <Chip icon="💨" value={u.speed} />
-                    <Chip icon="💰" value={`${u.upkeep_cost}/d`} color={colors.warning} />
-                  </View>
-                </View>
-                <View style={styles.unitQtyCol}>
-                  <Text style={styles.unitQty}>×{u.quantity}</Text>
-                  <TouchableOpacity style={styles.disbandBtn} onPress={() => openDisband(u)}>
-                    <Text style={styles.disbandTxt}>Disband</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              {busy > 0 && (
-                <View style={styles.dutyRow}>
-                  {u.garrison > 0 && (
-                    <View style={[styles.dutyBadge, { borderColor: alpha(colors.info, "66") }]}>
-                      <Text style={[styles.dutyTxt, { color: colors.info }]}>🛡 {u.garrison} defending</Text>
-                    </View>
-                  )}
-                  {u.exploring > 0 && (
-                    <View style={[styles.dutyBadge, { borderColor: alpha(colors.success, "66") }]}>
-                      <Text style={[styles.dutyTxt, { color: colors.success }]}>🧭 {u.exploring} exploring</Text>
-                    </View>
-                  )}
-                  <View style={[styles.dutyBadge, { borderColor: colors.border }]}>
-                    <Text style={styles.dutyTxt}>{u.available} free</Text>
-                  </View>
-                </View>
-              )}
-            </View>
-          );
-        })}
-
-        {data.units.length === 0 && (
-          <EmptyState icon="🪖" title="No units in your army" subtitle="Recruit soldiers or summon creatures with spells." />
-        )}
       </ScrollView>
+    );
+  }
 
-      {/* ── DISBAND MODAL ── */}
+  return (
+    <View style={styles.container}>
+      <SceneBackground source={sceneImage("barracks")} />
+      <FadeSlideIn key={subTab} style={{ flex: 1 }}>
+        {subTab === "overview" && renderOverview()}
+        {subTab === "units" && renderUnits()}
+        {subTab === "defense" && <DefenseScreen />}
+        {subTab === "recruit" && (
+          <RecruitScreen route={{ params: { unitId: recruitUnitId } }} />
+        )}
+      </FadeSlideIn>
+
+      <SubTabs tabs={SUB_TABS} active={subTab} onChange={changeSubTab} />
+
+      {/* disband modal */}
       {disbandModal && (
         <Modal transparent visible animationType="fade" onRequestClose={() => setDisbandModal(null)}>
           <View style={styles.modalOverlay}>
@@ -368,9 +423,9 @@ const styles = StyleSheet.create({
   /* war chest */
   warChest: {
     flexDirection: "row",
-    backgroundColor: colors.card,
+    backgroundColor: alpha(colors.bg, "a6"),
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: alpha(colors.border, "88"),
     paddingVertical: 10,
   },
   warChestItem: { flex: 1, alignItems: "center" },
@@ -380,7 +435,7 @@ const styles = StyleSheet.create({
 
   /* cards */
   card: {
-    backgroundColor: colors.card,
+    backgroundColor: "rgba(26,26,46,0.92)",
     marginHorizontal: 12,
     marginTop: 12,
     padding: 14,
@@ -388,26 +443,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  cardHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  cardTitle: { color: colors.text, fontSize: 15, fontWeight: "700" },
-
-  /* capacity */
-  capCount: { color: colors.text, fontSize: 16, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  capWarn: { color: colors.danger, fontSize: 12, marginTop: 8, lineHeight: 17 },
-  capHint: { color: colors.muted, fontSize: 11, marginTop: 8 },
-  powerRow: { flexDirection: "row", gap: 8, marginTop: 10 },
-
-  /* morale */
-  moralePct: { fontSize: 20, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  moraleMetaRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
-  moraleLabel: { fontSize: 13, fontWeight: "700" },
-  moraleDecay: { color: colors.muted, fontSize: 12, fontVariant: ["tabular-nums"] },
-  moraleMsg: { color: colors.textDim, fontSize: 12, fontStyle: "italic", marginTop: 6 },
-  moraleWarn: { color: colors.danger, fontSize: 12, fontWeight: "600", marginTop: 4 },
+  statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 7 },
+  statusLabel: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  statusValue: { color: colors.text, fontSize: 15, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  capWarn: { color: colors.danger, fontSize: 11, marginTop: 7, lineHeight: 16 },
+  moraleFootRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 6 },
+  moraleDecay: { color: colors.muted, fontSize: 11, fontVariant: ["tabular-nums"] },
+  moraleWarn: { color: colors.danger, fontSize: 11, fontWeight: "600" },
   payBtn: {
     backgroundColor: colors.success,
     borderRadius: 10,
-    paddingVertical: 12,
+    paddingVertical: 11,
     alignItems: "center",
     marginTop: 12,
   },
@@ -415,20 +461,7 @@ const styles = StyleSheet.create({
   payBtnFull: { backgroundColor: alpha(colors.success, "1a"), borderWidth: 1, borderColor: alpha(colors.success, "55") },
   payBtnFullTxt: { color: colors.success, fontSize: 13, fontWeight: "600" },
   btnDisabled: { opacity: 0.45 },
-
-  /* action tiles */
-  tileRow: { flexDirection: "row", gap: 10, marginHorizontal: 12, marginTop: 12 },
-  tile: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    alignItems: "center",
-    paddingVertical: 16,
-  },
-  tileIcon: { fontSize: 30, marginBottom: 6 },
-  tileTitle: { color: colors.text, fontSize: 15, fontWeight: "800" },
-  tileSub: { color: colors.muted, fontSize: 11, marginTop: 2 },
+  strengthRow: { flexDirection: "row", justifyContent: "space-around", paddingVertical: 12 },
 
   /* sections */
   sectionTitle: {
@@ -438,7 +471,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
     marginHorizontal: 14,
-    marginTop: 18,
+    marginTop: 16,
     marginBottom: 8,
   },
 
@@ -455,6 +488,83 @@ const styles = StyleSheet.create({
   chipIcon: { fontSize: 10 },
   chipTxt: { fontSize: 11, fontWeight: "700", fontVariant: ["tabular-nums"] },
 
+  /* carousel */
+  carousel: { paddingHorizontal: 12, gap: 10, paddingBottom: 4 },
+  caroCard: {
+    width: 116,
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+  },
+  caroCardSelected: {
+    borderColor: colors.gold,
+    backgroundColor: alpha(colors.gold, "12"),
+  },
+  caroName: { color: colors.textDim, fontSize: 11, fontWeight: "700", marginTop: 6 },
+  caroCount: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    backgroundColor: alpha(colors.bg, "dd"),
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  caroCountTxt: { color: colors.text, fontSize: 11, fontWeight: "800", fontVariant: ["tabular-nums"] },
+
+  /* detail panel */
+  detailPanel: {
+    backgroundColor: colors.card,
+    marginHorizontal: 12,
+    marginTop: 10,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: alpha(colors.gold, "55"),
+  },
+  detailHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
+  detailName: { color: colors.text, fontSize: 17, fontWeight: "800" },
+  detailType: { color: colors.accent, fontSize: 11, marginTop: 2, textTransform: "capitalize" },
+  detailQty: { color: colors.gold, fontSize: 22, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  unitChips: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
+  detailActions: { flexDirection: "row", gap: 8, marginTop: 12, alignItems: "center" },
+  recruitMoreBtn: {
+    flex: 1,
+    backgroundColor: colors.success,
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: "center",
+  },
+  recruitMoreTxt: { color: colors.white, fontSize: 14, fontWeight: "800" },
+  summonedNote: {
+    backgroundColor: alpha(colors.accent, "1a"),
+    borderWidth: 1,
+    borderColor: alpha(colors.accent, "55"),
+  },
+  summonedNoteTxt: { color: colors.accent, fontSize: 12, fontWeight: "600" },
+  disbandBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: alpha(colors.danger, "77"),
+  },
+  disbandTxt: { color: colors.danger, fontSize: 12, fontWeight: "700" },
+  dutyRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 },
+  dutyBadge: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  dutyTxt: { color: colors.muted, fontSize: 11, fontWeight: "600" },
+
   /* heroes */
   heroCard: {
     flexDirection: "row",
@@ -469,52 +579,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   heroArt: { borderRadius: 10 },
-  heroTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  heroName: { color: colors.gold, fontSize: 16, fontWeight: "800", flex: 1 },
-  heroBadge: {
-    backgroundColor: alpha(colors.gold, "22"),
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 5,
-  },
-  heroBadgeTxt: { color: colors.gold, fontSize: 9, fontWeight: "800", letterSpacing: 1 },
+  heroName: { color: colors.gold, fontSize: 15, fontWeight: "800" },
   heroAbilities: { color: colors.goldDim, fontSize: 11, marginTop: 3, lineHeight: 15 },
   heroStats: { flexDirection: "row", gap: 6, marginTop: 7 },
-
-  /* units */
-  unitCard: {
-    backgroundColor: colors.card,
-    marginHorizontal: 12,
-    marginBottom: 8,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  unitRow: { flexDirection: "row", alignItems: "center" },
-  unitArt: { marginRight: 10, borderRadius: 8 },
-  unitName: { color: colors.text, fontSize: 15, fontWeight: "700" },
-  unitType: { color: colors.accent, fontSize: 11, marginTop: 1, textTransform: "capitalize" },
-  unitChips: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 7 },
-  unitQtyCol: { alignItems: "flex-end", marginLeft: 8 },
-  unitQty: { color: colors.text, fontSize: 19, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  disbandBtn: {
-    marginTop: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: alpha(colors.danger, "77"),
-  },
-  disbandTxt: { color: colors.danger, fontSize: 11, fontWeight: "600" },
-  dutyRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 },
-  dutyBadge: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  dutyTxt: { color: colors.muted, fontSize: 11, fontWeight: "600" },
 
   /* disband modal */
   modalOverlay: {

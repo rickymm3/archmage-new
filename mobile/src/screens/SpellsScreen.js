@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
+  Image,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
@@ -12,8 +13,8 @@ import Slider from "@react-native-community/slider";
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
-import { ArtPlaceholder } from "../components/ui";
-import { spellImage } from "../assets";
+import { ArtPlaceholder, SubTabs, FadeSlideIn } from "../components/ui";
+import { affinityCrest, spellImage } from "../assets";
 import { useAuth } from "../context/AuthContext";
 import LoadingButton from "../components/LoadingButton";
 import { colors } from "../theme";
@@ -27,6 +28,85 @@ const AFFINITY_META = {
   voidwalker: { name: "Voidwalker", emoji: "🌑", color: colors.muted },
 };
 
+// Game-like school selector: a wrapped grid of crest tiles that always
+// fits the screen width (the old horizontal chip bar clipped on phones).
+function AffinityGrid({ keys, selected, onSelect, userAff, counts }) {
+  return (
+    <View style={affStyles.grid}>
+      {keys.map((aff) => {
+        const meta = AFFINITY_META[aff] || { name: aff, emoji: "✨", color: colors.muted };
+        const crest = affinityCrest(aff);
+        const isSelected = selected === aff;
+        const isUserAff = aff === userAff;
+        return (
+          <TouchableOpacity
+            key={aff}
+            style={[
+              affStyles.tile,
+              isSelected && { borderColor: meta.color, backgroundColor: meta.color + "1a" },
+            ]}
+            onPress={() => onSelect(aff)}
+            activeOpacity={0.8}
+          >
+            {crest ? (
+              <Image source={crest} style={affStyles.crest} resizeMode="contain" />
+            ) : (
+              <Text style={affStyles.emoji}>{meta.emoji}</Text>
+            )}
+            <Text style={[affStyles.name, isSelected && { color: meta.color }]} numberOfLines={1}>
+              {meta.name}
+            </Text>
+            {isUserAff && <Text style={affStyles.star}>★</Text>}
+            {counts && counts[aff] != null && (
+              <View style={[affStyles.count, isSelected && { borderColor: meta.color }]}>
+                <Text style={[affStyles.countTxt, isSelected && { color: meta.color }]}>{counts[aff]}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+const affStyles = StyleSheet.create({
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  tile: {
+    width: "31%",
+    flexGrow: 1,
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingVertical: 9,
+    paddingHorizontal: 4,
+  },
+  crest: { width: 34, height: 34 },
+  emoji: { fontSize: 26, height: 34, textAlign: "center" },
+  name: { color: colors.textDim, fontSize: 10, fontWeight: "700", marginTop: 4 },
+  star: { position: "absolute", top: 4, left: 6, color: colors.gold, fontSize: 11 },
+  count: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    minWidth: 16,
+    paddingHorizontal: 4,
+    alignItems: "center",
+  },
+  countTxt: { color: colors.muted, fontSize: 9, fontWeight: "800" },
+});
+
 const SPELL_TYPE_META = {
   self:    { label: "Cast on Self",    emoji: "✨", order: 1 },
   defense: { label: "Defense",         emoji: "🛡️", order: 2 },
@@ -35,10 +115,10 @@ const SPELL_TYPE_META = {
   attack:  { label: "Cast on Enemy",   emoji: "⚔️", order: 4 },
 };
 
-export default function SpellsScreen() {
+export default function SpellsScreen({ route }) {
   const { showAlert } = useModal();
   const { user } = useAuth();
-  const [tab, setTab] = useState("research"); // research | cast | active
+  const [tab, setTab] = useState(route?.params?.subTab || "research"); // research | cast | active
   const [spellsData, setSpellsData] = useState(null);
   const [castingData, setCastingData] = useState(null);
   const [activeData, setActiveData] = useState(null);
@@ -79,6 +159,11 @@ export default function SpellsScreen() {
   }
 
   useFocusEffect(useCallback(() => { loadData(); }, [tab]));
+
+  // Deep link (e.g. Home enchantments chip → Active sub-tab)
+  useEffect(() => {
+    if (route?.params?.subTab) setTab(route.params.subTab);
+  }, [route?.params?.subTab]);
 
   function handleResearch(spell) {
     const invested = spell.research_progress;
@@ -198,29 +283,13 @@ export default function SpellsScreen() {
       <>
         <Text style={styles.manaDisplay}>🔮 {spellsData.current_mana} / {spellsData.max_mana}</Text>
 
-        {/* Affinity Selector */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.affinityBar} contentContainerStyle={styles.affinityBarContent}>
-          {affinityKeys.map((aff) => {
-            const meta = AFFINITY_META[aff] || { name: aff, emoji: "✨", color: colors.muted };
-            const isSelected = selectedAffinity === aff;
-            const isUserAff = aff === userAff;
-            return (
-              <TouchableOpacity
-                key={aff}
-                style={[
-                  styles.affinityChip,
-                  isSelected && { borderColor: meta.color, backgroundColor: meta.color + "20" },
-                  isUserAff && !isSelected && { borderColor: meta.color + "60" },
-                ]}
-                onPress={() => setSelectedAffinity(aff)}
-              >
-                <Text style={styles.affinityEmoji}>{meta.emoji}</Text>
-                <Text style={[styles.affinityName, isSelected && { color: meta.color }]}>{meta.name}</Text>
-                {isUserAff && <View style={[styles.nativeDot, { backgroundColor: meta.color }]} />}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        {/* School selector */}
+        <AffinityGrid
+          keys={affinityKeys}
+          selected={selectedAffinity}
+          onSelect={setSelectedAffinity}
+          userAff={userAff}
+        />
 
         {!isNative && (
           <Text style={styles.foreignNote}>Foreign magic — limited to first 8 spells</Text>
@@ -342,31 +411,14 @@ export default function SpellsScreen() {
       <>
         <Text style={styles.manaDisplay}>🔮 {castingData.current_mana} / {castingData.max_mana} • ✨ {castingData.magic_power} MP</Text>
 
-        {/* Affinity Selector */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.affinityBar} contentContainerStyle={styles.affinityBarContent}>
-          {affinityKeys.map((aff) => {
-            const meta = AFFINITY_META[aff] || { name: aff, emoji: "✨", color: colors.muted };
-            const isSelected = effectiveAffinity === aff;
-            const isUserAff = aff === userAff;
-            const count = grouped[aff]?.length || 0;
-            return (
-              <TouchableOpacity
-                key={aff}
-                style={[
-                  styles.affinityChip,
-                  isSelected && { borderColor: meta.color, backgroundColor: meta.color + "20" },
-                  isUserAff && !isSelected && { borderColor: meta.color + "60" },
-                ]}
-                onPress={() => setSelectedAffinity(aff)}
-              >
-                <Text style={styles.affinityEmoji}>{meta.emoji}</Text>
-                <Text style={[styles.affinityName, isSelected && { color: meta.color }]}>{meta.name}</Text>
-                <Text style={[styles.castCount, isSelected && { color: meta.color }]}>{count}</Text>
-                {isUserAff && <View style={[styles.nativeDot, { backgroundColor: meta.color }]} />}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        {/* School selector (badge = castable spells known) */}
+        <AffinityGrid
+          keys={affinityKeys}
+          selected={effectiveAffinity}
+          onSelect={setSelectedAffinity}
+          userAff={userAff}
+          counts={Object.fromEntries(affinityKeys.map((a) => [a, grouped[a]?.length || 0]))}
+        />
 
         {/* Spells grouped by type */}
         {(() => {
@@ -419,25 +471,12 @@ export default function SpellsScreen() {
   }
 
   return (
+    <View style={styles.container}>
+    <FadeSlideIn key={tab} style={{ flex: 1 }}>
     <ScrollView
-      style={styles.container}
+      style={{ flex: 1 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadData(); setRefreshing(false); }} />}
     >
-      {/* Tabs */}
-      <View style={styles.tabs}>
-        {["research", "cast", "active"].map((t) => (
-          <TouchableOpacity
-            key={t}
-            style={[styles.tab, tab === t && styles.tabActive]}
-            onPress={() => setTab(t)}
-          >
-            <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
       {/* Research Tab */}
       {tab === "research" && renderResearchTab()}
 
@@ -622,6 +661,18 @@ export default function SpellsScreen() {
         </Modal>
       )}
     </ScrollView>
+    </FadeSlideIn>
+
+    <SubTabs
+      tabs={[
+        { key: "research", icon: "📖", label: "Research" },
+        { key: "cast", icon: "✨", label: "Cast" },
+        { key: "active", icon: "🌀", label: "Active" },
+      ]}
+      active={tab}
+      onChange={setTab}
+    />
+    </View>
   );
 }
 
@@ -634,23 +685,6 @@ const styles = StyleSheet.create({
   tabTextActive: { color: colors.accent },
   manaDisplay: { color: colors.accent, textAlign: "center", padding: 12, fontSize: 14 },
 
-  // Affinity bar
-  affinityBar: { maxHeight: 54, borderBottomWidth: 1, borderBottomColor: colors.border },
-  affinityBarContent: { paddingHorizontal: 8, paddingVertical: 8, gap: 8 },
-  affinityChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    gap: 4,
-  },
-  affinityEmoji: { fontSize: 14 },
-  affinityName: { color: colors.muted, fontSize: 13, fontWeight: "600" },
-  nativeDot: { width: 6, height: 6, borderRadius: 3, marginLeft: 2 },
-  castCount: { color: colors.faint, fontSize: 11, fontWeight: "bold", marginLeft: 2 },
   foreignNote: { color: colors.muted, fontSize: 12, textAlign: "center", paddingVertical: 6, fontStyle: "italic" },
 
   // Spell type group headers

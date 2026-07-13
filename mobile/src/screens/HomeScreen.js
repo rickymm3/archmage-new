@@ -2,26 +2,43 @@ import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
+  Image,
   ScrollView,
   StyleSheet,
-  RefreshControl,
   TouchableOpacity,
-  ActivityIndicator,
+  Modal,
+  Platform,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import * as api from "../services/api";
-import { useAuth } from "../context/AuthContext";
-import { LoadingState, ArtPlaceholder } from "../components/ui";
+import { LoadingState, ProgressBar } from "../components/ui";
+import LoadingButton from "../components/LoadingButton";
 import { ui as art } from "../assets";
 import { colors, alpha } from "../theme";
 
+function formatCountdown(isoDate, now) {
+  const diff = Math.max(0, new Date(isoDate).getTime() - now);
+  const total = Math.ceil(diff / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+function moraleColor(m) {
+  if (m >= 75) return colors.success;
+  if (m >= 20) return colors.gold;
+  return colors.danger;
+}
+
 export default function HomeScreen() {
-  const { logout } = useAuth();
   const navigation = useNavigation();
   const [data, setData] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const [collectingId, setCollectingId] = useState(null);
-  const [claimingExplorationId, setClaimingExplorationId] = useState(null);
+  const [now, setNow] = useState(Date.now());
+  const pollRef = useRef(null);
   const tickRef = useRef(null);
 
   async function loadDashboard() {
@@ -36,17 +53,14 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       loadDashboard();
-      // Tick every 10s to update progress bars while orders are active
-      tickRef.current = setInterval(loadDashboard, 10000);
-      return () => clearInterval(tickRef.current);
+      pollRef.current = setInterval(loadDashboard, 10000); // refresh data
+      tickRef.current = setInterval(() => setNow(Date.now()), 1000); // countdowns
+      return () => {
+        clearInterval(pollRef.current);
+        clearInterval(tickRef.current);
+      };
     }, [])
   );
-
-  async function onRefresh() {
-    setRefreshing(true);
-    await loadDashboard();
-    setRefreshing(false);
-  }
 
   if (!data) {
     return (
@@ -57,72 +71,39 @@ export default function HomeScreen() {
   }
 
   const p = data.player;
-  const rates = data.production_rates;
-  const army = data.army_summary;
+  const rates = data.production_rates || {};
+  const army = data.army_summary || {};
+  const spells = data.active_spells || [];
+  const orders = data.active_orders || [];
+  const activeExp = data.exploration?.active;
+  const completedExp = data.exploration?.completed || [];
+  const morale = Math.round(p.morale || 0);
+  const unread = data.unread_notifications || 0;
 
-  return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      {/* Player Stats */}
-      <View style={styles.card}>
-        <ArtPlaceholder emoji="🏰" label="Kingdom banner" aspect={3} source={art.kingdomBanner} style={styles.bannerArt} />
-        <Text style={styles.cardTitle}>{p.kingdom_name || p.username}</Text>
-        <Text style={styles.affinity}>{p.affinity}</Text>
-        {p.under_protection && (
-          <View style={styles.protectionBadge}>
-            <Text style={styles.protectionText}>🛡 Under Protection</Text>
-          </View>
-        )}
-      </View>
+  const hasActivity = orders.length > 0 || activeExp || completedExp.length > 0;
 
-      {/* Resources */}
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Resources</Text>
-        <View style={styles.statRow}>
-          <StatItem label="Gold" value={p.gold} icon="💰" />
-          <StatItem label="Mana" value={`${p.mana}/${p.max_mana}`} icon="🔮" />
-          <StatItem label="Land" value={`${p.land - p.free_land}/${p.land}`} icon="🏔" />
+  /* ── activity cards ── */
+
+  function renderOrderCard(order) {
+    const pct = order.progress_percent || 0;
+    const done = pct >= 100;
+    return (
+      <View key={`order-${order.id}`} style={styles.activityCard}>
+        <View style={styles.activityHeader}>
+          <Text style={styles.activityTitle}>📯 Recruiting {order.unit_name}</Text>
+          <Text style={styles.activityCount}>
+            {order.accepted_quantity}/{order.total_quantity}
+          </Text>
         </View>
-        <View style={styles.statRow}>
-          <StatItem label="Morale" value={Math.round(p.morale)} icon="😇" />
-          <StatItem label="Power" value={p.net_power} icon="💪" />
-          <StatItem label="Magic" value={p.magic_power} icon="✨" />
-        </View>
-      </View>
-
-      {/* Production */}
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Production / hr</Text>
-        <View style={styles.statRow}>
-          <StatItem label="Gold" value={`+${rates.gold || 0}`} icon="💰" />
-          <StatItem label="Mana" value={`+${rates.mana || 0}`} icon="🔮" />
-        </View>
-      </View>
-
-      {/* Army Summary */}
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Army</Text>
-        <View style={styles.statRow}>
-          <StatItem label="Units" value={army.total_units} icon="⚔️" />
-          <StatItem label="Strength" value={army.total_strength} icon="💪" />
-          <StatItem label="Upkeep" value={army.total_upkeep} icon="💰" />
-        </View>
-      </View>
-
-      {/* Active Recruitment Orders */}
-      {data.active_orders && data.active_orders.length > 0 && (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Recruiting</Text>
-          {data.active_orders.map((order) => (
-            <RecruitOrderWidget
-              key={order.id}
-              order={order}
-              collecting={collectingId === order.id}
-              onCollect={async () => {
+        <ProgressBar percent={pct} color={colors.success} height={6} style={{ marginVertical: 8 }} />
+        <View style={styles.activityFooter}>
+          <Text style={styles.activityMeta}>
+            {done ? "All arrived!" : `Done in ${formatCountdown(order.estimated_completion, now)}`}
+          </Text>
+          {order.available_to_accept > 0 && (
+            <LoadingButton
+              style={styles.smallBtn}
+              onPress={async () => {
                 setCollectingId(order.id);
                 try {
                   await api.acceptRecruitOrder(order.id);
@@ -130,410 +111,510 @@ export default function HomeScreen() {
                 } catch (e) {}
                 setCollectingId(null);
               }}
-            />
-          ))}
+              disabled={collectingId === order.id}
+            >
+              <Text style={styles.smallBtnTxt}>Collect {order.available_to_accept}</Text>
+            </LoadingButton>
+          )}
         </View>
-      )}
-
-      {/* Active Spells */}
-      {data.active_spells.length > 0 && (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Active Spells</Text>
-          {data.active_spells.map((spell) => (
-            <View key={spell.id} style={styles.spellRow}>
-              <Text style={styles.spellName}>{spell.spell_name}</Text>
-              <Text style={styles.spellMeta}>x{spell.stack_count}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* Exploration */}
-      <ExplorationWidget
-        exploration={data.exploration}
-        navigation={navigation}
-        claimingId={claimingExplorationId}
-        onClaim={async (id) => {
-          setClaimingExplorationId(id);
-          try {
-            await api.claimExploration(id);
-            await loadDashboard();
-          } catch (e) {}
-          setClaimingExplorationId(null);
-        }}
-      />
-
-      {/* Notifications */}
-      {data.unread_notifications > 0 && (
-        <TouchableOpacity
-          style={styles.notificationBadge}
-          onPress={() => navigation.navigate("More", { screen: "Notifications" })}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.notificationText}>
-            📬 {data.unread_notifications} unread notification{data.unread_notifications !== 1 ? "s" : ""}
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Logout */}
-      <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-        <Text style={styles.logoutText}>Sign Out</Text>
-      </TouchableOpacity>
-    </ScrollView>
-  );
-}
-
-function RecruitOrderWidget({ order, collecting, onCollect }) {
-  const available = order.available_to_accept;
-  const pct = order.progress_percent;
-  const remaining = formatTimeLeft(order.estimated_completion);
-
-  return (
-    <View style={styles.recruitOrder}>
-      <View style={styles.recruitHeader}>
-        <Text style={styles.recruitUnit}>⚔️ {order.unit_name}</Text>
-        <Text style={styles.recruitCount}>
-          {order.accepted_quantity}/{order.total_quantity}
-        </Text>
-      </View>
-      <View style={styles.progressBarBg}>
-        <View style={[styles.progressBarFill, { width: `${pct}%` }]} />
-      </View>
-      <View style={styles.recruitFooter}>
-        <Text style={styles.recruitTime}>
-          {pct >= 100 ? "Complete" : remaining}
-        </Text>
-        {available > 0 && (
-          <TouchableOpacity
-            style={styles.collectButton}
-            onPress={onCollect}
-            disabled={collecting}
-          >
-            {collecting ? (
-              <ActivityIndicator size="small" color={colors.white} />
-            ) : (
-              <Text style={styles.collectText}>Collect {available}</Text>
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
-  );
-}
-
-function formatTimeLeft(isoDate) {
-  const diff = Math.max(0, new Date(isoDate) - Date.now());
-  const mins = Math.ceil(diff / 60000);
-  if (mins >= 60) {
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return m > 0 ? `${h}h ${m}m left` : `${h}h left`;
-  }
-  return `${mins}m left`;
-}
-
-function formatCountdown(isoDate) {
-  const diff = Math.max(0, new Date(isoDate).getTime() - Date.now());
-  const total = Math.ceil(diff / 1000);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const pad = (n) => String(n).padStart(2, "0");
-  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
-}
-
-function ExplorationWidget({ exploration, navigation, claimingId, onClaim }) {
-  const [countdown, setCountdown] = useState("");
-  const timerRef = useRef(null);
-
-  const active = exploration?.active;
-  const completed = exploration?.completed || [];
-
-  useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (!active) { setCountdown(""); return; }
-
-    const tick = () => {
-      const diff = new Date(active.finishes_at).getTime() - Date.now();
-      setCountdown(diff <= 0 ? "Returning..." : formatCountdown(active.finishes_at));
-    };
-    tick();
-    timerRef.current = setInterval(tick, 1000);
-    return () => clearInterval(timerRef.current);
-  }, [active?.id, active?.finishes_at]);
-
-  if (!active && completed.length === 0) {
-    return (
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>🧭 Exploration</Text>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => navigation.navigate("Explorations")}
-        >
-          <Text style={styles.actionIcon}>🧭</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.actionText}>Explore the Wilds</Text>
-            <Text style={styles.actionSub}>Send scouts to discover land and treasure</Text>
-          </View>
-          <Text style={styles.actionArrow}>›</Text>
-        </TouchableOpacity>
       </View>
     );
   }
 
-  return (
-    <View style={styles.card}>
-      <Text style={styles.sectionTitle}>🧭 Exploration</Text>
-
-      {active && (
-        <View style={styles.explorationActive}>
-          <View style={styles.explorationActiveHeader}>
-            <View style={styles.explorationBadge}>
-              <Text style={styles.explorationBadgeText}>IN PROGRESS</Text>
-            </View>
-            <Text style={styles.explorationCountdown}>{countdown}</Text>
-          </View>
-          <View style={styles.explorationDetails}>
-            <Text style={styles.explorationDetailText}>
-              🛡 {active.unit_name ? `${active.quantity}× ${active.unit_name}` : "Unescorted"}
-            </Text>
-            <Text style={styles.explorationDetailText}>
-              🏔 ~{active.potential_land} land
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.explorationViewBtn}
-            onPress={() => navigation.navigate("Explorations")}
-          >
-            <Text style={styles.explorationViewBtnText}>View Expedition</Text>
-          </TouchableOpacity>
+  function renderActiveExpedition() {
+    const e = activeExp;
+    const startMs = new Date(e.started_at).getTime();
+    const endMs = new Date(e.finishes_at).getTime();
+    const pct = Math.round(Math.max(0, Math.min(1, (now - startMs) / Math.max(1, endMs - startMs))) * 100);
+    const label = e.unit_name ? `${e.quantity}× ${e.unit_name}` : "Unescorted party";
+    return (
+      <TouchableOpacity
+        key="exp-active"
+        style={styles.activityCard}
+        activeOpacity={0.8}
+        onPress={() => navigation.navigate("War", { subTab: "explore" })}
+      >
+        <View style={styles.activityHeader}>
+          <Text style={styles.activityTitle}>🧭 Expedition · {label}</Text>
+          <Text style={[styles.activityCount, { color: colors.gold }]}>
+            {now >= endMs ? "…" : formatCountdown(e.finishes_at, now)}
+          </Text>
         </View>
-      )}
+        <View style={styles.trailRow}>
+          <Text style={styles.trailEnd}>🏰</Text>
+          <View style={{ flex: 1, justifyContent: "center" }}>
+            <ProgressBar percent={pct} color={colors.gold} height={6} />
+            <Text style={[styles.trailMarker, { left: `${Math.min(94, pct)}%` }]}>
+              {e.unit_name ? "🐎" : "🚶"}
+            </Text>
+          </View>
+          <Text style={styles.trailEnd}>🏔</Text>
+        </View>
+        <Text style={styles.activityMeta}>
+          ~{e.potential_land ?? "?"} land potential · tap to view
+        </Text>
+      </TouchableOpacity>
+    );
+  }
 
-      {completed.map((exp) => {
-        const casualties = exp.quantity - (exp.survivors || exp.quantity);
-        return (
-          <View key={exp.id} style={styles.explorationCompleted}>
-            <View style={{ flex: 1 }}>
-              <View style={styles.explorationCompletedHeader}>
-                <Text style={styles.explorationCompletedTitle}>✅ Expedition Returned</Text>
-              </View>
-              <View style={styles.explorationRewards}>
-                <Text style={styles.explorationRewardText}>🏔 {exp.land_reward} land</Text>
-                {exp.gold_reward > 0 && (
-                  <Text style={styles.explorationRewardText}>💰 {exp.gold_reward} gold</Text>
-                )}
-                {exp.mana_reward > 0 && (
-                  <Text style={styles.explorationRewardText}>🔮 {exp.mana_reward} mana</Text>
-                )}
-                {casualties > 0 && (
-                  <Text style={[styles.explorationRewardText, { color: colors.danger }]}>
-                    💀 {casualties} lost
-                  </Text>
-                )}
-              </View>
+  function renderCompletedExpedition(e) {
+    const rewards = [];
+    if (e.land_reward) rewards.push(`🏔 +${e.land_reward}`);
+    if (e.gold_reward) rewards.push(`💰 +${e.gold_reward}`);
+    if (e.mana_reward) rewards.push(`🔮 +${e.mana_reward}`);
+    return (
+      <TouchableOpacity
+        key={`exp-${e.id}`}
+        style={[styles.activityCard, { borderColor: alpha(colors.success, "66") }]}
+        activeOpacity={0.8}
+        onPress={() => navigation.navigate("War", { subTab: "explore" })}
+      >
+        <View style={styles.activityHeader}>
+          <Text style={[styles.activityTitle, { color: colors.success }]}>✅ Expedition returned!</Text>
+          <Text style={styles.activityCount}>{rewards.join("  ") || "no spoils"}</Text>
+        </View>
+        <Text style={styles.activityMeta}>Tap to claim your rewards</Text>
+      </TouchableOpacity>
+    );
+  }
+
+  function renderIdleCTAs() {
+    return (
+      <>
+        <TouchableOpacity
+          style={styles.ctaCard}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate("War", { subTab: "explore" })}
+        >
+          <Text style={styles.ctaIcon}>🧭</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.ctaTitle}>Explore the Wilds</Text>
+            <Text style={styles.ctaSub}>Send a party to discover new land</Text>
+          </View>
+          <Text style={styles.ctaArrow}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.ctaCard}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate("Army", { subTab: "recruit" })}
+        >
+          <Text style={styles.ctaIcon}>📯</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.ctaTitle}>Recruit Soldiers</Text>
+            <Text style={styles.ctaSub}>Grow your army at the barracks</Text>
+          </View>
+          <Text style={styles.ctaArrow}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.ctaCard}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate("War", { subTab: "attack" })}
+        >
+          <Text style={styles.ctaIcon}>⚔️</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.ctaTitle}>Raid a Kingdom</Text>
+            <Text style={styles.ctaSub}>Scout enemies and seize their land</Text>
+          </View>
+          <Text style={styles.ctaArrow}>›</Text>
+        </TouchableOpacity>
+      </>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {/* ── HERO ── */}
+      <View style={styles.hero}>
+        <Image source={art.kingdomBanner} resizeMode="cover" style={StyleSheet.absoluteFill} />
+        <View style={styles.heroTint} />
+
+        {/* floating badges */}
+        <View style={styles.heroTopRow}>
+          {p.under_protection ? (
+            <View style={styles.shieldBadge}>
+              <Text style={styles.shieldTxt}>🛡 Protected</Text>
             </View>
+          ) : <View />}
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            {/* EXPERIMENTAL: pannable map home entry */}
             <TouchableOpacity
-              style={styles.explorationClaimBtn}
-              onPress={() => onClaim(exp.id)}
-              disabled={claimingId === exp.id}
+              style={styles.bellBtn}
+              onPress={() => navigation.navigate("KingdomMap")}
+              activeOpacity={0.8}
             >
-              {claimingId === exp.id ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <Text style={styles.explorationClaimText}>🎁 Claim</Text>
+              <Text style={styles.bellIcon}>🗺</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.bellBtn}
+              onPress={() => navigation.navigate("Profile")}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.bellIcon}>👤</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.bellBtn}
+              onPress={() => navigation.navigate("Notifications")}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.bellIcon}>🔔</Text>
+              {unread > 0 && (
+                <View style={styles.bellDot}>
+                  <Text style={styles.bellDotTxt}>{unread > 9 ? "9+" : unread}</Text>
+                </View>
               )}
             </TouchableOpacity>
           </View>
-        );
-      })}
+        </View>
+
+        <View style={styles.heroScrim}>
+          <Text style={styles.heroTitle}>{p.kingdom_name || p.username}</Text>
+          <Text style={styles.heroSub}>
+            {p.affinity} · 💪 {Number(p.net_power).toLocaleString()} power
+          </Text>
+        </View>
+      </View>
+
+      {/* ── RESOURCE STRIP — each cell jumps to its Kingdom section ── */}
+      <View style={styles.resourceStrip}>
+        <TouchableOpacity
+          style={styles.resItem}
+          activeOpacity={0.6}
+          onPress={() => navigation.navigate("Kingdom", { subTab: "tax" })}
+        >
+          <Text style={[styles.resValue, { color: colors.gold }]}>💰 {Number(p.gold).toLocaleString()}</Text>
+          <Text style={styles.resHint}>+{rates.gold || 0}/hr · tax</Text>
+        </TouchableOpacity>
+        <View style={styles.resDivider} />
+        <TouchableOpacity
+          style={styles.resItem}
+          activeOpacity={0.6}
+          onPress={() => navigation.navigate("Kingdom", { subTab: "mana" })}
+        >
+          <Text style={[styles.resValue, { color: colors.info }]}>🔮 {Number(p.mana).toLocaleString()}</Text>
+          <Text style={styles.resHint}>
+            battery {Math.round((p.mana_charge || 0) * 100)}% · channel
+          </Text>
+        </TouchableOpacity>
+        <View style={styles.resDivider} />
+        <TouchableOpacity
+          style={styles.resItem}
+          activeOpacity={0.6}
+          onPress={() => navigation.navigate("Kingdom", { subTab: "town" })}
+        >
+          <Text style={[styles.resValue, { color: colors.success }]}>🏔 {p.free_land}</Text>
+          <Text style={styles.resHint}>of {p.land} free · build</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.reportBtn} activeOpacity={0.7} onPress={() => setShowReport(true)}>
+          <Text style={styles.reportBtnTxt}>📜</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── VITALS ROW ── */}
+      <View style={styles.vitalsRow}>
+        <View style={styles.moraleBox}>
+          <View style={styles.moraleTop}>
+            <Text style={styles.vitalLabel}>Morale</Text>
+            <Text style={[styles.moraleVal, { color: moraleColor(morale) }]}>{morale}%</Text>
+          </View>
+          <ProgressBar percent={morale} color={moraleColor(morale)} height={5} />
+        </View>
+        <TouchableOpacity
+          style={styles.spellChip}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate("Magic", { subTab: "active" })}
+        >
+          <Text style={styles.spellChipIcon}>✨</Text>
+          <Text style={styles.spellChipTxt}>{spells.length}</Text>
+          <Text style={styles.spellChipLabel}>{spells.length === 1 ? "spell" : "spells"}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── HAPPENING NOW (fixed window, internal scroll) ── */}
+      <Text style={styles.sectionLabel}>{hasActivity ? "Happening Now" : "What Next?"}</Text>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.activityList}>
+        {completedExp.map(renderCompletedExpedition)}
+        {orders.map(renderOrderCard)}
+        {activeExp && renderActiveExpedition()}
+        {!hasActivity && renderIdleCTAs()}
+        <View style={{ height: 8 }} />
+      </ScrollView>
+
+      {/* ── KINGDOM REPORT SHEET ── */}
+      <Modal visible={showReport} transparent animationType="slide" onRequestClose={() => setShowReport(false)}>
+        <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setShowReport(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetGrip} />
+            <Text style={styles.sheetTitle}>📜 Kingdom Report</Text>
+
+            <Text style={styles.reportSection}>Economy</Text>
+            <ReportRow label="Gold production" value={`+${rates.gold || 0} / hr`} />
+            <ReportRow label="Mana production" value={`+${rates.mana || 0} / hr`} />
+            <ReportRow label="Mana battery charge" value={`${Math.round((p.mana_charge || 0) * 100)}%`} />
+            <ReportRow label="Land" value={`${p.land - p.free_land} used · ${p.free_land} free · ${p.land} total`} />
+
+            <Text style={styles.reportSection}>Might</Text>
+            <ReportRow label="Net power" value={Number(p.net_power).toLocaleString()} />
+            <ReportRow label="Magic power" value={p.magic_power} />
+            <ReportRow label="Army" value={`${army.total_units || 0} units · ${Number(army.total_strength || 0).toLocaleString()} strength`} />
+            <ReportRow label="Army upkeep" value={`💰 ${Number(army.total_upkeep || 0).toLocaleString()} / day`} />
+            <ReportRow label="Morale" value={`${morale}%`} valueColor={moraleColor(morale)} />
+
+            {p.under_protection && (
+              <>
+                <Text style={styles.reportSection}>Status</Text>
+                <ReportRow
+                  label="Magical protection"
+                  value={`until ${new Date(p.protection_expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+                  valueColor={colors.success}
+                />
+              </>
+            )}
+
+            <TouchableOpacity style={styles.sheetClose} onPress={() => setShowReport(false)}>
+              <Text style={styles.sheetCloseTxt}>Close</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
 
-function StatItem({ label, value, icon }) {
+function ReportRow({ label, value, valueColor = colors.text }) {
   return (
-    <View style={styles.statItem}>
-      <Text style={styles.statIcon}>{icon}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <View style={styles.reportRow}>
+      <Text style={styles.reportLabel}>{label}</Text>
+      <Text style={[styles.reportValue, { color: valueColor }]}>{value}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
-  loadingText: { color: colors.faint, textAlign: "center", marginTop: 60 },
-  card: {
-    backgroundColor: colors.card,
-    margin: 12,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
+  container: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    ...(Platform.OS === "web" ? { maxWidth: 480, width: "100%", alignSelf: "center" } : {}),
   },
-  bannerArt: { marginBottom: 12 },
-  cardTitle: { color: colors.text, fontSize: 24, fontWeight: "bold" },
-  affinity: { color: colors.accent, fontSize: 14, marginTop: 2 },
-  protectionBadge: {
-    backgroundColor: alpha(colors.success, "33"),
-    padding: 6,
-    borderRadius: 6,
-    marginTop: 8,
-    alignSelf: "flex-start",
-  },
-  protectionText: { color: colors.success, fontSize: 12 },
-  sectionTitle: {
-    color: colors.accent,
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 12,
-  },
-  statRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 8,
-  },
-  statItem: { alignItems: "center", flex: 1 },
-  statIcon: { fontSize: 20, marginBottom: 2 },
-  statValue: { color: colors.text, fontSize: 16, fontWeight: "bold" },
-  statLabel: { color: colors.muted, fontSize: 11, marginTop: 2 },
-  spellRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 6,
+
+  /* hero */
+  hero: {
+    height: "26%",
+    overflow: "hidden",
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  spellName: { color: colors.text, fontSize: 14 },
-  spellMeta: { color: colors.accent, fontSize: 14 },
-  actionButton: {
+  heroTint: { ...StyleSheet.absoluteFillObject, backgroundColor: alpha(colors.bg, "33") },
+  heroTopRow: {
+    position: "absolute",
+    top: 10,
+    left: 12,
+    right: 12,
+    zIndex: 5,
     flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.cardAlt,
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 8,
-  },
-  actionIcon: { fontSize: 24, marginRight: 12 },
-  actionText: { color: colors.text, fontSize: 15, fontWeight: "600" },
-  actionSub: { color: colors.muted, fontSize: 12, marginTop: 2 },
-  actionArrow: { color: colors.accent, fontSize: 24, fontWeight: "bold" },
-  notificationBadge: {
-    backgroundColor: alpha(colors.danger, "33"),
-    margin: 12,
-    padding: 12,
-    borderRadius: 8,
+    justifyContent: "space-between",
     alignItems: "center",
   },
-  notificationText: { color: colors.danger, fontSize: 14 },
-  logoutButton: {
-    margin: 12,
-    padding: 14,
-    borderRadius: 8,
+  shieldBadge: {
+    backgroundColor: alpha(colors.success, "33"),
     borderWidth: 1,
-    borderColor: colors.faint,
-    alignItems: "center",
-    marginBottom: 32,
-  },
-  logoutText: { color: colors.muted, fontSize: 16 },
-  recruitOrder: {
-    backgroundColor: colors.cardAlt,
+    borderColor: colors.success,
     borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
   },
-  recruitHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  shieldTxt: { color: colors.success, fontSize: 11, fontWeight: "700" },
+  bellBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: alpha(colors.bg, "aa"),
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: "center",
-    marginBottom: 8,
+    justifyContent: "center",
   },
-  recruitUnit: { color: colors.text, fontSize: 14, fontWeight: "600" },
-  recruitCount: { color: colors.muted, fontSize: 13 },
-  progressBarBg: {
-    height: 6,
-    backgroundColor: colors.card,
-    borderRadius: 3,
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: colors.accent,
-    borderRadius: 3,
-  },
-  recruitFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  bellIcon: { fontSize: 16 },
+  bellDot: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: colors.danger,
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
     alignItems: "center",
+    justifyContent: "center",
   },
-  recruitTime: { color: colors.muted, fontSize: 12 },
-  collectButton: {
-    backgroundColor: colors.success,
+  bellDotTxt: { color: colors.white, fontSize: 10, fontWeight: "800" },
+  heroScrim: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: alpha(colors.bg, "cc"),
     paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingVertical: 9,
   },
-  collectText: { color: colors.white, fontSize: 13, fontWeight: "600" },
-  explorationActive: {
-    backgroundColor: colors.cardAlt,
+  heroTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: "800",
+    textShadowColor: colors.black,
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  heroSub: { color: colors.textDim, fontSize: 12, marginTop: 2, textTransform: "capitalize" },
+
+  /* resource strip */
+  resourceStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingVertical: 8,
+    paddingRight: 10,
+  },
+  resItem: { flex: 1, alignItems: "center" },
+  resValue: { fontSize: 14, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  resHint: { color: colors.muted, fontSize: 9, marginTop: 1 },
+  resDivider: { width: 1, height: 22, backgroundColor: colors.border },
+  reportBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderLeftWidth: 1,
+    borderLeftColor: colors.border,
+    justifyContent: "center",
+  },
+  reportBtnTxt: { fontSize: 16 },
+
+  /* vitals */
+  vitalsRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    alignItems: "stretch",
+  },
+  moraleBox: {
+    flex: 1,
+    backgroundColor: colors.card,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    justifyContent: "center",
+  },
+  moraleTop: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
+  vitalLabel: { color: colors.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  moraleVal: { fontSize: 12, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  spellChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: alpha(colors.accent, "66"),
+    paddingHorizontal: 12,
+  },
+  spellChipIcon: { fontSize: 14 },
+  spellChipTxt: { color: colors.accent, fontSize: 16, fontWeight: "800" },
+  spellChipLabel: { color: colors.muted, fontSize: 10 },
+
+  /* activity zone */
+  sectionLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginHorizontal: 14,
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  activityList: { paddingHorizontal: 12 },
+  activityCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: 12,
     marginBottom: 8,
   },
-  explorationActiveHeader: {
+  activityHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  activityTitle: { color: colors.text, fontSize: 13, fontWeight: "700", flex: 1 },
+  activityCount: { color: colors.muted, fontSize: 12, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  activityFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  activityMeta: { color: colors.muted, fontSize: 11, marginTop: 4 },
+  smallBtn: {
+    backgroundColor: colors.success,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  smallBtnTxt: { color: colors.white, fontSize: 12, fontWeight: "700" },
+  trailRow: { flexDirection: "row", alignItems: "center", gap: 6, marginVertical: 10 },
+  trailEnd: { fontSize: 14 },
+  trailMarker: { position: "absolute", top: -11, fontSize: 13, marginLeft: -7 },
+
+  /* idle CTAs */
+  ctaCard: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
     marginBottom: 8,
   },
-  explorationBadge: {
-    backgroundColor: alpha(colors.info, "22"),
+  ctaIcon: { fontSize: 24, marginRight: 12 },
+  ctaTitle: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  ctaSub: { color: colors.muted, fontSize: 11, marginTop: 2 },
+  ctaArrow: { color: colors.accent, fontSize: 22, fontWeight: "700" },
+
+  /* kingdom report sheet */
+  sheetOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
+  sheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     borderWidth: 1,
-    borderColor: colors.info,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    borderColor: colors.border,
+    padding: 16,
+    paddingBottom: 26,
   },
-  explorationBadgeText: { color: colors.info, fontSize: 10, fontWeight: "bold" },
-  explorationCountdown: { color: colors.text, fontSize: 18, fontWeight: "bold" },
-  explorationDetails: {
-    flexDirection: "row",
-    justifyContent: "space-around",
+  sheetGrip: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
     marginBottom: 10,
   },
-  explorationDetailText: { color: colors.muted, fontSize: 13 },
-  explorationViewBtn: {
-    backgroundColor: alpha(colors.info, "22"),
-    borderWidth: 1,
-    borderColor: colors.info,
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: "center",
+  sheetTitle: { color: colors.gold, fontSize: 17, fontWeight: "800", textAlign: "center", marginBottom: 6 },
+  reportSection: {
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginTop: 12,
+    marginBottom: 4,
   },
-  explorationViewBtnText: { color: colors.info, fontSize: 14, fontWeight: "600" },
-  explorationCompleted: {
-    backgroundColor: alpha(colors.success, "15"),
-    borderWidth: 1,
-    borderColor: alpha(colors.success, "44"),
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
+  reportRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: alpha(colors.border, "77"),
   },
-  explorationCompletedHeader: { marginBottom: 4 },
-  explorationCompletedTitle: { color: colors.success, fontSize: 14, fontWeight: "bold" },
-  explorationRewards: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
-  explorationRewardText: { color: colors.textDim, fontSize: 12 },
-  explorationClaimBtn: {
-    backgroundColor: colors.success,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginLeft: 10,
-  },
-  explorationClaimText: { color: colors.white, fontSize: 14, fontWeight: "bold" },
+  reportLabel: { color: colors.muted, fontSize: 13 },
+  reportValue: { fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  sheetClose: { alignItems: "center", paddingVertical: 12, marginTop: 8 },
+  sheetCloseTxt: { color: colors.muted, fontSize: 14 },
 });

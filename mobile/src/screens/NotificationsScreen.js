@@ -68,6 +68,7 @@ export default function NotificationsScreen({ navigation }) {
           result: {
             outcome: battle.winner,
             land_seized: battle.land_seized || 0,
+            verdict: battle.verdict,
             log: battle.log || [],
             attacker_army: normalizeArmy(battle.attacker_army),
             defender_army: normalizeArmy(battle.defender_army),
