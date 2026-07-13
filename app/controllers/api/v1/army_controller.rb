@@ -155,6 +155,7 @@ module Api
           mana_upkeep: uu.unit.respond_to?(:mana_upkeep) ? uu.unit.mana_upkeep : 0,
           element: uu.unit.element,
           abilities: uu.unit.abilities,
+          recruitable: uu.unit.recruitable,
           hero: uu.assigned_hero ? { id: uu.assigned_hero.id, name: uu.assigned_hero.name } : nil
         }
       end

@@ -22,6 +22,10 @@ module Battle
       'void' => 'holy'
     }.freeze
 
+    # Home-field advantage: the attacker must destroy this much more power
+    # than they lose for the raid to count as a victory.
+    DEFENDER_BONUS = 1.25
+
     def initialize(attacker:, defender:)
       @log = []
       @turn = 0
@@ -42,6 +46,7 @@ module Battle
       
       winner = nil
       reason = nil
+      decided_by = nil
 
       # Battle Loop (Max 10 Rounds)
       10.times do |i|
@@ -96,6 +101,7 @@ module Battle
            if rand < 0.5 # 50% chance to rout (increased from 30%)
              winner = :defender
              reason = "Attacker retreated in panic!"
+             decided_by = "rout"
              break
            else
              @log << "[ATK] ⚠ Morale is wavering!"
@@ -106,6 +112,7 @@ module Battle
            if rand < 0.5
              winner = :attacker
              reason = "Defender retreated in panic!"
+             decided_by = "rout"
              break
            else
              @log << "[DEF] ⚠ Morale is wavering!"
@@ -113,15 +120,59 @@ module Battle
         end
       end
 
-      winner ||= :defender # Defender wins purely by surviving (Time Limit)
-      reason ||= "Time Limit Reached."
+      # ── Verdict: who bled more? ─────────────────────────────────────
+      # Power lost = starting power minus what marched home. The attacker
+      # only wins if they destroyed more than DEFENDER_BONUS × their own
+      # losses — the defender holds the field on anything close.
+      atk_start = @attacker_army.initial_power
+      def_start = @defender_army.initial_power
+      atk_lost = [atk_start - @attacker_army.current_power, 0].max
+      def_lost = [def_start - @defender_army.current_power, 0].max
+      attacker_score = def_lost
+      defender_score = (atk_lost * DEFENDER_BONUS).round
+
+      decided_by ||= winner ? (reason.to_s.include?("annihilated") ? "annihilation" : "mutual") : nil
+
+      if winner.nil?
+        decided_by = "power"
+        if attacker_score > defender_score
+          winner = :attacker
+          reason = "The defense was broken — the raiders destroyed more than they lost."
+        else
+          winner = :defender
+          reason = "The defense held — the raiders' losses outweighed the damage they dealt."
+        end
+      end
+
+      verdict = {
+        attacker: {
+          power_start: atk_start,
+          power_end: @attacker_army.current_power,
+          power_lost: atk_lost,
+          lost_pct: atk_start > 0 ? ((atk_lost.to_f / atk_start) * 100).round : 0
+        },
+        defender: {
+          power_start: def_start,
+          power_end: @defender_army.current_power,
+          power_lost: def_lost,
+          lost_pct: def_start > 0 ? ((def_lost.to_f / def_start) * 100).round : 0
+        },
+        defender_bonus: DEFENDER_BONUS,
+        attacker_score: attacker_score,
+        defender_score: defender_score,
+        decided_by: decided_by
+      }
 
       @log << "\n=== BATTLE END ==="
+      @log << "[ATK] Power: #{atk_start} → #{@attacker_army.current_power} (lost #{atk_lost}, #{verdict[:attacker][:lost_pct]}%)"
+      @log << "[DEF] Power: #{def_start} → #{@defender_army.current_power} (lost #{def_lost}, #{verdict[:defender][:lost_pct]}%)"
+      @log << "Attack score #{attacker_score} vs Defense score #{defender_score} (#{atk_lost} × #{DEFENDER_BONUS} defender bonus)"
       @log << "Winner: #{winner.to_s.upcase} (#{reason})"
-      
+
       OpenStruct.new(
         winner: winner,
         log: @log,
+        verdict: verdict,
         attacker_army: @attacker_army,
         defender_army: @defender_army,
         attacker_remaining: @attacker_army.total_quantity,

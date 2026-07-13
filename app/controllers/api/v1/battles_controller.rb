@@ -2,29 +2,19 @@ module Api
   module V1
     class BattlesController < BaseController
       def index
-        last_scouted = current_user.last_scouted_at
-        if last_scouted.nil? || last_scouted < 10.minutes.ago
-          Battle::ScoutingService.new(current_user).call
-          current_user.reload
-        end
+        targeting = Battle::TargetingService.new(current_user)
 
         render json: {
-          targets: current_user.scouted_targets || [],
-          can_refresh: current_user.last_scouted_at.present? && current_user.last_scouted_at < 5.minutes.ago,
-          last_scouted_at: current_user.last_scouted_at
+          my_power: current_user.net_power,
+          my_rank: targeting.my_rank,
+          range: targeting.range,
+          targets: targeting.targets
         }
       end
 
-      def scout
-        Battle::ScoutingService.new(current_user).call
-        current_user.reload
-
-        render json: {
-          targets: current_user.scouted_targets || [],
-          can_refresh: false,
-          last_scouted_at: current_user.last_scouted_at,
-          message: "Scouting report updated"
-        }
+      def search
+        targeting = Battle::TargetingService.new(current_user)
+        render json: { results: targeting.search(params[:q]) }
       end
 
       def setup
@@ -37,6 +27,11 @@ module Api
 
         if target.under_protection?
           render json: { error: "Target is under magical protection" }, status: :unprocessable_entity
+          return
+        end
+
+        unless Battle::TargetingService.in_range?(current_user, target)
+          render json: { error: "Target is outside your attack range" }, status: :unprocessable_entity
           return
         end
 
@@ -95,6 +90,7 @@ module Api
         {
           outcome: result.winner.to_s,
           land_seized: result.land_seized || 0,
+          verdict: result.verdict,
           attacker_army: serialize_army_summary(result.attacker_army),
           defender_army: serialize_army_summary(result.defender_army),
           log: result.log || []

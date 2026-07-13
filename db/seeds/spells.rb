@@ -412,4 +412,81 @@ upsert_spell(
   configuration: { stat_target: "army_attack", base_magnitude: 14, duration: 7200 }
 )
 
+# ═══════════════════════════════════════════════════════════════════
+# SECOND WAVE OF SUMMONS — a swarm option and an apex creature per school
+# (invest more mana at cast time to summon proportionally more)
+# ═══════════════════════════════════════════════════════════════════
+
+upsert_spell(
+  name: "Summon Ember Imps",
+  description: "Sparks a mischief of living cinders. Cheap, fast, and eager to burn.",
+  rank: 1, affinity: "pyromancer", mana_cost: 40, research_cost: 200,
+  spell_type: "summon",
+  configuration: { unit_slug: "ember_imp", quantity: 3 }
+)
+
+upsert_spell(
+  name: "Summon Magma Behemoth",
+  description: "Calls a mountain of molten rock up from the deep. The earth groans under it.",
+  rank: 6, affinity: "pyromancer", mana_cost: 260, research_cost: 4800,
+  spell_type: "summon",
+  configuration: { unit_slug: "magma_behemoth", quantity: 1 }
+)
+
+upsert_spell(
+  name: "Summon Tide Serpent",
+  description: "Coils a serpent of storm-water into being — swift, slippery, spiteful.",
+  rank: 2, affinity: "tempest", mana_cost: 90, research_cost: 800,
+  spell_type: "summon",
+  configuration: { unit_slug: "tide_serpent", quantity: 1 }
+)
+
+upsert_spell(
+  name: "Summon Storm Titan",
+  description: "Binds a walking thunderhead to your banner. Lightning follows it to war.",
+  rank: 6, affinity: "tempest", mana_cost: 250, research_cost: 4500,
+  spell_type: "summon",
+  configuration: { unit_slug: "storm_titan", quantity: 1 }
+)
+
+upsert_spell(
+  name: "Summon Thorn Sprites",
+  description: "Wakes a handful of bramble spirits armed with needle and spite.",
+  rank: 1, affinity: "geomancer", mana_cost: 35, research_cost: 150,
+  spell_type: "summon",
+  configuration: { unit_slug: "thorn_sprite", quantity: 3 }
+)
+
+upsert_spell(
+  name: "Summon Mountain Wyrm",
+  description: "Wakes the serpent sleeping under the range. It rises hungry.",
+  rank: 6, affinity: "geomancer", mana_cost: 270, research_cost: 4800,
+  spell_type: "summon",
+  configuration: { unit_slug: "mountain_wyrm", quantity: 1 }
+)
+
+upsert_spell(
+  name: "Summon Dream Wisps",
+  description: "Loosens a few flickers of borrowed thought into the waking world.",
+  rank: 1, affinity: "mindweaver", mana_cost: 35, research_cost: 150,
+  spell_type: "summon",
+  configuration: { unit_slug: "dream_wisp", quantity: 3 }
+)
+
+upsert_spell(
+  name: "Summon Thought Tyrant",
+  description: "Gives a vast and terrible intellect a body. Its scream rends formations.",
+  rank: 6, affinity: "mindweaver", mana_cost: 250, research_cost: 4500,
+  spell_type: "summon",
+  configuration: { unit_slug: "thought_tyrant", quantity: 1 }
+)
+
+upsert_spell(
+  name: "Summon Bone Dragon",
+  description: "Knits a dragon's bones together with pure hatred. It remembers how to fly.",
+  rank: 6, affinity: "voidwalker", mana_cost: 280, research_cost: 5000,
+  spell_type: "summon",
+  configuration: { unit_slug: "bone_dragon", quantity: 1 }
+)
+
 puts "Spells seeded: #{Spell.count}"

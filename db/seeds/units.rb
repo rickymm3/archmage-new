@@ -295,6 +295,116 @@
     unit_type: "infantry", element: "holy",
     abilities: {},
     recruitable: false
+  },
+
+  # ── Second wave of summons (small swarm + apex per affinity) ────
+  # Pyromancer
+  {
+    slug: "ember_imp",
+    name: "Ember Imp",
+    description: "A cackling mote of living fire. Weak alone, vicious in swarms.",
+    requirements: {},
+    upkeep_cost: 0, mana_upkeep: 1, power: 5,
+    attack: 7, defense: 2, speed: 12,
+    unit_type: "magic", element: "fire",
+    abilities: { "splash_damage" => 0.15 },
+    recruitable: false
+  },
+  {
+    slug: "magma_behemoth",
+    name: "Magma Behemoth",
+    description: "A mountain of molten rock that shrugs off blades and melts ranks whole.",
+    requirements: {},
+    upkeep_cost: 0, mana_upkeep: 12, power: 40,
+    attack: 45, defense: 40, speed: 4,
+    unit_type: "infantry", element: "fire",
+    abilities: { "taunt" => true, "splash_damage" => 0.3 },
+    recruitable: false
+  },
+
+  # Tempest
+  {
+    slug: "tide_serpent",
+    name: "Tide Serpent",
+    description: "A coiling ribbon of storm-water that strikes and slips away.",
+    requirements: {},
+    upkeep_cost: 0, mana_upkeep: 4, power: 14,
+    attack: 18, defense: 10, speed: 16,
+    unit_type: "magic", element: "water",
+    abilities: { "dodge" => 0.2 },
+    recruitable: false
+  },
+  {
+    slug: "storm_titan",
+    name: "Storm Titan",
+    description: "A walking thunderhead. Lightning arcs from its fists across the field.",
+    requirements: {},
+    upkeep_cost: 0, mana_upkeep: 11, power: 38,
+    attack: 42, defense: 30, speed: 18,
+    unit_type: "magic", element: "water",
+    abilities: { "splash_damage" => 0.4 },
+    recruitable: false
+  },
+
+  # Geomancer
+  {
+    slug: "thorn_sprite",
+    name: "Thorn Sprite",
+    description: "A bramble spirit no taller than a boot, armed with needle and spite.",
+    requirements: {},
+    upkeep_cost: 0, mana_upkeep: 1, power: 4,
+    attack: 5, defense: 3, speed: 10,
+    unit_type: "magic", element: "nature",
+    abilities: {},
+    recruitable: false
+  },
+  {
+    slug: "mountain_wyrm",
+    name: "Mountain Wyrm",
+    description: "An ancient stone-scaled serpent that sleeps beneath ranges and wakes hungry.",
+    requirements: {},
+    upkeep_cost: 0, mana_upkeep: 12, power: 42,
+    attack: 38, defense: 48, speed: 6,
+    unit_type: "infantry", element: "nature",
+    abilities: { "taunt" => true },
+    recruitable: false
+  },
+
+  # Mindweaver
+  {
+    slug: "dream_wisp",
+    name: "Dream Wisp",
+    description: "A flicker of borrowed thought. Hard to strike what may not exist.",
+    requirements: {},
+    upkeep_cost: 0, mana_upkeep: 1, power: 5,
+    attack: 6, defense: 3, speed: 18,
+    unit_type: "magic", element: "holy",
+    abilities: { "dodge" => 0.3 },
+    recruitable: false
+  },
+  {
+    slug: "thought_tyrant",
+    name: "Thought Tyrant",
+    description: "A vast intellect given form. Its psychic scream rends whole formations.",
+    requirements: {},
+    upkeep_cost: 0, mana_upkeep: 10, power: 36,
+    attack: 40, defense: 28, speed: 12,
+    unit_type: "magic", element: "holy",
+    abilities: { "splash_damage" => 0.35 },
+    recruitable: false
+  },
+
+  # Voidwalker (already fields ghoul/shade/wraith — gains its apex)
+  {
+    slug: "bone_dragon",
+    name: "Bone Dragon",
+    description: "A dragon's skeleton knit together by hate. Feeds on the lives it takes.",
+    requirements: {},
+    upkeep_cost: 0, mana_upkeep: 13, power: 45,
+    attack: 55, defense: 35, speed: 14,
+    unit_type: "flying", element: "void",
+    abilities: { "life_leech" => 0.25 },
+    recruitable: false
   }
 ].each do |unit_data|
   unit = Unit.find_or_initialize_by(slug: unit_data[:slug])

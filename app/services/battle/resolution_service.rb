@@ -14,6 +14,7 @@ module Battle
 
     def call
       return failed_attack("Target is under magical protection.") if @defender.under_protection?
+      return failed_attack("Target is outside your attack range.") unless Battle::TargetingService.in_range?(@attacker, @defender)
       return failed_attack("No units selected.") if @unit_allocations.empty? || @unit_allocations.values.sum <= 0
 
       # 1. Prepare Attacker Stacks
@@ -182,6 +183,7 @@ module Battle
         battle_data = {
           winner: result.winner,
           log: result.log,
+          verdict: result.verdict,
           attacker: { username: @attacker.username },
           defender: { username: @defender.username },
           attacker_army: serialize_army(result.attacker_army),
@@ -260,6 +262,7 @@ module Battle
            winner: result.winner,
            land_seized: land_seized,
            log: result.log,
+           verdict: result.verdict,
            attacker: @attacker,
            defender: @defender,
            attacker_army: result.attacker_army,

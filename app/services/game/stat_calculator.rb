@@ -24,7 +24,7 @@ module Game
 
     def active_spell_modifiers
       # Sum up the magnitude of all active spells targeting this stat
-      @user.active_spells
+      @user.active_spells.active
            .select { |s| s.metadata['stat_target'] == @stat }
            .sum { |s| s.metadata['magnitude'].to_f }
     end

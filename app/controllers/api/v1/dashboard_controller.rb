@@ -51,7 +51,7 @@ module Api
       end
 
       def serialize_active_spells(user)
-        user.active_spells.includes(:spell).map do |as|
+        user.active_spells.active.includes(:spell).map do |as|
           {
             id: as.id,
             spell_name: as.spell.name,

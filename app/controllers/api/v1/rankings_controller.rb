@@ -13,7 +13,7 @@ module Api
                            power: user.net_power,
                            land: user.land,
                            army_size: user.user_units.sum(&:quantity) + user.user_units.sum(&:garrison),
-                           has_fog: user.active_spells.any? { |as| as.spell.name == "Fog" }
+                           has_fog: user.active_spells.any? { |as| as.spell.name == "Fog" && as.expires_at > Time.current }
                          }
                        end
                        .sort_by { |r| -r[:power] }

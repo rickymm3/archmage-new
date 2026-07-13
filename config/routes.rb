@@ -119,7 +119,7 @@ Rails.application.routes.draw do
 
       # Battles
       get  "battles",            to: "battles#index"
-      post "battles/scout",      to: "battles#scout"
+      get  "battles/search",     to: "battles#search"
       get  "battles/:id/setup",  to: "battles#setup"
       post "battles",            to: "battles#create"
 

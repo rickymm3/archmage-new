@@ -299,7 +299,7 @@ class User < ApplicationRecord
     end
 
     # Active Buff Bonuses (Dynamic)
-    active_spells.includes(:spell).each do |active|
+    active_spells.active.includes(:spell).each do |active|
        meta = active.metadata || {}
        if meta['stat_target'] == 'mana_recovery' || meta['stat_target'] == 'mana_production'
           potential += meta['magnitude'].to_i
@@ -347,7 +347,7 @@ class User < ApplicationRecord
       end
     end
     # Active Buff Bonuses (Dynamic)
-    active_spells.includes(:spell).each do |active|
+    active_spells.active.includes(:spell).each do |active|
        meta = active.metadata || {}
        if meta['stat_target'] == 'mana_recovery' || meta['stat_target'] == 'mana_production'
           breakdown[:income] << { name: "#{active.spell.name} (Active)", amount: meta['magnitude'].to_i }

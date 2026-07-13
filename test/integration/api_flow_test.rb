@@ -105,6 +105,14 @@ class ApiFlowTest < ActionDispatch::IntegrationTest
     result = response.parsed_body["result"]
     assert_includes %w[attacker defender draw], result["outcome"]
 
+    # Verdict explains the outcome via power lost on each side
+    verdict = result["verdict"]
+    assert verdict.present?, "battle result should include a verdict"
+    assert verdict["attacker"]["power_start"].positive?
+    assert_operator verdict["attacker"]["power_end"], :<=, verdict["attacker"]["power_start"]
+    assert_equal 1.25, verdict["defender_bonus"]
+    assert_includes %w[power annihilation rout mutual], verdict["decided_by"]
+
     hero_stack = result["attacker_army"]["stacks"].find { |s| s["hero"].present? }
     assert hero_stack, "hero should be attached to a stack"
     assert_equal "General Kael", hero_stack["hero"]["name"]
@@ -124,10 +132,12 @@ class ApiFlowTest < ActionDispatch::IntegrationTest
     ds.update!(level: 5, quantity: 1, burning: false, damage_info: nil)
     defender.user_units.destroy_all
 
+    # 200 militia keeps the attacker's power inside the 0.4x-2.5x strike
+    # range of the (armyless) defender while still winning decisively.
     militia = units(:one)
-    attacker.user_units.create!(unit: militia, quantity: 500, garrison: 0, exploring: 0)
+    attacker.user_units.create!(unit: militia, quantity: 200, garrison: 0, exploring: 0)
 
-    api_post "/battles", { target_id: defender.id, units: { militia.id.to_s => 500 } }
+    api_post "/battles", { target_id: defender.id, units: { militia.id.to_s => 200 } }
     assert_response :success
     assert_equal "attacker", response.parsed_body.dig("result", "outcome")
 
@@ -159,6 +169,80 @@ class ApiFlowTest < ActionDispatch::IntegrationTest
 
     api_post "/town/extinguish", { structure_id: barracks.id }
     assert_response :unprocessable_entity
+  end
+
+  test "attacks outside the power range are rejected" do
+    register!
+    attacker = User.find_by!(username: "TestMage")
+    defender = users(:two)
+    defender.update!(protection_expires_at: nil)
+    defender.user_units.destroy_all
+
+    # A massive army pushes the attacker far beyond 2.5x the defender's power.
+    militia = units(:one)
+    attacker.user_units.create!(unit: militia, quantity: 5000, garrison: 0, exploring: 0)
+
+    api_post "/battles", { target_id: defender.id, units: { militia.id.to_s => 5000 } }
+    assert_response :unprocessable_entity
+    assert_match(/outside your attack range/i, response.parsed_body["error"])
+
+    # Targeting index reflects the same rule
+    api_get "/battles"
+    assert_response :success
+    body = response.parsed_body
+    assert body["range"]["min"].positive?
+    refute body["targets"].any? { |t| t["id"] == defender.id },
+      "out-of-range defender should not appear in the target list"
+
+    # Manual search still finds them, marked unattackable with a reason
+    api_get "/battles/search?q=#{defender.username}"
+    assert_response :success
+    hit = response.parsed_body["results"].find { |r| r["id"] == defender.id }
+    assert hit, "search should find the kingdom by name"
+    assert_equal false, hit["in_range"]
+    assert_match(/too weak/i, hit["reason"])
+  end
+
+  test "active spells expire everywhere: lists, rankings fog, mana math" do
+    register!
+    user = User.find_by!(username: "TestMage")
+
+    fog = Spell.create!(
+      name: "Fog", description: "test fog", rank: 2, affinity: "tempest",
+      mana_cost: 60, research_cost: 500, spell_type: "self",
+      configuration: { stat_target: "army_size_hidden", base_magnitude: 1, duration: 14400 }
+    )
+    active = user.active_spells.create!(
+      spell: fog, expires_at: 1.hour.from_now, stack_count: 1,
+      metadata: { "stat_target" => "mana_recovery", "magnitude" => 50 }
+    )
+
+    # While live: visible in the list and fogging the rankings
+    api_get "/active_spells"
+    assert_equal 1, response.parsed_body["active_spells"].length
+
+    api_get "/rankings"
+    me = response.parsed_body["rankings"].find { |r| r["id"] == user.id }
+    assert me["has_fog"], "fog should hide the caster while the spell is live"
+
+    boosted_potential = user.reload.mana_generation_potential
+
+    # Expire it — everything must let go
+    active.update!(expires_at: 1.minute.ago)
+
+    api_get "/rankings"
+    me = response.parsed_body["rankings"].find { |r| r["id"] == user.id }
+    refute me["has_fog"], "fog must lift once the spell expires"
+
+    assert_operator user.reload.mana_generation_potential, :<, boosted_potential,
+      "expired buffs must stop boosting mana generation"
+
+    api_get "/active_spells"
+    assert_equal 0, response.parsed_body["active_spells"].length, "expired spells must not be listed"
+    assert_equal 0, user.reload.active_spells.count, "reading the list should sweep expired rows"
+
+    api_get "/dashboard"
+    assert_equal 0, response.parsed_body["active_spells"].length
   end
 
   test "treasury tax collects gold on valid tier and rejects bad tier" do

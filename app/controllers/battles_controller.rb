@@ -1,20 +1,13 @@
 class BattlesController < ApplicationController
   
   def index
-    # Ensure scouting data exists, refresh if stale (10 mins)
-    last_scouted = current_user.last_scouted_at
-    if last_scouted.nil? || last_scouted < 10.minutes.ago
-       Battle::ScoutingService.new(current_user).call
-       current_user.reload
-    end
-    
-    @targets = current_user.scouted_targets || []
-    @can_refresh = current_user.last_scouted_at < 5.minutes.ago
+    targeting = Battle::TargetingService.new(current_user)
+    @targets = targeting.targets
+    @range = targeting.range
   end
-  
+
   def scout
-    Battle::ScoutingService.new(current_user).call # Forces refresh
-    redirect_to battles_path, notice: "Scouting report updated."
+    redirect_to battles_path, notice: "Targets are always live now."
   end
   
   def new

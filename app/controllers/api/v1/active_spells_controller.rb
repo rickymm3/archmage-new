@@ -2,7 +2,9 @@ module Api
   module V1
     class ActiveSpellsController < BaseController
       def index
-        active_spells = current_user.active_spells.includes(:spell)
+        # Lazy cleanup: expired enchantments dissolve when the list is read
+        current_user.active_spells.where("expires_at <= ?", Time.current).destroy_all
+        active_spells = current_user.active_spells.active.includes(:spell)
         sustained_spells = current_user.user_spells.where(active: true).includes(:spell)
 
         render json: {
