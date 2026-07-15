@@ -1,6 +1,8 @@
 module Api
   module V1
     class BattlesController < BaseController
+      include BattleResultSerializable
+
       def index
         targeting = Battle::TargetingService.new(current_user)
 
@@ -83,40 +85,6 @@ module Api
           attack: uu.unit.attack,
           defense: uu.unit.defense,
           speed: uu.unit.speed
-        }
-      end
-
-      def serialize_battle_result(result)
-        {
-          outcome: result.winner.to_s,
-          land_seized: result.land_seized || 0,
-          verdict: result.verdict,
-          attacker_army: serialize_army_summary(result.attacker_army),
-          defender_army: serialize_army_summary(result.defender_army),
-          log: result.log || []
-        }
-      end
-
-      def serialize_army_summary(army)
-        return nil unless army
-        {
-          name: army.name,
-          stacks: army.stacks.map do |s|
-            {
-              name: s.name,
-              unit_id: s.unit_id,
-              unit_type: s.unit_type,
-              element: s.element,
-              attack: s.attack,
-              defense: s.defense,
-              speed: s.speed,
-              initial: s.initial_quantity,
-              remaining: s.quantity,
-              lost: s.initial_quantity - s.quantity,
-              hero: s.hero,
-              hero_alive: s.hero ? (s.hero_hp || 0) > 0 : nil
-            }
-          end
         }
       end
     end

@@ -1,8 +1,8 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { Text } from "react-native";
 
+import CustomTabBar from "./CustomTabBar";
 import HomeScreen from "../screens/HomeScreen";
 import KingdomScreen from "../screens/KingdomScreen";
 import ArmyScreen from "../screens/ArmyScreen";
@@ -11,7 +11,9 @@ import SpellsScreen from "../screens/SpellsScreen";
 
 // Root-stack pushes (flows and detail views)
 import AttackSetupScreen from "../screens/AttackSetupScreen";
+import BarbarianAttackSetupScreen from "../screens/BarbarianAttackSetupScreen";
 import BattleResultScreen from "../screens/BattleResultScreen";
+import BattleReplayScreen from "../screens/BattleReplayScreen";
 import NotificationsScreen from "../screens/NotificationsScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 // EXPERIMENTAL: pannable map home — remove with screens/KingdomMapScreen.js
@@ -28,31 +30,11 @@ const screenOptions = {
   headerTitleStyle: { fontWeight: "bold" },
 };
 
-function TabIcon({ label, focused }) {
-  const icons = {
-    Home: "🏠",
-    Kingdom: "👑",
-    Army: "⚔️",
-    War: "🔥",
-    Magic: "✨",
-  };
-  return (
-    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>
-      {icons[label] || "•"}
-    </Text>
-  );
-}
-
 function MainTabs() {
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        ...screenOptions,
-        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border },
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarIcon: ({ focused }) => <TabIcon label={route.name} focused={focused} />,
-      })}
+      screenOptions={screenOptions}
+      tabBar={(props) => <CustomTabBar {...props} />}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Kingdom" component={KingdomScreen} />
@@ -73,9 +55,19 @@ export default function MainNavigator() {
         options={{ ...screenOptions, headerShown: true, title: "Attack Setup" }}
       />
       <RootStack.Screen
+        name="BarbarianAttackSetup"
+        component={BarbarianAttackSetupScreen}
+        options={{ ...screenOptions, headerShown: true, title: "Attack Settlement" }}
+      />
+      <RootStack.Screen
         name="BattleResult"
         component={BattleResultScreen}
         options={{ ...screenOptions, headerShown: true, title: "Battle Result", headerLeft: () => null }}
+      />
+      <RootStack.Screen
+        name="BattleReplay"
+        component={BattleReplayScreen}
+        options={{ ...screenOptions, headerShown: true, title: "Battle Replay" }}
       />
       <RootStack.Screen
         name="Notifications"

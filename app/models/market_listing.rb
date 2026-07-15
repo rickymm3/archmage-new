@@ -14,9 +14,11 @@ class MarketListing < ApplicationRecord
     .where("units.unit_type = ?", 'hero') 
   }
   
-  scope :regular, -> { 
-    where.not(id: heroes.select(:id))
+  scope :regular, -> {
+    where.not(id: heroes.select(:id)).where.not(item_type: 'Item')
   }
+
+  scope :items, -> { where(item_type: 'Item') }
   
   validates :current_price, numericality: { greater_than_or_equal_to: 0 }
   validates :quantity, numericality: { greater_than: 0 }
@@ -103,6 +105,9 @@ class MarketListing < ApplicationRecord
         else
           user.user_spells.create!(spell: item, learned: true)
         end
+      when 'Item'
+        user_item = user.user_items.find_or_create_by(item: item)
+        user_item.increment!(:quantity, quantity)
       end
       
       update!(status: :collected)

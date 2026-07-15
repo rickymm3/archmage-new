@@ -19,12 +19,12 @@ module Spells
       
       # Ensure minimum cast amount
       if @amount < spell.mana_cost
-        @result[:error] = "Not enough mana. Minimum investment is #{spell.mana_cost}."
+        @result[:error] = "Not enough #{resource_name}. Minimum investment is #{spell.mana_cost}."
         return false
       end
-      
-      unless user.mana >= @amount
-         @result[:error] = "Not enough mana available. You have #{user.mana}, need #{@amount}."
+
+      unless resource_available?(@amount)
+         @result[:error] = "Not enough #{resource_name} available. You have #{current_resource_amount}, need #{@amount}."
          return false
       end
 
@@ -48,7 +48,31 @@ module Spells
     end
 
     private
-    
+
+    # Most spells cost mana to cast, but a spell can set cost_resource: "gold"
+    # to instead draw its cost straight from the treasury (e.g. Meditation,
+    # which trades gold for a mana-production boost so it doesn't eat into
+    # the very mana pool it's meant to grow).
+    def resource_name
+      spell.cost_resource == 'gold' ? 'gold' : 'mana'
+    end
+
+    def current_resource_amount
+      spell.cost_resource == 'gold' ? user.gold : user.mana
+    end
+
+    def resource_available?(amount)
+      current_resource_amount >= amount
+    end
+
+    def deduct_cost!(amount)
+      if spell.cost_resource == 'gold'
+        user.decrement!(:gold, amount)
+      else
+        user.decrement!(:mana, amount)
+      end
+    end
+
     # Configuration Helper
     def spell_config
       # Default fallbacks if DB configuration is missing
@@ -113,7 +137,7 @@ module Spells
 
       # Use a transaction for data integrity
       user.transaction do
-        user.decrement!(:mana, @amount)
+        deduct_cost!(@amount)
         
         # Create or Update ActiveSpell
         active = user.active_spells.find_or_initialize_by(spell: spell)
@@ -143,7 +167,7 @@ module Spells
       expires_at = Time.current + duration
 
       user.transaction do
-        user.decrement!(:mana, @amount)
+        deduct_cost!(@amount)
         
         active = user.active_spells.find_or_initialize_by(spell: spell)
         active.expires_at = expires_at
@@ -167,7 +191,7 @@ module Spells
       expires_at = Time.current + duration
 
       user.transaction do
-        user.decrement!(:mana, @amount)
+        deduct_cost!(@amount)
         
         active = user.active_spells.find_or_initialize_by(spell: spell)
         active.expires_at = expires_at
@@ -202,7 +226,7 @@ module Spells
       end
 
       user.transaction do
-        user.decrement!(:mana, @amount)
+        deduct_cost!(@amount)
         
         if effect[:value].nil?
             # Legacy Logic

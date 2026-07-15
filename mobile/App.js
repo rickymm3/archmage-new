@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { ModalProvider, useModal } from "./src/context/ModalContext";
 import AuthStack from "./src/navigation/AuthStack";
 import MainTabs from "./src/navigation/MainTabs";
+import DeviceFrame from "./src/components/DeviceFrame";
 import { ActivityIndicator, View, Platform } from "react-native";
 import { useEffect, useRef } from "react";
 import * as api from "./src/services/api";
@@ -72,13 +73,15 @@ function Root() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ModalProvider>
-        <NavigationContainer theme={navTheme}>
-          <StatusBar style="light" />
-          <Root />
-        </NavigationContainer>
-      </ModalProvider>
-    </AuthProvider>
+    <DeviceFrame>
+      <AuthProvider>
+        <ModalProvider>
+          <NavigationContainer theme={navTheme}>
+            <StatusBar style="light" />
+            <Root />
+          </NavigationContainer>
+        </ModalProvider>
+      </AuthProvider>
+    </DeviceFrame>
   );
 }

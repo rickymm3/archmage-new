@@ -19,15 +19,58 @@ export function sceneImage(key) {
 
 export const ui = {
   logo: require("../assets/ui/logo.png"),
+  // Kingdom map background (KingdomMapScreen). Currently a daytime green
+  // clearing — mismatched against the twilight purple/gold theme used
+  // everywhere else (kingdom_banner.png, expedition_map.png). No code
+  // change needed to replace it: overwrite this same file with new art.
   townPanorama: require("../assets/ui/town_panorama.png"),
+  // Fixed kingdom map scene with all 6 buildings painted directly into the
+  // art (replaces the old townPanorama + separate structure-icon overlay
+  // approach). 941x1672 native.
+  kingdomBackground: require("../assets/ui/kingdom-background.png"),
   kingdomBanner: require("../assets/ui/kingdom_banner.png"),
   avatarDefault: require("../assets/ui/avatar_default.png"),
   bannerVictory: require("../assets/ui/banner_victory.png"),
   bannerDefeat: require("../assets/ui/banner_defeat.png"),
   expeditionMap: require("../assets/ui/expedition_map.png"),
+
+  // Kingdom map HUD chrome
+  collectTaxesBtn: require("../assets/ui/collect-taxes.png"),
+  collectManaBtn: require("../assets/ui/collect-mana.png"),
+  zoomBar: require("../assets/ui/zoom.png"),
+  coinIcon: require("../assets/ui/coin-icon.png"),
+  manaIcon: require("../assets/ui/mana-icon.png"),
+  diamondIcon: require("../assets/ui/diamond-icon.png"),
+  currencyTop: require("../assets/ui/currency-top.png"),
+
+  // Bottom tab bar background — one seamless pre-assembled bar (see
+  // navigation/CustomTabBar.js, which overlays 5 interactive tab zones on
+  // top). menu-bar-bg.png is menu-empty.png cropped to its actual visible
+  // content band (the source canvas has a lot of transparent vertical
+  // padding around the bar shape). menuLeft/Right/Middle/Spacing were an
+  // earlier attempt to piece the bar together from fragments — kept
+  // registered since they're valid assets, but each has its own
+  // independent shading, so stitching them side by side produced visible
+  // seams; not currently used anywhere.
+  menuBarBg: require("../assets/ui/menu-bar-bg.png"),
+  menuEmpty: require("../assets/ui/menu-empty.png"),
+  menuLeft: require("../assets/ui/menu-left.png"),
+  menuRight: require("../assets/ui/menu-right.png"),
+  menuMiddle: require("../assets/ui/menu-middle.png"),
+  menuSpacing: require("../assets/ui/menu-spacing.png"),
 };
 
 // Structures: three growth tiers each.
+//
+// TODO once art arrives — two KingdomMapScreen buildings have no real art
+// yet and fall back to an emoji glyph (🏆 / 🛒). Drop the files at these
+// exact paths, then add ONE line each to the STRUCTURES map below
+// (Metro requires a static, literal path, so the require() can't be added
+// until the file actually exists):
+//   mobile/assets/structures/hall_of_legends.png   hall_of_legends: [require("../assets/structures/hall_of_legends.png")],
+//   mobile/assets/structures/black_market.png       black_market: [require("../assets/structures/black_market.png")],
+// Then in screens/KingdomMapScreen.js's POIS array, swap
+// `emoji: "🏆"` / `emoji: "🛒"` for `img: () => structureImage("hall_of_legends")` / `img: () => structureImage("black_market")`.
 const STRUCTURES = {
   town_center: [require("../assets/structures/town_center_t1.png"), require("../assets/structures/town_center_t2.png"), require("../assets/structures/town_center_t3.png")],
   barracks:    [require("../assets/structures/barracks_t1.png"),    require("../assets/structures/barracks_t2.png"),    require("../assets/structures/barracks_t3.png")],

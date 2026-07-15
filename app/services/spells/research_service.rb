@@ -24,24 +24,20 @@ module Spells
       # Affinity check: allow all affinities but cap non-native at 8 spells
       is_native = @spell.affinity == 'general' || @spell.affinity == @user.color
       unless is_native
-        # Check if this spell is within the first 8 of its affinity
-        affinity_spells = Spell.where(affinity: @spell.affinity).order(:rank, :name).limit(8).pluck(:id)
-        unless affinity_spells.include?(@spell.id)
+        unless Spell.accessible_ids(@user, @spell.affinity).include?(@spell.id)
           @errors << "You can only research the first 8 spells of other affinities."
           return false
         end
       end
 
-      # Linear unlock: previous spell in same affinity must be learned
-      affinity_spells_ordered = Spell.where(affinity: @spell.affinity).order(:rank, :name).to_a
-      spell_index = affinity_spells_ordered.index { |s| s.id == @spell.id }
-      if spell_index && spell_index > 0
-        prev_spell = affinity_spells_ordered[spell_index - 1]
-        prev_learned = @user.user_spells.find_by(spell_id: prev_spell.id)&.learned?
-        unless prev_learned
-          @errors << "You must learn #{prev_spell.name} first."
-          return false
-        end
+      # Must be your currently rolled research target for this affinity —
+      # spells are no longer picked directly, only rolled (see
+      # Spells::RollTargetService). This is the enforcement point now that
+      # there's no UI path to pick an arbitrary spell.
+      target = Spells::RollTargetService.current_target_for(@user, @spell.affinity)
+      unless target && target.spell_id == @spell.id
+        @errors << "#{@spell.name} is not your current research target for this affinity. Roll one first."
+        return false
       end
 
       user_spell = @user.user_spells.find_or_initialize_by(spell: @spell)

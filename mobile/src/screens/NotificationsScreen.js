@@ -59,17 +59,23 @@ export default function NotificationsScreen({ navigation }) {
     try {
       const result = await api.getNotification(id);
       const n = result.notification;
-      const battle = n.category === "battle" ? n.data : null;
+      const isBattleLike = ["battle", "barbarian"].includes(n.category);
+      const battle = isBattleLike ? n.data : null;
 
       if (battle?.attacker_army?.stacks && battle?.defender_army?.stacks) {
         // Open the full battle report instead of a raw-text alert.
-        const viewer = battle.attacker?.username === user?.username ? "attacker" : "defender";
+        // Barbarian raids have no real "attacker" user object — the
+        // recipient is always the attacker in that flow (settlements never
+        // receive notifications), so category alone decides the viewer.
+        const viewer =
+          n.category === "barbarian" ? "attacker" : battle.attacker?.username === user?.username ? "attacker" : "defender";
         navigation.navigate("BattleResult", {
           result: {
             outcome: battle.winner,
             land_seized: battle.land_seized || 0,
             verdict: battle.verdict,
             log: battle.log || [],
+            events: battle.events || [],
             attacker_army: normalizeArmy(battle.attacker_army),
             defender_army: normalizeArmy(battle.defender_army),
           },

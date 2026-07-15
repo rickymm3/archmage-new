@@ -12,6 +12,7 @@ import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
 import { LoadingState, SubTabs, FadeSlideIn } from "../components/ui";
+import { formatCountdown } from "../utils/time";
 import { colors, alpha } from "../theme";
 
 const TABS = [
@@ -104,15 +105,6 @@ export default function TreasuryScreen({ fixedTab }) {
     if (hrs > 0 && mins > 0) return `${hrs}h ${mins}m cooldown`;
     if (hrs > 0) return `${hrs}h cooldown`;
     return `${mins}m cooldown`;
-  }
-
-  function formatCountdown(seconds) {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    if (hrs > 0) return `${hrs}h ${mins}m ${secs}s`;
-    if (mins > 0) return `${mins}m ${secs}s`;
-    return `${secs}s`;
   }
 
   const onCooldown = cooldownRemaining != null && cooldownRemaining > 0;

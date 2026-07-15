@@ -2,7 +2,7 @@ require 'ostruct'
 
 module Battle
   class CalculatorService
-    attr_reader :result, :log
+    attr_reader :result, :log, :events
 
     # Multipliers
     TYPE_ADVANTAGE = {
@@ -28,8 +28,11 @@ module Battle
 
     def initialize(attacker:, defender:)
       @log = []
+      @events = []
+      @seq = 0
+      @current_round = 0
       @turn = 0
-      
+
       # We just store the data, Army creation happens in call()
       @attacker_data = attacker
       @defender_data = defender
@@ -43,7 +46,12 @@ module Battle
 
       @log << "[ATK] #{@attacker_army.name} (Power: #{@attacker_army.current_power})"
       @log << "[DEF] #{@defender_army.name} (Power: #{@defender_army.current_power})"
-      
+
+      @events << event(
+        type: "battle_start", round: 0, text: @log.join("\n"),
+        attacker_name: @attacker_army.name, defender_name: @defender_army.name
+      )
+
       winner = nil
       reason = nil
       decided_by = nil
@@ -51,7 +59,9 @@ module Battle
       # Battle Loop (Max 10 Rounds)
       10.times do |i|
         round = i + 1
+        @current_round = round
         @log << "\n--- ROUND #{round} ---"
+        @events << event(type: "round_start", round: round, text: "--- ROUND #{round} ---")
 
         # 1. Initiative Phase
         # Combine all active stacks from both armies
@@ -80,6 +90,7 @@ module Battle
             execute_attack(stack, target)
           else
             @log << "#{stack.name} found no valid targets!"
+            @events << event(type: "no_target", source: stack_ref(stack), text: @log.last)
           end
         end
 
@@ -105,6 +116,7 @@ module Battle
              break
            else
              @log << "[ATK] ⚠ Morale is wavering!"
+             @events << event(type: "morale_warning", round: round, text: @log.last, side: "attacker")
            end
         end
 
@@ -116,6 +128,7 @@ module Battle
              break
            else
              @log << "[DEF] ⚠ Morale is wavering!"
+             @events << event(type: "morale_warning", round: round, text: @log.last, side: "defender")
            end
         end
       end
@@ -169,9 +182,15 @@ module Battle
       @log << "Attack score #{attacker_score} vs Defense score #{defender_score} (#{atk_lost} × #{DEFENDER_BONUS} defender bonus)"
       @log << "Winner: #{winner.to_s.upcase} (#{reason})"
 
+      @events << event(
+        type: "battle_end", round: @current_round, text: @log.last(5).join("\n"),
+        winner: winner, reason: reason, decided_by: decided_by
+      )
+
       OpenStruct.new(
         winner: winner,
         log: @log,
+        events: @events,
         verdict: verdict,
         attacker_army: @attacker_army,
         defender_army: @defender_army,
@@ -181,6 +200,15 @@ module Battle
     end
 
     private
+
+    def event(type:, text:, round: @current_round, **fields)
+      @seq += 1
+      { seq: @seq, round: round, type: type.to_s, text: text }.merge(fields)
+    end
+
+    def stack_ref(stack)
+      { side: stack.side.to_s, index: stack.army_ref.stacks.index(stack), name: stack.name }
+    end
 
     def select_target(source, enemy_army)
       # Priority 0: Taunt
@@ -227,6 +255,7 @@ module Battle
             evasion_chance = (source.speed - target.speed) * 0.02 # 2% dodge per speed point
             if rand < evasion_chance
                @log << "  -> #{side_tag} #{source.name} creates distance, avoiding retaliation!"
+               @events << event(type: "evasion", source: stack_ref(source), target: stack_ref(target), text: @log.last)
                return
             end
          end
@@ -240,13 +269,16 @@ module Battle
       # DMG = (Quantity * Attack) or (Hero Attack if Qty=0)
       raw_damage = 0
       kills = 0 # Initialize return value
-      
+      hero_strike_line = nil
+      source_is_hero_solo = attacker.quantity <= 0
+
       if attacker.quantity > 0
         raw_damage = (attacker.quantity * attacker.attack).to_f
       elsif attacker.hero && attacker.hero_hp > 0
         raw_damage = attacker.hero_attack.to_f * 2.5 # Hero deals 250% base dmg when solo
         hero_tag = attacker.side == :attacker ? "[ATK]" : "[DEF]"
-        @log << "  -> #{hero_tag} HERO STRIKE! #{attacker.hero[:name]} attacks alone!"
+        hero_strike_line = "  -> #{hero_tag} HERO STRIKE! #{attacker.hero[:name]} attacks alone!"
+        @log << hero_strike_line
       else
         return # Attacker is truly dead
       end
@@ -303,24 +335,36 @@ module Battle
       bonus_str = bonuses.any? ? "[#{bonuses.join('+')}]" : ""
       math_str = "#{attacker.quantity}×#{attacker.attack} ATK × #{('%.2f' % multiplier)} = #{final_damage} dmg"
       log_entry = "  -> #{att_tag} #{attacker.name} #{action_verb} #{def_tag} #{defender.name} #{bonus_str} (#{math_str})"
-      
+
+      target_qty_before = defender.quantity
+      target_hero_hp_before = defender.hero ? defender.hero_hp : nil
+
       if defender.quantity > 0
           # Standard Unit Damage
           # Effective HP = (Defense * 2) + 10
           unit_ehp = (defender.defense * 2) + 10
-          
+
           kills = (final_damage / unit_ehp).floor
           # Can't kill more than exist
           kills = [kills, defender.quantity].min
-          
+
           defender.quantity -= kills
           log_entry += " -> #{final_damage}/#{unit_ehp} EHP = #{kills} kills (#{defender.quantity} left)"
-          
-          if defender.quantity <= 0 && defender.hero && defender.hero_hp > 0
+
+          target_exposed = defender.quantity <= 0 && defender.hero && defender.hero_hp > 0
+          if target_exposed
              log_entry += " (UNIT WIPED OUT! HERO EXPOSED!)"
           end
-          
+
           @log << log_entry
+          @events << event(
+            type: "attack", source: stack_ref(attacker), target: stack_ref(defender),
+            is_retaliation: is_retaliation, source_is_hero_solo: source_is_hero_solo,
+            damage_phase: "unit", damage: final_damage, kills: kills, bonuses: bonuses,
+            target_quantity_before: target_qty_before, target_quantity_after: defender.quantity,
+            target_wiped: defender.quantity <= 0, target_hero_exposed: target_exposed,
+            text: [hero_strike_line, log_entry].compact.join("\n")
+          )
       elsif defender.hero && defender.hero_hp > 0
           # Hero Damage Phase
           # Hero Effective HP = Hero HP + (Defense * 5?)
@@ -334,10 +378,18 @@ module Battle
           actual_damage = (final_damage * (1.0 - reduction)).to_i
           
           defender.hero_hp -= actual_damage
-          
+
           status = defender.hero_hp > 0 ? "HP: #{defender.hero_hp}/#{defender.hero_max_hp}" : "FALLEN"
           log_entry = "  -> #{att_tag} #{attacker.name} strikes HERO #{defender.hero[:name]} directly! #{actual_damage} dmg (#{('%.0f' % (reduction * 100))}% armor) → #{status}"
           @log << log_entry
+          @events << event(
+            type: "attack", source: stack_ref(attacker), target: stack_ref(defender),
+            is_retaliation: is_retaliation, source_is_hero_solo: source_is_hero_solo,
+            damage_phase: "hero", damage: actual_damage, bonuses: bonuses,
+            target_hero_hp_before: target_hero_hp_before, target_hero_hp_after: defender.hero_hp,
+            target_hero_fallen: defender.hero_hp <= 0,
+            text: [hero_strike_line, log_entry].compact.join("\n")
+          )
       end
 
       # Abilities (Splash, Leech, etc.)
@@ -352,20 +404,36 @@ module Battle
                # Hit random neighbor
                neighbor = defender.army_ref.active_stacks.reject { |s| s == defender }.sample
                if neighbor
+                  neighbor_qty_before = neighbor.quantity
                   actual_splash = [secondary_kills, neighbor.quantity].min
                   neighbor.quantity -= actual_splash
-                  @log << "    -> SPLASH! #{actual_splash} #{neighbor.name} hit by blast."
+                  splash_line = "    -> SPLASH! #{actual_splash} #{neighbor.name} hit by blast."
+                  @log << splash_line
+                  @events << event(
+                    type: "splash", source: stack_ref(attacker), target: stack_ref(neighbor),
+                    kills: actual_splash,
+                    target_quantity_before: neighbor_qty_before, target_quantity_after: neighbor.quantity,
+                    target_wiped: neighbor.quantity <= 0, text: splash_line
+                  )
                end
             end
          end
-         
+
          # Life Leech
          if attacker.ability?('life_leech')
              leech_pct = attacker.ability_val('life_leech')
              healed = (kills * leech_pct).to_i
              if healed > 0
+                leech_qty_before = attacker.quantity
                 attacker.quantity += healed
-                @log << "    -> LEECH! #{attacker.name} drains life, recovering #{healed}."
+                leech_line = "    -> LEECH! #{attacker.name} drains life, recovering #{healed}."
+                @log << leech_line
+                @events << event(
+                  type: "leech", source: stack_ref(attacker), target: stack_ref(attacker),
+                  healed: healed,
+                  target_quantity_before: leech_qty_before, target_quantity_after: attacker.quantity,
+                  text: leech_line
+                )
              end
          end
       end
@@ -394,9 +462,20 @@ module Battle
                hero_kills = [hero_kills, attacker.quantity].min
                
                if hero_kills > 0
+                  vengeance_qty_before = attacker.quantity
                   attacker.quantity -= hero_kills
-                  @log << "    -> #{defender.hero[:name]} leads a VENGEANCE CHARGE!"
-                  @log << "       -> Critical Hit! Dealt #{damage} damage, slaying #{hero_kills} #{attacker.name}!"
+                  vengeance_line1 = "    -> #{defender.hero[:name]} leads a VENGEANCE CHARGE!"
+                  vengeance_line2 = "       -> Critical Hit! Dealt #{damage} damage, slaying #{hero_kills} #{attacker.name}!"
+                  @log << vengeance_line1
+                  @log << vengeance_line2
+                  @events << event(
+                    type: "hero_reaction", hero_reaction_name: "vengeance_charge",
+                    source: stack_ref(defender), target: stack_ref(attacker),
+                    damage: damage, kills: hero_kills,
+                    target_quantity_before: vengeance_qty_before, target_quantity_after: attacker.quantity,
+                    target_wiped: attacker.quantity <= 0,
+                    text: "#{vengeance_line1}\n#{vengeance_line2}"
+                  )
                end
             end
          end
@@ -407,26 +486,49 @@ module Battle
             
             if defender.quantity < threshold && !already_triggered
                defender.instance_variable_set(:@valerius_nova_triggered, true)
-               @log << "    -> #{defender.hero[:name]} unleashes ARCANE NOVA!"
-               
+               nova_trigger_line = "    -> #{defender.hero[:name]} unleashes ARCANE NOVA!"
+               @log << nova_trigger_line
+
                # Hit attacker + up to 2 random others
                targets = [attacker]
                attacker.army_ref.active_stacks.reject { |s| s == attacker }.sample(2).each do |s|
                    targets << s
                end
-               
+
                base_damage = (power * 1.0).to_i
-               
+               nova_hit_lines = []
+               nova_hit_targets = []
+
                targets.each do |t|
                   t_ehp = (t.defense * 2) + 10
-                  kills = (base_damage / t_ehp).floor
-                  kills = [kills, t.quantity].min
-                  
-                  if kills > 0
-                     t.quantity -= kills
-                     @log << "       -> The nova blasts #{t.name} for #{kills} casualties!"
+                  t_kills = (base_damage / t_ehp).floor
+                  t_kills = [t_kills, t.quantity].min
+
+                  if t_kills > 0
+                     t_qty_before = t.quantity
+                     t.quantity -= t_kills
+                     nova_line = "       -> The nova blasts #{t.name} for #{t_kills} casualties!"
+                     @log << nova_line
+                     nova_hit_lines << nova_line
+                     nova_hit_targets << stack_ref(t).merge(
+                       quantity_before: t_qty_before, quantity_after: t.quantity,
+                       kills: t_kills, wiped: t.quantity <= 0
+                     )
                   end
                end
+
+               primary = nova_hit_targets.first
+               @events << event(
+                 type: "hero_reaction", hero_reaction_name: "arcane_nova",
+                 source: stack_ref(defender),
+                 target: primary && { side: primary[:side], index: primary[:index], name: primary[:name] },
+                 target_quantity_before: primary&.[](:quantity_before),
+                 target_quantity_after: primary&.[](:quantity_after),
+                 target_wiped: primary&.[](:wiped),
+                 kills: primary&.[](:kills),
+                 secondary_targets: nova_hit_targets,
+                 text: ([nova_trigger_line] + nova_hit_lines).join("\n")
+               )
             end
          end
          
@@ -447,9 +549,20 @@ module Battle
                kills = [kills, attacker.quantity].min
                
                if kills > 0
+                  volley_qty_before = attacker.quantity
                   attacker.quantity -= kills
-                  @log << "    -> #{defender.hero[:name]} signals a DESPERATE VOLLEY!"
-                  @log << "       -> Arrows darken the sky! #{kills} #{attacker.name} fall before they can close in."
+                  volley_line1 = "    -> #{defender.hero[:name]} signals a DESPERATE VOLLEY!"
+                  volley_line2 = "       -> Arrows darken the sky! #{kills} #{attacker.name} fall before they can close in."
+                  @log << volley_line1
+                  @log << volley_line2
+                  @events << event(
+                    type: "hero_reaction", hero_reaction_name: "desperate_volley",
+                    source: stack_ref(defender), target: stack_ref(attacker),
+                    damage: damage, kills: kills,
+                    target_quantity_before: volley_qty_before, target_quantity_after: attacker.quantity,
+                    target_wiped: attacker.quantity <= 0,
+                    text: "#{volley_line1}\n#{volley_line2}"
+                  )
                end
             end
          end
@@ -491,6 +604,33 @@ module Battle
       def morale_broken?
          # If current power < 50% of max
          current_power < (@max_power * 0.5)
+      end
+
+      # Shared serialization shape for both the live-fight response and
+      # stored Notification data — used by Battle::ResolutionService and
+      # BattleResultSerializable so both callers stay in sync.
+      def to_summary
+        {
+          name: name,
+          stacks: stacks.map do |s|
+            {
+              name: s.name,
+              unit_id: s.unit_id,
+              unit_type: s.unit_type,
+              element: s.element,
+              attack: s.attack,
+              defense: s.defense,
+              speed: s.speed,
+              initial: s.initial_quantity,
+              remaining: s.quantity,
+              lost: s.initial_quantity - s.quantity,
+              hero: s.hero,
+              hero_alive: s.hero ? (s.hero_hp || 0) > 0 : nil,
+              hero_hp: s.hero ? s.hero_hp : nil,
+              hero_max_hp: s.hero ? s.hero_max_hp : nil
+            }
+          end
+        }
       end
     end
 

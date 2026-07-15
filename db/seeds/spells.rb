@@ -44,6 +44,17 @@ upsert_spell(
 )
 
 upsert_spell(
+  name: "Meditation",
+  description: "Pay gold — not mana — to hire scribes and channelers who sharpen your focus. Adds a flat bonus to your Mana production for 2 hours. Investing more gold when you cast increases the bonus, though each extra gold buys a little less than the last (diminishing returns).",
+  rank: 1, affinity: "general", mana_cost: 250, research_cost: 200,
+  spell_type: "self", cost_resource: "gold",
+  configuration: {
+    stat_target: "mana_production", base_magnitude: 30, duration: 7200,
+    scaling: { attribute: "magnitude", function: "log", base_magnitude: 30, base_cost: 250, unit: "Mana/cycle" }
+  }
+)
+
+upsert_spell(
   name: "Mage Armor",
   description: "Protective ward. +4 Army Defense for 4 hours.",
   rank: 2, affinity: "general", mana_cost: 40, research_cost: 500,

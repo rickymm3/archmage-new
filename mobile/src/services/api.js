@@ -191,6 +191,14 @@ export async function researchSpell(spellId, amount) {
   });
 }
 
+export async function rollResearchTarget(affinity) {
+  return apiRequest(`/spells/${affinity}/roll`, { method: "POST" });
+}
+
+export async function rerollResearchTarget(affinity) {
+  return apiRequest(`/spells/${affinity}/reroll`, { method: "POST" });
+}
+
 export async function castSpell(spellId, amount) {
   return apiRequest(`/spells/${spellId}/cast`, {
     method: "POST",
@@ -248,6 +256,39 @@ export async function placeBid(listingId, amount) {
 
 export async function collectListing(listingId) {
   return apiRequest(`/marketplace/${listingId}/collect`, { method: "POST" });
+}
+
+// Inventory / Items
+export async function getInventory() {
+  return apiRequest("/inventory");
+}
+
+export async function equipItem(userItemId) {
+  return apiRequest(`/inventory/${userItemId}/equip`, { method: "PATCH" });
+}
+
+export async function unequipItem(userItemId) {
+  return apiRequest(`/inventory/${userItemId}/unequip`, { method: "PATCH" });
+}
+
+export async function useItem(userItemId) {
+  return apiRequest(`/inventory/${userItemId}/use`, { method: "POST" });
+}
+
+// Barbarians
+export async function getBarbarianSettlements() {
+  return apiRequest("/barbarians");
+}
+
+export async function getBarbarianSetup(settlementId) {
+  return apiRequest(`/barbarians/${settlementId}/setup`);
+}
+
+export async function attackBarbarianSettlement(settlementId, units) {
+  return apiRequest(`/barbarians/${settlementId}/attack`, {
+    method: "POST",
+    body: JSON.stringify({ units }),
+  });
 }
 
 // Treasury

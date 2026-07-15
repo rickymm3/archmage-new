@@ -10,6 +10,8 @@ module Api
         listings = case filter
         when "heroes"
           base_scope.heroes
+        when "items"
+          base_scope.items
         else
           base_scope.regular
         end
@@ -85,6 +87,13 @@ module Api
             affinity: item.affinity,
             rank: item.rank,
             mana_cost: item.mana_cost
+          )
+        elsif item.is_a?(Item)
+          base.merge(
+            slug: item.slug,
+            item_type: item.item_type,
+            rarity: item.rarity,
+            rarity_color: item.rarity_color
           )
         else
           base

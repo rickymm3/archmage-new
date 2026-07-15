@@ -10,6 +10,7 @@ module Api
           units: holdings.map { |uu| serialize_user_unit(uu) },
           stats: {
             total_quantity: holdings.sum(&:quantity),
+            army_power: current_user.army_power,
             total_upkeep: holdings.sum { |uu| uu.quantity * uu.unit.upkeep_cost },
             total_mana_upkeep: holdings.sum { |uu| uu.quantity * (uu.unit.respond_to?(:mana_upkeep) ? (uu.unit.mana_upkeep || 0) : 0) },
             total_attack: holdings.sum { |uu| uu.quantity * uu.unit.attack },

@@ -112,10 +112,12 @@ Rails.application.routes.draw do
       patch "army/assign_hero",  to: "army#assign_hero"
 
       # Spells
-      get  "spells",              to: "spells#index"
-      get  "spells/casting",      to: "spells#casting"
-      post "spells/:id/research", to: "spells#research"
-      post "spells/:id/cast",     to: "spells#cast"
+      get  "spells",                  to: "spells#index"
+      get  "spells/casting",          to: "spells#casting"
+      post "spells/:affinity/roll",   to: "spells#roll"
+      post "spells/:affinity/reroll", to: "spells#reroll"
+      post "spells/:id/research",     to: "spells#research"
+      post "spells/:id/cast",         to: "spells#cast"
 
       # Battles
       get  "battles",            to: "battles#index"
@@ -127,6 +129,17 @@ Rails.application.routes.draw do
       get  "explorations",           to: "explorations#index"
       post "explorations",           to: "explorations#create"
       post "explorations/:id/claim", to: "explorations#claim"
+
+      # Barbarians
+      get  "barbarians",            to: "barbarians#index"
+      get  "barbarians/:id/setup",  to: "barbarians#setup"
+      post "barbarians/:id/attack", to: "barbarians#attack"
+
+      # Inventory / Items
+      get   "inventory",              to: "inventory#index"
+      patch "inventory/:id/equip",    to: "inventory#equip"
+      patch "inventory/:id/unequip",  to: "inventory#unequip"
+      post  "inventory/:id/use",      to: "inventory#use"
 
       # Marketplace
       get  "marketplace",             to: "marketplace#index"

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_11_173155) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_14_200630) do
   create_table "active_spells", force: :cascade do |t|
     t.integer "user_id", null: false
     t.integer "spell_id", null: false
@@ -21,6 +21,21 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_11_173155) do
     t.datetime "updated_at", null: false
     t.index ["spell_id"], name: "index_active_spells_on_spell_id"
     t.index ["user_id"], name: "index_active_spells_on_user_id"
+  end
+
+  create_table "barbarian_settlements", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.text "description"
+    t.string "element", default: "physical", null: false
+    t.integer "min_level", null: false
+    t.integer "max_level", null: false
+    t.integer "level", null: false
+    t.datetime "defeated_at"
+    t.datetime "respawn_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["slug"], name: "index_barbarian_settlements_on_slug", unique: true
   end
 
   create_table "bids", force: :cascade do |t|
@@ -47,6 +62,20 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_11_173155) do
     t.json "events", default: []
     t.index ["unit_id"], name: "index_explorations_on_unit_id"
     t.index ["user_id"], name: "index_explorations_on_user_id"
+  end
+
+  create_table "items", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.text "description"
+    t.integer "item_type", default: 0, null: false
+    t.integer "rarity", default: 0, null: false
+    t.json "abilities"
+    t.json "use_effect"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["item_type"], name: "index_items_on_item_type"
+    t.index ["slug"], name: "index_items_on_slug", unique: true
   end
 
   create_table "market_listings", force: :cascade do |t|
@@ -258,6 +287,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_11_173155) do
     t.datetime "updated_at", null: false
     t.json "configuration"
     t.integer "rarity", default: 0
+    t.string "cost_resource", default: "mana", null: false
   end
 
   create_table "structures", force: :cascade do |t|
@@ -296,6 +326,18 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_11_173155) do
     t.index ["speed"], name: "index_units_on_speed"
   end
 
+  create_table "user_items", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.integer "item_id", null: false
+    t.integer "quantity", default: 0, null: false
+    t.boolean "equipped", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["item_id"], name: "index_user_items_on_item_id"
+    t.index ["user_id", "item_id"], name: "index_user_items_on_user_id_and_item_id", unique: true
+    t.index ["user_id"], name: "index_user_items_on_user_id"
+  end
+
   create_table "user_spells", force: :cascade do |t|
     t.integer "user_id", null: false
     t.integer "spell_id", null: false
@@ -304,6 +346,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_11_173155) do
     t.boolean "active"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "rolled_at"
     t.index ["spell_id"], name: "index_user_spells_on_spell_id"
     t.index ["user_id"], name: "index_user_spells_on_user_id"
   end
@@ -381,6 +424,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_11_173155) do
   add_foreign_key "solid_queue_ready_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
+  add_foreign_key "user_items", "items"
+  add_foreign_key "user_items", "users"
   add_foreign_key "user_spells", "spells"
   add_foreign_key "user_spells", "users"
   add_foreign_key "user_structures", "structures"

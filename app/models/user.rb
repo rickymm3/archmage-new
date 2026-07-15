@@ -11,6 +11,9 @@ class User < ApplicationRecord
   has_many :user_units, dependent: :destroy
   has_many :units, through: :user_units
   accepts_nested_attributes_for :user_units, update_only: true
+
+  has_many :user_items, dependent: :destroy
+  has_many :items, through: :user_items
   
   has_many :user_spells, dependent: :destroy
   has_many :spells, through: :user_spells
@@ -39,10 +42,23 @@ class User < ApplicationRecord
     user_units.includes(:unit).sum { |uu| (uu.unit.attack.to_i + uu.unit.defense.to_i + uu.unit.speed.to_i) * (uu.quantity.to_i + uu.garrison.to_i) }
   end
 
+  # Grows with how many spells you've researched, weighted by each spell's
+  # rank (1-10) rather than a flat per-spell amount — otherwise learning a
+  # pile of cheap rank-1 spells would be worth exactly as much as landing a
+  # single rank-10 spell, which rewards spamming easy research over actually
+  # pursuing powerful spells. Mirrors army_power's role for the army: a
+  # second "power" axis fed into net_power for rankings/targeting.
+  SPELL_POWER_PER_RANK = 10
+
+  def spell_power
+    user_spells.joins(:spell).where(learned: true).sum('spells.rank') * SPELL_POWER_PER_RANK
+  end
+
   def net_power
-    # A rough estimate of total player power
-    # value of land (100) + army strength + magic power * 10
-    (land * 100) + army_strength + (magic_power * 10)
+    # A rough estimate of total player power, used for the leaderboard and
+    # for deciding who's in your attack range (see Battle::TargetingService).
+    # value of land (100) + army power + spell power
+    (land * 100) + army_power + spell_power
   end
 
   def under_protection?
@@ -68,6 +84,16 @@ class User < ApplicationRecord
       case resource.to_s
       when 'gold' then decrement!(:gold, amount)
       when 'mana' then decrement!(:mana, amount)
+      end
+    end
+  end
+
+  def grant_resources!(resources)
+    resources.each do |resource, amount|
+      case resource.to_s
+      when 'gold' then increment!(:gold, amount)
+      when 'mana' then increment!(:mana, amount)
+      when 'land' then increment!(:land, amount)
       end
     end
   end
@@ -373,12 +399,21 @@ class User < ApplicationRecord
     breakdown
   end
 
+  # Each unit stack contributes its unit type's `power` stat times how many
+  # the user owns (garrisoned + field + exploring — same scope as the old
+  # total_army_size headcount this replaces). Falls back to 3 for any unit
+  # missing a power value (shouldn't happen with seeded data, but keeps this
+  # and current_power's Void Breach math from ever dividing by/multiplying
+  # a nil).
+  def army_power
+    user_units.includes(:unit).sum { |uu| uu.quantity * (uu.unit.power || 3) }
+  end
+
   def current_power
-     army_score = user_units.includes(:unit).sum { |uu| uu.quantity * (uu.unit.power || 3) }
      economy_score = land * 5
      magic_score = user_spells.where(learned: true).count * 10
-     
-     army_score + economy_score + magic_score
+
+     army_power + economy_score + magic_score
   end
 
   def active_spell_bonus(stat)
@@ -415,9 +450,14 @@ class User < ApplicationRecord
     [total, 100.0].min
   end
   
+  # Deliberately still keyed on raw headcount (total_army_size), not
+  # army_power — this models feeding/housing troops (a logistics limit tied
+  # to Barracks/Field Camp capacity), not their combat strength. Swapping
+  # "how strong is my army" from headcount to power (see army_power above)
+  # doesn't change what overcrowds your kingdom.
   def current_morale_decay_rate_per_second
     base_decay_rate = 100.0 / 1.day.to_i
-    
+
     current_size = total_army_size
     cap = army_capacity
     

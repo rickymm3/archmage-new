@@ -9,11 +9,14 @@ module Marketplace
 
     MAX_REGULAR_LISTINGS = 20
     MAX_HERO_LISTINGS = 5
+    MAX_ITEM_LISTINGS = 10
 
-    def self.generate_listings(count = 1, force_hero: false)
+    def self.generate_listings(count = 1, force_hero: false, force_item: false)
       count.times do
         if force_hero
           generate_single_hero_listing
+        elsif force_item
+          generate_single_item_listing
         else
           generate_single_listing
         end
@@ -39,6 +42,36 @@ module Marketplace
       if needed_heroes > 0
         generate_listings(needed_heroes, force_hero: true)
       end
+
+      # Item listings
+      current_items = MarketListing.active.items.count
+      needed_items = MAX_ITEM_LISTINGS - current_items
+      if needed_items > 0
+        generate_listings(needed_items, force_item: true)
+      end
+    end
+
+    def self.generate_single_item_listing
+      rarity = pick_rarity
+      candidates = Item.where(rarity: rarity)
+      candidates = Item.all if candidates.empty?
+      return if candidates.empty?
+
+      item = candidates.sample
+      quantity = item.consumable? ? rand(1..5) : 1
+
+      base_price = item.base_price * quantity
+      price_variance = rand(0.8..1.2)
+      starting_price = (base_price * price_variance).to_i
+
+      MarketListing.create!(
+        item: item,
+        quantity: quantity,
+        current_price: starting_price,
+        min_bid_increment: [starting_price / 10, 1].max,
+        expires_at: rand(4..24).hours.from_now,
+        status: :active
+      )
     end
     
     def self.generate_single_hero_listing

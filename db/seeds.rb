@@ -94,4 +94,13 @@ puts "Spells Loaded."
 
 puts "Loading Production Balance..."
 load File.join(Rails.root, 'db', 'seeds', 'balance_production.rb')
+
+puts "Loading Items..."
+load File.join(Rails.root, 'db', 'seeds', 'items.rb')
+puts "Items Loaded."
+
+puts "Loading Barbarian Settlements..."
+load File.join(Rails.root, 'db', 'seeds', 'barbarian_settlements.rb')
+puts "Barbarian Settlements Loaded."
+
 puts "Done."

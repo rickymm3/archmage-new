@@ -107,7 +107,7 @@ module Battle
         stacks << format_stack(uu.unit, qty, hero_data)
       end
       return nil if stacks.empty?
-      stacks
+      Battle::EquipmentBonus.apply!(@attacker, stacks)
     end
 
     def prepare_defender_stacks
@@ -128,7 +128,7 @@ module Battle
 
         stacks << format_stack(uu.unit, current_defending, hero_data)
       end
-      stacks
+      Battle::EquipmentBonus.apply!(@defender, stacks)
     end
 
     def format_stack(unit, quantity, hero_data = nil)
@@ -152,28 +152,13 @@ module Battle
     end
 
     def serialize_army(army)
-      {
-        name: army.name,
-        stacks: army.stacks.map do |s|
-          {
-            name: s.name,
-            unit_id: s.unit_id,
-            unit_type: s.unit_type,
-            element: s.element,
-            attack: s.attack,
-            defense: s.defense,
-            speed: s.speed,
-            initial: s.initial_quantity,
-            remaining: s.quantity,
-            # Legacy keys kept for older stored notifications
-            initial_quantity: s.initial_quantity,
-            remaining_quantity: s.quantity,
-            lost: s.initial_quantity - s.quantity,
-            hero: s.hero,
-            hero_alive: s.hero ? (s.hero_hp || 0) > 0 : nil
-          }
-        end
-      }
+      summary = army.to_summary
+      summary[:stacks] = summary[:stacks].each_with_index.map do |stack_hash, i|
+        s = army.stacks[i]
+        # Legacy keys kept for older stored notifications
+        stack_hash.merge(initial_quantity: s.initial_quantity, remaining_quantity: s.quantity)
+      end
+      summary
     end
 
     def process_outcome(result)
@@ -183,6 +168,7 @@ module Battle
         battle_data = {
           winner: result.winner,
           log: result.log,
+          events: result.events,
           verdict: result.verdict,
           attacker: { username: @attacker.username },
           defender: { username: @defender.username },
@@ -262,6 +248,7 @@ module Battle
            winner: result.winner,
            land_seized: land_seized,
            log: result.log,
+           events: result.events,
            verdict: result.verdict,
            attacker: @attacker,
            defender: @defender,

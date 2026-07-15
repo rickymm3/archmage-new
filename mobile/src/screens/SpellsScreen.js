@@ -217,14 +217,18 @@ export default function SpellsScreen({ route }) {
   }
 
   function handleCast(spell) {
+    const isGold = spell.cost_resource === "gold";
     const minCost = spell.mana_cost;
-    const available = castingData?.current_mana || 0;
+    const available = isGold ? (castingData?.current_gold || 0) : (castingData?.current_mana || 0);
     if (available < minCost) {
-      showAlert("Not Enough Mana", `You need at least ${minCost} mana to cast ${spell.name}.`);
+      showAlert(
+        isGold ? "Not Enough Gold" : "Not Enough Mana",
+        `You need at least ${minCost} ${isGold ? "gold" : "mana"} to cast ${spell.name}.`
+      );
       return;
     }
     setCastSliderValue(minCost);
-    setCastModal({ spell, minCost, maxInvest: available });
+    setCastModal({ spell, minCost, maxInvest: available, isGold });
   }
 
   async function confirmCast() {
@@ -250,10 +254,24 @@ export default function SpellsScreen({ route }) {
     }
   }
 
-  // Get spells for the currently selected affinity
-  function getAffinitySpells() {
-    if (!spellsData?.affinities || !selectedAffinity) return [];
-    return spellsData.affinities[selectedAffinity] || [];
+  async function handleRoll(affinity) {
+    try {
+      const result = await api.rollResearchTarget(affinity);
+      showAlert("Research", `Rolled ${result.spell.name}!`);
+      loadData();
+    } catch (e) {
+      showAlert("Error", e.message);
+    }
+  }
+
+  async function handleReroll(affinity) {
+    try {
+      const result = await api.rerollResearchTarget(affinity);
+      showAlert("Rerolled", result.message);
+      loadData();
+    } catch (e) {
+      showAlert("Error", e.message);
+    }
   }
 
   function renderResearchTab() {
@@ -270,14 +288,11 @@ export default function SpellsScreen({ route }) {
       return a.localeCompare(b);
     });
 
-    const spells = getAffinitySpells();
-    const currentResearch = spells.find((s) => !s.learned && s.unlocked && s.research_progress > 0);
-    const nextToResearch = !currentResearch ? spells.find((s) => !s.learned && s.unlocked) : null;
-    const activeSpell = currentResearch || nextToResearch;
-    const learnedSpells = spells.filter((s) => s.learned);
-    const lockedSpells = spells.filter((s) => !s.learned && s !== activeSpell);
+    const affData = spellsData.affinities[selectedAffinity] || {};
+    const target = affData.target;
+    const learnedSpells = affData.learned || [];
     const affMeta = AFFINITY_META[selectedAffinity] || { name: selectedAffinity, emoji: "✨", color: colors.muted };
-    const isNative = selectedAffinity === userAff || selectedAffinity === "general";
+    const isNative = affData.native;
 
     return (
       <>
@@ -295,38 +310,53 @@ export default function SpellsScreen({ route }) {
           <Text style={styles.foreignNote}>Foreign magic — limited to first 8 spells</Text>
         )}
 
-        {/* Currently Researching / Next to Research */}
-        {activeSpell && (
+        {/* Currently rolled research target */}
+        {target && (
           <View style={[styles.activeResearchCard, { borderColor: affMeta.color }]}>
             <View style={styles.activeResearchHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.activeResearchLabel}>
-                  {activeSpell.research_progress > 0 ? "Currently Researching" : "Next to Research"}
+                  {target.research_progress > 0 ? "Currently Researching" : "New Research Target"}
                 </Text>
-                <Text style={[styles.activeResearchName, { color: affMeta.color }]}>{activeSpell.name}</Text>
+                <Text style={[styles.activeResearchName, { color: affMeta.color }]}>{target.name}</Text>
               </View>
-              <TouchableOpacity style={styles.infoBtn} onPress={() => setInfoSpell(activeSpell)}>
+              <TouchableOpacity style={styles.infoBtn} onPress={() => setInfoSpell(target)}>
                 <Text style={styles.infoBtnText}>ⓘ</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.activeResearchProgress}>
               <Text style={styles.activeProgressText}>
-                {activeSpell.research_progress} / {activeSpell.research_cost} mana
+                {target.research_progress} / {target.research_cost} mana
               </Text>
               <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: `${Math.round((activeSpell.research_progress / activeSpell.research_cost) * 100)}%`, backgroundColor: affMeta.color }]} />
+                <View style={[styles.progressBarFill, { width: `${Math.round((target.research_progress / target.research_cost) * 100)}%`, backgroundColor: affMeta.color }]} />
               </View>
             </View>
             <TouchableOpacity
               style={[styles.researchBtn, { backgroundColor: affMeta.color }]}
-              onPress={() => handleResearch(activeSpell)}
+              onPress={() => handleResearch(target)}
             >
               <Text style={styles.researchBtnText}>Research</Text>
             </TouchableOpacity>
+            {target.research_progress === 0 && (
+              <TouchableOpacity style={styles.rerollBtn} onPress={() => handleReroll(selectedAffinity)}>
+                <Text style={styles.rerollBtnText}>🎲 Reroll (25 mana)</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
-        {!activeSpell && spells.length > 0 && learnedSpells.length === spells.length && (
+        {/* No target yet — offer to roll, unless fully mastered */}
+        {!target && !affData.mastered && (
+          <TouchableOpacity
+            style={[styles.researchBtn, styles.rollBtn, { backgroundColor: affMeta.color }]}
+            onPress={() => handleRoll(selectedAffinity)}
+          >
+            <Text style={styles.researchBtnText}>Research a New Spell</Text>
+          </TouchableOpacity>
+        )}
+
+        {!target && affData.mastered && (
           <View style={styles.completedCard}>
             <Text style={styles.completedEmoji}>{affMeta.emoji}</Text>
             <Text style={styles.completedText}>All {affMeta.name} spells mastered!</Text>
@@ -351,25 +381,7 @@ export default function SpellsScreen({ route }) {
           </>
         )}
 
-        {/* Locked / Upcoming */}
-        {lockedSpells.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Upcoming ({lockedSpells.length})</Text>
-            {lockedSpells.map((s) => (
-              <View key={s.id} style={[styles.lockedCard, !s.unlocked && { opacity: 0.4 }]}>
-                <View style={styles.learnedRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.lockedName}>{s.name}</Text>
-                    <Text style={styles.learnedMeta}>Rank {s.rank} • {s.research_cost} mana</Text>
-                  </View>
-                  <Text style={styles.lockedIcon}>{s.unlocked ? "📖" : "🔒"}</Text>
-                </View>
-              </View>
-            ))}
-          </>
-        )}
-
-        {spells.length === 0 && (
+        {learnedSpells.length === 0 && !target && !affData.mastered && (
           <Text style={styles.emptyText}>No spells available for this affinity</Text>
         )}
       </>
@@ -409,7 +421,7 @@ export default function SpellsScreen({ route }) {
 
     return (
       <>
-        <Text style={styles.manaDisplay}>🔮 {castingData.current_mana} / {castingData.max_mana} • ✨ {castingData.magic_power} MP</Text>
+        <Text style={styles.manaDisplay}>🔮 {castingData.current_mana} / {castingData.max_mana} • 💰 {castingData.current_gold} • ✨ {castingData.magic_power} MP</Text>
 
         {/* School selector (badge = castable spells known) */}
         <AffinityGrid
@@ -447,7 +459,9 @@ export default function SpellsScreen({ route }) {
                     <View style={styles.spellHeader}>
                       <Text style={styles.spellName}>{s.name}</Text>
                       <View style={styles.spellHeaderRight}>
-                        <Text style={styles.manaCost}>{s.mana_cost} mana</Text>
+                        <Text style={[styles.manaCost, s.cost_resource === "gold" && styles.goldCost]}>
+                          {s.cost_resource === "gold" ? "💰" : "🔮"} {s.mana_cost} {s.cost_resource === "gold" ? "gold" : "mana"}
+                        </Text>
                         <TouchableOpacity style={styles.infoBtnSmall} onPress={() => setInfoSpell(s)}>
                           <Text style={styles.infoBtnSmallText}>ⓘ</Text>
                         </TouchableOpacity>
@@ -587,9 +601,11 @@ export default function SpellsScreen({ route }) {
               <Text style={styles.modalSpellName}>{castModal.spell.name}</Text>
               <Text style={styles.castModalDesc}>{castModal.spell.description}</Text>
 
-              <Text style={styles.manaAvailable}>🔮 {castModal.maxInvest} mana available</Text>
+              <Text style={styles.manaAvailable}>
+                {castModal.isGold ? "💰" : "🔮"} {castModal.maxInvest} {castModal.isGold ? "gold" : "mana"} available
+              </Text>
 
-              <Text style={styles.investLabel}>{castSliderValue} mana</Text>
+              <Text style={styles.investLabel}>{castSliderValue} {castModal.isGold ? "gold" : "mana"}</Text>
               <Slider
                 style={styles.slider}
                 minimumValue={castModal.minCost}
@@ -651,7 +667,9 @@ export default function SpellsScreen({ route }) {
               <View style={styles.infoDivider} />
               <Text style={styles.infoDetail}>Type: {infoSpell.spell_type}</Text>
               <Text style={styles.infoDetail}>Research Cost: {infoSpell.research_cost} mana</Text>
-              <Text style={styles.infoDetail}>Cast Cost: {infoSpell.mana_cost} mana</Text>
+              <Text style={styles.infoDetail}>
+                Cast Cost: {infoSpell.mana_cost} {infoSpell.cost_resource === "gold" ? "gold" : "mana"}
+              </Text>
               <Text style={styles.infoDetail}>Rarity: {infoSpell.rarity || "Common"}</Text>
               <TouchableOpacity style={styles.infoCloseBtn} onPress={() => setInfoSpell(null)}>
                 <Text style={styles.infoCloseTxt}>Close</Text>
@@ -732,6 +750,16 @@ const styles = StyleSheet.create({
   activeProgressText: { color: colors.muted, fontSize: 12, marginBottom: 6 },
   researchBtn: { paddingVertical: 10, borderRadius: 8, alignItems: "center", marginTop: 12 },
   researchBtnText: { color: colors.white, fontWeight: "bold", fontSize: 15 },
+  rollBtn: { marginHorizontal: 12, marginTop: 8 },
+  rerollBtn: {
+    marginTop: 8,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  rerollBtnText: { color: colors.muted, fontSize: 13, fontWeight: "600" },
 
   // Completed
   completedCard: { margin: 12, padding: 24, alignItems: "center" },
@@ -793,6 +821,7 @@ const styles = StyleSheet.create({
   spellName: { color: colors.text, fontSize: 16, fontWeight: "600", flex: 1 },
   meta: { color: colors.muted, fontSize: 12, marginTop: 4 },
   manaCost: { color: colors.info, fontSize: 13 },
+  goldCost: { color: colors.gold },
   infoBtnSmall: {
     width: 26,
     height: 26,

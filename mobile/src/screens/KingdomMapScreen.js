@@ -1,16 +1,18 @@
 // ═══════════════════════════════════════════════════════════════════
 // EXPERIMENTAL — Kingdom Map home scene.
 //
-// A free-panning map of your kingdom where the buildings ARE the menu:
-// swipe to move around, tap a structure to open that part of the game.
-// No nav bars, no lists — pure game shell.
+// A pan/zoomable view of your kingdom, art-directed to match a reference
+// mock: buildings are painted directly into a single fixed background
+// image (kingdom-background.png) — there's no separate per-building sprite
+// or drag-to-reposition system anymore. Tapping a labeled plaque over a
+// painted building opens that part of the game.
 //
 // To remove this experiment entirely:
 //   1. delete this file
 //   2. remove the "KingdomMap" route in navigation/MainTabs.js
 //   3. remove the 🗺 button in screens/HomeScreen.js
 // ═══════════════════════════════════════════════════════════════════
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -24,37 +26,89 @@ import {
   Platform,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
 import * as api from "../services/api";
 import { PressableScale, ProgressBar } from "../components/ui";
+import { TabBarVisual, TAB_NAMES } from "../navigation/CustomTabBar";
 import LoadingButton from "../components/LoadingButton";
-import { ui as art, structureImage } from "../assets";
+import { loadMapLayout, saveMapLayout, clearMapLayout } from "../services/mapLayout";
+import { formatCountdown } from "../utils/time";
+import { ui as art } from "../assets";
 import { colors, alpha } from "../theme";
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
-const VIEW_W = Platform.OS === "web" ? Math.min(SCREEN_W, 480) : SCREEN_W;
-const VIEW_H = SCREEN_H;
+// The viewport this screen renders into isn't necessarily the raw window —
+// on web it's whatever size components/DeviceFrame.js decides to give it.
+// So the actual width/height come from the root container's own onLayout
+// (see viewSize state below), not Dimensions.get("window"). This constant
+// is only a same-frame-paint fallback for the brief moment before the
+// first layout fires.
+const { width: INITIAL_W, height: INITIAL_H } = Dimensions.get("window");
 
-// Map canvas — comfortably larger than any phone viewport.
-const MAP_W = 1400;
-const MAP_H = 1000;
+// Canvas matches kingdom-background.png's native size exactly, so plaque
+// x/y below are just that image's own pixel coordinates.
+const MAP_W = 941;
+const MAP_H = 1672;
 
-// Points of interest: where the buildings sit and where they take you.
-// x/y are canvas coordinates (center of the POI).
+// Where each painted building sits in kingdom-background.png (center of its
+// label plaque, tuned by eye against the art) and which part of the game it
+// opens. Every building visible in the art gets an entry; there's no
+// separate building sprite to render — the art already has them.
 const POIS = [
-  { key: "town",     label: "Town Hall",      x: 640,  y: 430, size: 130, img: () => structureImage("town_center", 2), nav: ["Kingdom", { subTab: "town" }] },
-  { key: "army",     label: "Barracks",       x: 330,  y: 560, size: 104, img: () => structureImage("barracks", 1),    nav: ["Army", { subTab: "overview" }] },
-  { key: "magic",    label: "Mage Tower",     x: 950,  y: 300, size: 104, img: () => structureImage("altar", 2),       nav: ["Magic", {}] },
-  { key: "tax",      label: "Treasury",       x: 900,  y: 580, size: 96,  img: () => structureImage("bank", 1),        nav: ["Kingdom", { subTab: "tax" }] },
-  { key: "mana",     label: "Mana Core",      x: 1130, y: 460, size: 96,  img: () => structureImage("mana_core", 1),   nav: ["Kingdom", { subTab: "mana" }] },
-  { key: "market",   label: "Black Market",   x: 520,  y: 720, size: 92,  emoji: "🛒",                                  nav: ["Kingdom", { subTab: "market" }] },
-  { key: "war",      label: "War Camp",       x: 200,  y: 310, size: 100, img: () => structureImage("field_camp", 2),  nav: ["War", { subTab: "attack" }] },
-  { key: "explore",  label: "The Wilds",      x: 1180, y: 780, size: 92,  emoji: "🏔",                                  nav: ["War", { subTab: "explore" }] },
-  { key: "rankings", label: "Hall of Legends", x: 770, y: 170, size: 88,  emoji: "🏆",                                  nav: ["War", { subTab: "rankings" }] },
+  { key: "rankings", label: "Hall of Legends", icon: "🏆", x: 433, y: 405, nav: ["War", { subTab: "rankings" }] },
+  { key: "market",   label: "Black Market",    icon: "⚖️", x: 715, y: 622, nav: ["Kingdom", { subTab: "market" }] },
+  { key: "town",     label: "Town Hall",       icon: "🏰", x: 423, y: 958, nav: ["Kingdom", { subTab: "town" }] },
+  { key: "tax",      label: "Treasury",        icon: "💰", x: 772, y: 1008, nav: ["Kingdom", { subTab: "tax" }] },
+  { key: "war",      label: "War Camp",        icon: "⚔️", x: 220, y: 1000, nav: ["War", { subTab: "attack" }] },
+  { key: "magic",    label: "Mage Tower",      icon: "🔮", x: 640, y: 1376, nav: ["Magic", {}] },
 ];
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
-const MIN_X = -(MAP_W - VIEW_W);
-const MIN_Y = -(MAP_H - VIEW_H);
+
+// Default/minimum zoom is a true "cover" fit — scale by whichever of
+// width/height needs the bigger multiplier so BOTH dimensions are fully
+// covered edge-to-edge (no letterboxed gaps on the sides, ever), same as
+// CSS background-size:cover. The map art is proportionally wider than a
+// phone screen, so height is normally the binding dimension — the bottom
+// of the art running under the footer chrome (tip card, tax/mana buttons,
+// tab bar) is expected and fine; the width filling the frame edge-to-edge
+// matters more than every building staying clear of the menus. Takes the
+// actual measured viewport (not a module-level constant) so it stays
+// correct if that viewport is resized — e.g. DeviceFrame reflowing when a
+// browser window is resized.
+function fitScaleFor(viewW, viewH) {
+  return Math.max(viewW / MAP_W, viewH / MAP_H);
+}
+const MAX_SCALE = 1.4;
+const SCALE_STEP = 0.15;
+
+// Pan bounds shrink/grow with zoom. RN's `scale` transform pivots around the
+// element's own CENTER (not its top-left corner), so a scaled canvas's true
+// on-screen edges are offset from where a naive translate-only calculation
+// would put them — by size*(1-scale)/2 on each side. This accounts for that
+// offset directly, so pan.x/pan.y's neutral resting bound is no longer
+// always 0 once scale != 1.
+function panBounds(scale, viewW, viewH) {
+  const offsetX = (MAP_W - MAP_W * scale) / 2;
+  const offsetY = (MAP_H - MAP_H * scale) / 2;
+  const contentW = MAP_W * scale;
+  const contentH = MAP_H * scale;
+
+  let minX, maxX;
+  if (contentW <= viewW) {
+    minX = maxX = (viewW - contentW) / 2 - offsetX;
+  } else {
+    maxX = -offsetX;
+    minX = viewW - offsetX - contentW;
+  }
+
+  // Y is always top-anchored, never centered — fitScaleFor already leaves
+  // the natural gap (if any) below the image, clear of the footer chrome,
+  // so there's nothing to gain from centering it into that gap too.
+  const maxY = -offsetY;
+  const minY = contentH <= viewH ? maxY : viewH - offsetY - contentH;
+
+  return { minX, maxX, minY, maxY };
+}
 
 const TIER_COLORS = {
   lenient: colors.success,
@@ -63,9 +117,223 @@ const TIER_COLORS = {
   extortion: colors.danger,
 };
 
+// Each building gets two independently positioned overlays on top of the
+// painted art: a "hotspot" (a big invisible/dashed-in-edit-mode tap zone
+// sized to cover the building itself) and a "label" (the visible icon+name
+// plaque). They're separate because the label needs to stay small and
+// readable near the building while the hotspot wants to be big and roughly
+// match the building's actual silhouette — dragging one shouldn't move the
+// other. Both default to centering on the POI's tuned x/y; a user can then
+// drag (and, for the hotspot, resize) either one in edit mode, persisted via
+// services/mapLayout.js.
+const DEFAULT_HS_W = 190;
+const DEFAULT_HS_H = 230;
+const MIN_HS = 60;
+
+function defaultLayoutFor(poi) {
+  return {
+    hs: { x: poi.x, y: poi.y, w: DEFAULT_HS_W, h: DEFAULT_HS_H },
+    lbl: { x: poi.x, y: poi.y },
+  };
+}
+
+function defaultLayout(pois) {
+  const out = {};
+  pois.forEach((p) => { out[p.key] = defaultLayoutFor(p); });
+  return out;
+}
+
+function EditablePOI({ poi, entry, scale, editMode, onChange, onPress }) {
+  const { hs, lbl } = entry;
+
+  const hsDragStart = useRef({ x: hs.x, y: hs.y });
+  const hsSizeStart = useRef({ w: hs.w, h: hs.h });
+  const lblDragStart = useRef({ x: lbl.x, y: lbl.y });
+
+  const hsMoveResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) + Math.abs(g.dy) > 4,
+      onPanResponderGrant: () => { hsDragStart.current = { x: hs.x, y: hs.y }; },
+      onPanResponderMove: (_, g) => {
+        onChange(poi.key, "hs", {
+          x: hsDragStart.current.x + g.dx / scale,
+          y: hsDragStart.current.y + g.dy / scale,
+        });
+      },
+    })
+  ).current;
+
+  const hsResizeResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => { hsSizeStart.current = { w: hs.w, h: hs.h }; },
+      onPanResponderMove: (_, g) => {
+        onChange(poi.key, "hs", {
+          w: Math.max(MIN_HS, hsSizeStart.current.w + (g.dx / scale) * 2),
+          h: Math.max(MIN_HS, hsSizeStart.current.h + (g.dy / scale) * 2),
+        });
+      },
+    })
+  ).current;
+
+  const lblMoveResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) + Math.abs(g.dy) > 4,
+      onPanResponderGrant: () => { lblDragStart.current = { x: lbl.x, y: lbl.y }; },
+      onPanResponderMove: (_, g) => {
+        onChange(poi.key, "lbl", {
+          x: lblDragStart.current.x + g.dx / scale,
+          y: lblDragStart.current.y + g.dy / scale,
+        });
+      },
+    })
+  ).current;
+
+  const hsBoxStyle = { position: "absolute", left: hs.x - hs.w / 2, top: hs.y - hs.h / 2, width: hs.w, height: hs.h };
+  const lblBoxStyle = { position: "absolute", left: lbl.x - 95, top: lbl.y - 22, width: 190 };
+
+  if (editMode) {
+    return (
+      <>
+        <View {...hsMoveResponder.panHandlers} style={[hsBoxStyle, styles.hotspotEdit]}>
+          <Text style={styles.hotspotTag} numberOfLines={1}>{poi.label} · link</Text>
+          <View {...hsResizeResponder.panHandlers} style={styles.resizeHandle} />
+        </View>
+        <View {...lblMoveResponder.panHandlers} style={lblBoxStyle}>
+          <View style={[styles.poiPlaque, styles.poiPlaqueEdit]}>
+            <Text style={styles.poiPlaqueIcon}>{poi.icon}</Text>
+            <Text style={styles.poiLabel}>{poi.label}</Text>
+          </View>
+        </View>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <TouchableOpacity style={hsBoxStyle} activeOpacity={0.7} onPress={onPress} />
+      <PressableScale scaleTo={0.92} containerStyle={lblBoxStyle} style={styles.poiInner} onPress={onPress}>
+        <View style={styles.poiPlaque}>
+          <Text style={styles.poiPlaqueIcon}>{poi.icon}</Text>
+          <Text style={styles.poiLabel}>{poi.label}</Text>
+        </View>
+      </PressableScale>
+    </>
+  );
+}
+
 export default function KingdomMapScreen({ navigation }) {
   const [player, setPlayer] = useState(null);
   const [unread, setUnread] = useState(0);
+
+  // The viewport this screen actually renders into — measured via onLayout
+  // on the root container below, not assumed from the raw window (see
+  // components/DeviceFrame.js, which may give it a smaller bordered box on
+  // web). INITIAL_W/H is only a same-frame guess for the instant before
+  // the first layout callback fires.
+  const [viewSize, setViewSize] = useState({ w: INITIAL_W, h: INITIAL_H });
+  const viewSizeRef = useRef(viewSize);
+  const fitScale = fitScaleFor(viewSize.w, viewSize.h);
+
+  const [scale, setScale] = useState(fitScale);
+  const scaleAnim = useRef(new Animated.Value(fitScale)).current;
+  const scaleRef = useRef(fitScale);
+
+  function handleContainerLayout(e) {
+    const { width, height } = e.nativeEvent.layout;
+    if (!width || !height) return;
+    if (viewSizeRef.current.w === width && viewSizeRef.current.h === height) return;
+    viewSizeRef.current = { w: width, h: height };
+    setViewSize({ w: width, h: height });
+
+    // Re-home the camera to the top-anchored default fit for the new size —
+    // covers both the very first real measurement (correcting the initial
+    // guess) and later resizes (a browser window drag, a rotated device),
+    // so the view is never left zoomed/panned outside the new bounds.
+    const fit = fitScaleFor(width, height);
+    const { minX, maxX, maxY } = panBounds(fit, width, height);
+    scaleRef.current = fit;
+    setScale(fit);
+    scaleAnim.setValue(fit);
+    pan.setValue({ x: (minX + maxX) / 2, y: maxY });
+  }
+
+  // Building hotspot/label positions — user-editable, persisted across
+  // sessions (see EditablePOI above). Loaded async so the first paint uses
+  // the tuned defaults and never flashes/jumps once the saved layout lands.
+  const [editMode, setEditMode] = useState(false);
+  const [layout, setLayout] = useState(() => defaultLayout(POIS));
+  const layoutLoadedRef = useRef(false);
+
+  useEffect(() => {
+    (async () => {
+      const saved = await loadMapLayout();
+      if (saved) {
+        setLayout((prev) => {
+          const merged = {};
+          POIS.forEach((p) => {
+            merged[p.key] = {
+              hs: { ...prev[p.key].hs, ...(saved[p.key]?.hs || {}) },
+              lbl: { ...prev[p.key].lbl, ...(saved[p.key]?.lbl || {}) },
+            };
+          });
+          return merged;
+        });
+      }
+      layoutLoadedRef.current = true;
+    })();
+  }, []);
+
+  // Debounced autosave — skips the initial default-layout render so it
+  // never overwrites a saved layout before loadMapLayout() has resolved.
+  useEffect(() => {
+    if (!layoutLoadedRef.current) return;
+    const t = setTimeout(() => { saveMapLayout(layout); }, 400);
+    return () => clearTimeout(t);
+  }, [layout]);
+
+  function handleLayoutChange(key, kind, patch) {
+    setLayout((prev) => ({ ...prev, [key]: { ...prev[key], [kind]: { ...prev[key][kind], ...patch } } }));
+  }
+
+  function handleResetLayout() {
+    const fresh = defaultLayout(POIS);
+    setLayout(fresh);
+    clearMapLayout();
+  }
+
+  function zoomBy(delta) {
+    const { w: viewW, h: viewH } = viewSizeRef.current;
+    const minScale = fitScaleFor(viewW, viewH);
+    const next = clamp(Math.round((scaleRef.current + delta) * 100) / 100, minScale, MAX_SCALE);
+    if (next === scaleRef.current) return;
+    scaleRef.current = next;
+    setScale(next);
+    Animated.spring(scaleAnim, { toValue: next, speed: 14, bounciness: 4, useNativeDriver: Platform.OS !== "web" }).start();
+
+    // Re-clamp the current pan into the new zoom level's bounds so the
+    // camera never ends up parked outside the (now smaller/larger) map.
+    const { minX, maxX, minY, maxY } = panBounds(next, viewW, viewH);
+    pan.stopAnimation((v) => {
+      const clampedX = clamp(v.x, minX, maxX);
+      const clampedY = clamp(v.y, minY, maxY);
+      if (clampedX !== v.x || clampedY !== v.y) {
+        Animated.spring(pan, { toValue: { x: clampedX, y: clampedY }, speed: 14, bounciness: 0, useNativeDriver: Platform.OS !== "web" }).start();
+      }
+    });
+  }
+
+  // Middle zoom-bar button: snap back to the default top-anchored fit view
+  // — a quick "where am I" recenter.
+  function resetView() {
+    const { w: viewW, h: viewH } = viewSizeRef.current;
+    const fit = fitScaleFor(viewW, viewH);
+    const { minX, maxX, maxY } = panBounds(fit, viewW, viewH);
+    scaleRef.current = fit;
+    setScale(fit);
+    Animated.spring(scaleAnim, { toValue: fit, speed: 14, bounciness: 4, useNativeDriver: Platform.OS !== "web" }).start();
+    Animated.spring(pan, { toValue: { x: (minX + maxX) / 2, y: maxY }, speed: 10, bounciness: 0, useNativeDriver: Platform.OS !== "web" }).start();
+  }
 
   // Quick-action popups: null | "tax" | "mana"
   const [actionModal, setActionModal] = useState(null);
@@ -80,29 +348,37 @@ export default function KingdomMapScreen({ navigation }) {
     return () => clearInterval(t);
   }, [actionModal]);
 
-  // Start centered on the Town Hall.
-  const startX = clamp(-(POIS[0].x - VIEW_W / 2), MIN_X, 0);
-  const startY = clamp(-(POIS[0].y - VIEW_H / 2), MIN_Y, 0);
+  // Start pinned to the TOP of the image (never crop the top) and centered
+  // horizontally. maxY from panBounds is exactly the pan value that puts
+  // the image's top edge at the viewport's top edge (see panBounds's
+  // comment on the center-pivot scale offset) — whatever doesn't fit
+  // vertically is cropped off the bottom, and a taller viewport naturally
+  // shows more of it since less needs to be cropped.
+  const { minX: startMinX, maxX: startMaxX, maxY: startMaxY } = panBounds(fitScale, viewSize.w, viewSize.h);
+  const startX = (startMinX + startMaxX) / 2;
+  const startY = startMaxY;
   const pan = useRef(new Animated.ValueXY({ x: startX, y: startY })).current;
   const panStart = useRef({ x: startX, y: startY });
 
   const panResponder = useRef(
     PanResponder.create({
-      // Only claim the gesture once it's clearly a drag, so POI taps work.
+      // Only claim the gesture once it's clearly a drag, so plaque taps work.
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) + Math.abs(g.dy) > 8,
       onPanResponderGrant: () => {
         pan.stopAnimation((v) => { panStart.current = v; });
       },
       onPanResponderMove: (_, g) => {
+        const { minX, maxX, minY, maxY } = panBounds(scaleRef.current, viewSizeRef.current.w, viewSizeRef.current.h);
         pan.setValue({
-          x: clamp(panStart.current.x + g.dx, MIN_X, 0),
-          y: clamp(panStart.current.y + g.dy, MIN_Y, 0),
+          x: clamp(panStart.current.x + g.dx, minX, maxX),
+          y: clamp(panStart.current.y + g.dy, minY, maxY),
         });
       },
       onPanResponderRelease: (_, g) => {
         // A touch of glide, clamped to the map bounds.
-        const toX = clamp(panStart.current.x + g.dx + g.vx * 120, MIN_X, 0);
-        const toY = clamp(panStart.current.y + g.dy + g.vy * 120, MIN_Y, 0);
+        const { minX, maxX, minY, maxY } = panBounds(scaleRef.current, viewSizeRef.current.w, viewSizeRef.current.h);
+        const toX = clamp(panStart.current.x + g.dx + g.vx * 120, minX, maxX);
+        const toY = clamp(panStart.current.y + g.dy + g.vy * 120, minY, maxY);
         Animated.spring(pan, {
           toValue: { x: toX, y: toY },
           speed: 8,
@@ -171,8 +447,6 @@ export default function KingdomMapScreen({ navigation }) {
     const t = treasury;
     const cooldownMs = t?.tax_cooldown ? new Date(t.tax_cooldown).getTime() - now : 0;
     const onCooldown = cooldownMs > 0;
-    const mins = Math.floor(cooldownMs / 60000);
-    const secs = Math.max(0, Math.floor((cooldownMs % 60000) / 1000));
 
     return (
       <>
@@ -189,7 +463,7 @@ export default function KingdomMapScreen({ navigation }) {
 
         {onCooldown ? (
           <View style={styles.cooldownBox}>
-            <Text style={styles.cooldownTxt}>⏳ Collectors are resting — ready in {mins}m {secs}s</Text>
+            <Text style={styles.cooldownTxt}>⏳ Collectors are resting — ready in {formatCountdown(cooldownMs / 1000)}</Text>
           </View>
         ) : (
           t?.tax_rates &&
@@ -253,55 +527,89 @@ export default function KingdomMapScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.container}>
-      {/* ── PANNABLE MAP ── */}
-      <View style={styles.viewport} {...panResponder.panHandlers}>
+    <View style={styles.container} onLayout={handleContainerLayout}>
+      {/* ── PANNABLE / ZOOMABLE MAP ── */}
+      <View style={styles.viewport} {...(editMode ? {} : panResponder.panHandlers)}>
         <Animated.View
-          style={[styles.canvas, { transform: [{ translateX: pan.x }, { translateY: pan.y }] }]}
+          style={[
+            styles.canvas,
+            { transform: [{ translateX: pan.x }, { translateY: pan.y }, { scale: scaleAnim }] },
+          ]}
         >
-          <Image source={art.townPanorama} resizeMode="cover" style={styles.mapArt} />
-          <View style={styles.mapTint} />
+          <Image source={art.kingdomBackground} resizeMode="cover" style={styles.mapArt} />
 
           {POIS.map((p) => (
-            <PressableScale
+            <EditablePOI
               key={p.key}
-              scaleTo={0.9}
-              containerStyle={[
-                styles.poi,
-                {
-                  left: p.x - p.size / 2,
-                  top: p.y - p.size / 2,
-                  width: p.size,
-                  height: p.size + 26,
-                },
-              ]}
-              style={styles.poiInner}
+              poi={p}
+              entry={layout[p.key]}
+              scale={scale}
+              editMode={editMode}
+              onChange={handleLayoutChange}
               onPress={() => go(p.nav)}
-            >
-              {p.img && p.img() ? (
-                <Image source={p.img()} resizeMode="contain" style={{ width: p.size, height: p.size }} />
-              ) : (
-                <Text style={{ fontSize: p.size * 0.62, textShadowColor: colors.black, textShadowRadius: 6 }}>
-                  {p.emoji}
-                </Text>
-              )}
-              <View style={styles.poiPlaque}>
-                <Text style={styles.poiLabel}>{p.label}</Text>
-              </View>
-            </PressableScale>
+            />
           ))}
         </Animated.View>
+      </View>
+
+      {/* bottom vignette — fades the map into the footer HUD instead of
+          buildings clipping abruptly behind it (fixed to the screen, not
+          the pannable canvas). */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={["transparent", alpha(colors.bg, "dd"), colors.bg]}
+        locations={[0, 0.45, 0.72]}
+        style={styles.bottomScrim}
+      />
+
+      {/* zoom controls — one image, three overlaid tap zones (+ / reset / −) */}
+      <View style={styles.zoomStack} pointerEvents="box-none">
+        <Image source={art.zoomBar} style={styles.zoomBarImg} resizeMode="contain" />
+        <TouchableOpacity
+          style={styles.zoomHitIn}
+          onPress={() => zoomBy(SCALE_STEP)}
+          disabled={scale >= MAX_SCALE}
+        />
+        <TouchableOpacity style={styles.zoomHitReset} onPress={resetView} />
+        <TouchableOpacity
+          style={styles.zoomHitOut}
+          onPress={() => zoomBy(-SCALE_STEP)}
+          disabled={scale <= fitScale}
+        />
       </View>
 
       {/* ── FIXED HUD ── */}
       {/* top: resources */}
       <View style={styles.hudTop} pointerEvents="box-none">
-        <View style={styles.hudStrip}>
-          <Text style={styles.hudRes}>💰 {player ? Number(player.gold).toLocaleString() : "—"}</Text>
-          <Text style={styles.hudRes}>🔮 {player ? Number(player.mana).toLocaleString() : "—"}</Text>
-          <Text style={styles.hudRes}>🏔 {player ? player.free_land : "—"}</Text>
+        <View style={styles.currencyBar}>
+          <Image source={art.currencyTop} style={styles.currencyBarImg} resizeMode="stretch" />
+          <View style={styles.currencySlots} pointerEvents="none">
+            <View style={styles.currencySlot}>
+              <Image source={art.coinIcon} style={styles.currencyIcon} resizeMode="contain" />
+              <Text style={styles.currencyVal}>{player ? Number(player.gold).toLocaleString() : "—"}</Text>
+            </View>
+            <View style={styles.currencySlot}>
+              <Image source={art.manaIcon} style={styles.currencyIcon} resizeMode="contain" />
+              <Text style={[styles.currencyVal, { color: colors.info }]}>{player ? Number(player.mana).toLocaleString() : "—"}</Text>
+            </View>
+            <View style={styles.currencySlot}>
+              <Image source={art.diamondIcon} style={styles.currencyIcon} resizeMode="contain" />
+              <Text style={[styles.currencyVal, { color: "#5fb8ff" }]}>0</Text>
+            </View>
+          </View>
         </View>
         <View style={styles.hudButtons}>
+          {editMode && (
+            <TouchableOpacity style={styles.hudBtn} onPress={handleResetLayout}>
+              <Text style={styles.hudBtnTxt}>↺</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.hudBtn, editMode && styles.hudBtnActive]}
+            onPress={() => setEditMode((e) => !e)}
+          >
+            <Text style={styles.hudBtnTxt}>{editMode ? "✅" : "✏️"}</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.hudBtn} onPress={() => navigation.navigate("Notifications")}>
             <Text style={styles.hudBtnTxt}>🔔</Text>
             {unread > 0 && (
@@ -310,33 +618,37 @@ export default function KingdomMapScreen({ navigation }) {
               </View>
             )}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.hudBtn} onPress={() => navigation.navigate("Profile")}>
-            <Text style={styles.hudBtnTxt}>👤</Text>
+          <TouchableOpacity style={styles.avatarBtn} onPress={() => navigation.navigate("Profile")}>
+            <Image source={art.avatarDefault} style={styles.avatarImg} resizeMode="cover" />
           </TouchableOpacity>
         </View>
       </View>
 
+      {editMode && (
+        <View style={styles.editBanner} pointerEvents="none">
+          <Text style={styles.editBannerTxt}>Edit mode — drag boxes to move, corner dot to resize the link zone</Text>
+        </View>
+      )}
+
       {/* quick actions: tax + mana, straight from the map */}
       <View style={styles.quickRow} pointerEvents="box-none">
-        <PressableScale style={styles.quickBtn} scaleTo={0.92} onPress={() => openAction("tax")}>
-          <Text style={styles.quickIcon}>💰</Text>
-          <Text style={styles.quickTxt}>Collect Taxes</Text>
+        <PressableScale containerStyle={styles.quickBtnWrap} style={styles.quickBtnInner} scaleTo={0.96} onPress={() => openAction("tax")}>
+          <Image source={art.collectTaxesBtn} style={styles.quickBtnImg} resizeMode="contain" />
         </PressableScale>
-        <PressableScale style={styles.quickBtn} scaleTo={0.92} onPress={() => openAction("mana")}>
-          <Text style={styles.quickIcon}>🔮</Text>
-          <Text style={styles.quickTxt}>Channel Mana</Text>
+        <PressableScale containerStyle={styles.quickBtnWrap} style={styles.quickBtnInner} scaleTo={0.96} onPress={() => openAction("mana")}>
+          <Image source={art.collectManaBtn} style={styles.quickBtnImg} resizeMode="contain" />
         </PressableScale>
       </View>
 
-      {/* bottom: kingdom name + exit back to classic UI */}
-      <View style={styles.hudBottom} pointerEvents="box-none">
-        <View style={styles.kingdomPlate}>
-          <Text style={styles.kingdomName}>{player?.kingdom_name || "Your Kingdom"}</Text>
-          <Text style={styles.kingdomHint}>drag to roam · tap a building to enter</Text>
-        </View>
-        <TouchableOpacity style={styles.exitBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.exitTxt}>⌂ classic</Text>
-        </TouchableOpacity>
+      {/* bottom: same tab bar as the rest of the app, floating on top of the
+          map art (not squeezed above it in normal flow) — tapping "Home" is
+          the way back to the classic dashboard. */}
+      <View style={styles.tabBarDock} pointerEvents="box-none">
+        <TabBarVisual
+          names={TAB_NAMES}
+          activeIndex={0}
+          onPress={(name) => go([name, {}])}
+        />
       </View>
 
       {/* ── QUICK-ACTION POPUP ── */}
@@ -373,26 +685,84 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
-    ...(Platform.OS === "web" ? { maxWidth: 480, width: "100%", alignSelf: "center", overflow: "hidden" } : {}),
+    overflow: "hidden",
   },
   viewport: { flex: 1, overflow: "hidden" },
+  tabBarDock: { position: "absolute", left: 0, right: 0, bottom: 0 },
+  bottomScrim: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 340,
+  },
   canvas: { width: MAP_W, height: MAP_H },
   mapArt: { position: "absolute", width: MAP_W, height: MAP_H },
-  mapTint: { ...StyleSheet.absoluteFillObject, backgroundColor: alpha(colors.bg, "22") },
 
-  /* POIs */
-  poi: { position: "absolute" },
+  /* building plaques */
   poiInner: { alignItems: "center" },
   poiPlaque: {
-    marginTop: 2,
-    backgroundColor: alpha(colors.bg, "cc"),
-    borderWidth: 1,
-    borderColor: alpha(colors.gold, "66"),
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    backgroundColor: alpha("#1a1128", "e0"),
+    borderWidth: 1.5,
+    borderColor: alpha(colors.gold, "99"),
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    shadowColor: colors.black,
+    shadowOpacity: 0.6,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
-  poiLabel: { color: colors.text, fontSize: 11, fontWeight: "800" },
+  poiPlaqueIcon: { fontSize: 15 },
+  poiLabel: { color: colors.gold, fontSize: 14, fontWeight: "800" },
+  poiPlaqueEdit: { borderColor: colors.info, borderWidth: 2 },
+
+  /* edit-mode hotspot (the "link" tap zone over a painted building) */
+  hotspotEdit: {
+    borderWidth: 2,
+    borderColor: alpha(colors.info, "cc"),
+    borderStyle: "dashed",
+    backgroundColor: alpha(colors.info, "22"),
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hotspotTag: {
+    color: colors.white,
+    fontSize: 11,
+    fontWeight: "700",
+    backgroundColor: alpha(colors.black, "88"),
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  resizeHandle: {
+    position: "absolute",
+    right: -11,
+    bottom: -11,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.info,
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  editBanner: {
+    position: "absolute",
+    top: Platform.OS === "web" ? 54 : 90,
+    left: 10,
+    right: 10,
+    backgroundColor: alpha(colors.info, "ee"),
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  editBannerTxt: { color: colors.white, fontSize: 11, fontWeight: "700", textAlign: "center" },
 
   /* HUD */
   hudTop: {
@@ -404,29 +774,48 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  hudStrip: {
+  currencyBar: { flex: 1, height: 30, marginRight: 8 },
+  currencyBarImg: { width: "100%", height: "100%" },
+  currencySlots: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
     flexDirection: "row",
-    gap: 12,
-    backgroundColor: alpha(colors.bg, "cc"),
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    alignItems: "center",
+    paddingHorizontal: "7%",
   },
-  hudRes: { color: colors.text, fontSize: 12, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  hudButtons: { flexDirection: "row", gap: 8 },
+  currencySlot: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 3 },
+  currencyIcon: { width: 15, height: 15 },
+  currencyVal: { color: colors.gold, fontSize: 11, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  hudButtons: { flexDirection: "row", alignItems: "center", gap: 8 },
   hudBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: alpha(colors.bg, "cc"),
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: alpha("#1a1128", "e6"),
+    borderWidth: 1.25,
+    borderColor: alpha(colors.gold, "77"),
     alignItems: "center",
     justifyContent: "center",
   },
   hudBtnTxt: { fontSize: 15 },
+  hudBtnActive: { borderColor: colors.info, backgroundColor: alpha(colors.info, "33") },
+  avatarBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: colors.gold,
+    overflow: "hidden",
+    backgroundColor: "#1a1128",
+    shadowColor: colors.gold,
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  avatarImg: { width: "100%", height: "100%" },
   hudDot: {
     position: "absolute",
     top: -4,
@@ -441,58 +830,32 @@ const styles = StyleSheet.create({
   },
   hudDotTxt: { color: colors.white, fontSize: 9, fontWeight: "800" },
 
-  hudBottom: {
+  /* zoom controls */
+  zoomStack: {
     position: "absolute",
-    bottom: 18,
-    left: 10,
     right: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
+    bottom: 164,
+    width: 46,
+    height: 46 * (1554 / 468),
   },
-  kingdomPlate: {
-    backgroundColor: alpha(colors.bg, "cc"),
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  kingdomName: { color: colors.gold, fontSize: 14, fontWeight: "800" },
-  kingdomHint: { color: colors.muted, fontSize: 10, marginTop: 1 },
-  exitBtn: {
-    backgroundColor: alpha(colors.bg, "cc"),
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  exitTxt: { color: colors.muted, fontSize: 12, fontWeight: "700" },
+  zoomBarImg: { width: "100%", height: "100%" },
+  zoomHitIn: { position: "absolute", left: 0, right: 0, top: "0%", height: "33%" },
+  zoomHitReset: { position: "absolute", left: 0, right: 0, top: "33%", height: "34%" },
+  zoomHitOut: { position: "absolute", left: 0, right: 0, top: "67%", height: "33%" },
+
 
   /* quick actions */
   quickRow: {
     position: "absolute",
-    bottom: 74,
+    bottom: 96,
     left: 10,
     right: 10,
     flexDirection: "row",
-    justifyContent: "center",
     gap: 10,
   },
-  quickBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: alpha(colors.bg, "d9"),
-    borderWidth: 1.5,
-    borderColor: alpha(colors.gold, "88"),
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  quickIcon: { fontSize: 15 },
-  quickTxt: { color: colors.gold, fontSize: 13, fontWeight: "800" },
+  quickBtnWrap: { flex: 1, height: 58 },
+  quickBtnInner: { width: "100%", height: "100%" },
+  quickBtnImg: { width: "100%", height: "100%" },
 
   /* quick-action popup */
   modalOverlay: {

@@ -13,7 +13,9 @@ import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
 import { LoadingState, ArtPlaceholder, EmptyState } from "../components/ui";
 import { anyUnitImage, spellImage } from "../assets";
-import { colors } from "../theme";
+import { colors, rarityColors } from "../theme";
+
+const ITEM_TYPE_EMOJI = { weapon: "⚔️", armor: "🛡", accessory: "💍", consumable: "🧪" };
 
 export default function MarketplaceScreen() {
   const { showAlert, showPrompt } = useModal();
@@ -64,14 +66,14 @@ export default function MarketplaceScreen() {
     >
       {/* Filter Tabs */}
       <View style={styles.tabs}>
-        {["regular", "heroes"].map((f) => (
+        {["regular", "heroes", "items"].map((f) => (
           <TouchableOpacity
             key={f}
             style={[styles.tab, filter === f && styles.tabActive]}
             onPress={() => setFilter(f)}
           >
             <Text style={[styles.tabText, filter === f && styles.tabTextActive]}>
-              {f === "heroes" ? "Heroes" : "Goods"}
+              {f === "heroes" ? "Heroes" : f === "items" ? "Items" : "Goods"}
             </Text>
           </TouchableOpacity>
         ))}
@@ -95,19 +97,25 @@ export default function MarketplaceScreen() {
       )}
 
       {/* Active Listings */}
-      {data.listings.map((l) => (
-        <View key={l.id} style={styles.card}>
+      {data.listings.map((l) => {
+        const isItem = l.item_type === "Item";
+        const rarityColor = isItem ? rarityColors[l.item?.rarity] : null;
+        return (
+        <View key={l.id} style={[styles.card, rarityColor && { borderColor: rarityColor }]}>
           <View style={styles.listingHeader}>
             <ArtPlaceholder
-              emoji={filter === "heroes" ? "🦸" : l.item_type === "Spell" ? "📜" : "⚔️"}
+              emoji={isItem ? (ITEM_TYPE_EMOJI[l.item?.item_type] || "🎒") : filter === "heroes" ? "🦸" : l.item_type === "Spell" ? "📜" : "⚔️"}
               label={null}
               size={44}
-              source={l.item_type === "Spell" ? spellImage(l.item?.affinity) : anyUnitImage(l.item?.slug)}
+              source={isItem ? undefined : l.item_type === "Spell" ? spellImage(l.item?.affinity) : anyUnitImage(l.item?.slug)}
               style={{ marginRight: 10 }}
             />
             <View style={{ flex: 1 }}>
               <Text style={styles.itemName}>{l.item?.name}</Text>
-              <Text style={styles.itemType}>{l.item_type}{l.quantity > 1 ? ` x${l.quantity}` : ""}</Text>
+              <Text style={[styles.itemType, rarityColor && { color: rarityColor }]}>
+                {isItem ? `${l.item?.rarity} ${l.item?.item_type}` : l.item_type}
+                {l.quantity > 1 ? ` x${l.quantity}` : ""}
+              </Text>
             </View>
             <View style={styles.priceCol}>
               <Text style={styles.price}>{l.current_price} 💰</Text>
@@ -120,7 +128,8 @@ export default function MarketplaceScreen() {
             <Text style={styles.bidText}>Place Bid</Text>
           </LoadingButton>
         </View>
-      ))}
+        );
+      })}
 
       {data.listings.length === 0 && (
         <EmptyState icon="🏪" title="No listings available" subtitle="The market restocks over time — check back soon." />

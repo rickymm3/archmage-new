@@ -81,7 +81,10 @@ module Treasury
               title: "DEFEAT: Void Breach",
               content: "The Void overwhelmed your garrison. #{breach_message}",
               category: 'battle',
-              data: { log: breach_result[:log], penalty: penalty_details, result: 'defeat' }
+              data: {
+                log: breach_result[:log], events: breach_result[:events], penalty: penalty_details, result: 'defeat',
+                attacker_army: breach_result[:attacker_army], defender_army: breach_result[:defender_army]
+              }
             )
         else
             message = "⚔️ VOID BREACH REPELLED! (Check Notifications)"
@@ -90,7 +93,10 @@ module Treasury
               title: "VICTORY: Void Breach Repelled",
               content: "Your garrison successfully defended the Mana Core.",
               category: 'battle',
-              data: { log: breach_result[:log], result: 'victory' }
+              data: {
+                log: breach_result[:log], events: breach_result[:events], result: 'victory',
+                attacker_army: breach_result[:attacker_army], defender_army: breach_result[:defender_army]
+              }
             )
         end
       elsif mana_change < 0
@@ -119,20 +125,27 @@ module Treasury
         defender: defender
       ).call
 
+      army_snapshots = {
+        attacker_army: battle.attacker_army.to_summary,
+        defender_army: battle.defender_army.to_summary
+      }
+
       if battle.winner == :defender
         {
           message: "VICTORY! Garrison repelled the Breach (Void Power: #{void_power}).",
           penalty: nil,
-          log: battle.log
-        }
+          log: battle.log,
+          events: battle.events
+        }.merge(army_snapshots)
       else
         loss_gold = (@user.gold * 0.1).to_i
         loss_morale = 15
         {
           message: "DEFEAT! The Void Overwhelmed you (Void Power: #{void_power}).",
           penalty: { gold: loss_gold, morale: loss_morale },
-          log: battle.log
-        }
+          log: battle.log,
+          events: battle.events
+        }.merge(army_snapshots)
       end
     end
 

@@ -19,12 +19,14 @@ import { heroImage, unitImage, sceneImage } from "../assets";
 import { colors, alpha } from "../theme";
 import DefenseScreen from "./DefenseScreen";
 import RecruitScreen from "./RecruitScreen";
+import InventoryScreen from "./InventoryScreen";
 
 const SUB_TABS = [
   { key: "overview", icon: "🏰", label: "Overview" },
   { key: "units", icon: "⚔️", label: "Units" },
   { key: "defense", icon: "🛡", label: "Defense" },
   { key: "recruit", icon: "📯", label: "Recruit" },
+  { key: "inventory", icon: "🎒", label: "Gear" },
 ];
 
 // Backend sends abilities as an object (e.g. { passive: "...", trigger: "..." }).
@@ -163,10 +165,19 @@ export default function ArmyScreen({ route }) {
             ? { refreshControl: <RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadArmy(); setRefreshing(false); }} /> }
             : {})}
         >
-        {/* single status card: capacity + morale */}
+        {/* headline strength card: Army Power */}
         <View style={styles.card}>
           <View style={styles.statusRow}>
-            <Text style={styles.statusLabel}>⚔️ Army Size</Text>
+            <Text style={styles.statusLabel}>⚡ Army Power</Text>
+            <Text style={styles.statusValue}>{Number(s.army_power || 0).toLocaleString()}</Text>
+          </View>
+          <Text style={styles.powerHint}>Each unit contributes its own power × how many you own.</Text>
+        </View>
+
+        {/* capacity + morale */}
+        <View style={styles.card}>
+          <View style={styles.statusRow}>
+            <Text style={styles.statusLabel}>🪖 Troop Capacity</Text>
             <Text style={[styles.statusValue, overcrowded && { color: colors.danger }]}>
               {size} / {capacity}
             </Text>
@@ -223,7 +234,7 @@ export default function ArmyScreen({ route }) {
         <View style={[styles.card, styles.strengthRow]}>
           <Chip icon="⚔️" value={`${Number(s.total_attack).toLocaleString()} ATK`} color={colors.dangerSoft} />
           <Chip icon="🛡" value={`${Number(s.total_defense).toLocaleString()} DEF`} color={colors.info} />
-          <Chip icon="🪖" value={`${size} units`} />
+          <Chip icon="🪖" value={`${size} units`} color={colors.muted} />
         </View>
         </ScrollView>
       </View>
@@ -367,6 +378,7 @@ export default function ArmyScreen({ route }) {
         {subTab === "recruit" && (
           <RecruitScreen route={{ params: { unitId: recruitUnitId } }} />
         )}
+        {subTab === "inventory" && <InventoryScreen />}
       </FadeSlideIn>
 
       <SubTabs tabs={SUB_TABS} active={subTab} onChange={changeSubTab} />
@@ -447,6 +459,7 @@ const styles = StyleSheet.create({
   statusLabel: { color: colors.text, fontSize: 14, fontWeight: "700" },
   statusValue: { color: colors.text, fontSize: 15, fontWeight: "800", fontVariant: ["tabular-nums"] },
   capWarn: { color: colors.danger, fontSize: 11, marginTop: 7, lineHeight: 16 },
+  powerHint: { color: colors.muted, fontSize: 11, marginTop: 6, lineHeight: 15 },
   moraleFootRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 6 },
   moraleDecay: { color: colors.muted, fontSize: 11, fontVariant: ["tabular-nums"] },
   moraleWarn: { color: colors.danger, fontSize: 11, fontWeight: "600" },

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { colors, alpha } from "../theme";
 import { ArtPlaceholder } from "../components/ui";
 import { ui as art } from "../assets";
+import { TYPE_ICONS, ELEM_COLORS } from "../battleVisuals";
 import {
   View,
   Text,
@@ -9,23 +10,6 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from "react-native";
-
-const TYPE_ICONS = {
-  infantry: "🗡",
-  cavalry: "🐎",
-  ranged: "🏹",
-  flying: "🦅",
-  magic: "✨",
-  hero: "👑",
-};
-const ELEM_COLORS = {
-  fire: colors.danger,
-  water: colors.info,
-  nature: colors.success,
-  holy: colors.gold,
-  void: colors.arcane,
-  physical: colors.textDim,
-};
 
 // Victory is decided by power destroyed: the attacker must out-damage the
 // defender's losses × the defender bonus. This panel shows that math.
@@ -253,6 +237,17 @@ export default function BattleResultScreen({ route, navigation }) {
         )}
       </View>
 
+      {/* Watch Replay — only when structured event data is present (new
+          battles only; old stored notifications degrade gracefully). */}
+      {result.events?.length > 0 && (
+        <TouchableOpacity
+          style={styles.replayButton}
+          onPress={() => navigation.navigate("BattleReplay", { result, viewer })}
+        >
+          <Text style={styles.replayButtonText}>▶ Watch Replay</Text>
+        </TouchableOpacity>
+      )}
+
       {/* The Verdict — why you won or lost, in plain power math */}
       {result.verdict && (
         <VerdictPanel verdict={result.verdict} viewer={viewer} isVictory={isVictory} />
@@ -359,6 +354,16 @@ const styles = StyleSheet.create({
   bannerEmoji: { fontSize: 36 },
   bannerTitle: { color: colors.text, fontSize: 28, fontWeight: "bold", letterSpacing: 3, marginTop: 4 },
   bannerSub: { color: colors.textDim, fontSize: 14, marginTop: 4 },
+
+  replayButton: {
+    marginHorizontal: 12,
+    marginTop: 10,
+    backgroundColor: colors.accent,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  replayButtonText: { color: colors.white, fontSize: 16, fontWeight: "800" },
 
   armySection: { margin: 12, padding: 12, backgroundColor: colors.card, borderRadius: 10, borderWidth: 1 },
   armyHeader: { marginBottom: 8 },
