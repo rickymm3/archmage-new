@@ -54,3 +54,5 @@ mobile.zip:Zone.Identifier
 /mobile/assets/ui/universal-hud-v2/chroma/
 /mobile/assets/ui/universal-hud-v3/chroma/
 /mobile/assets/ui/universal-hud-v4/chroma/
+.vercel
+.env*
