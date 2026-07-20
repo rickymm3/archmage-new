@@ -1,9 +1,10 @@
-// Persists user-dragged Kingdom Map hotspot/label positions across
-// sessions. expo-secure-store isn't available on web, so fall back to
-// localStorage there (same pattern as services/api.js's token storage).
+// Persists the village grid layout ({ positions: { slug: {x, y} } })
+// across sessions. expo-secure-store isn't available on web, so fall back
+// to localStorage there (same pattern as services/api.js's token storage).
+// Key bumped from v2 (old hotspot-map shape) so stale data is ignored.
 import { Platform } from "react-native";
 
-const KEY = "kingdom_map_layout_v2";
+const KEY = "village_grid_v1";
 
 let Store;
 if (Platform.OS === "web") {

@@ -1,921 +1,797 @@
 // ═══════════════════════════════════════════════════════════════════
-// EXPERIMENTAL — Kingdom Map home scene.
+// VILLAGE GRID — buildable kingdom map (replaces the painted-art map).
 //
-// A pan/zoomable view of your kingdom, art-directed to match a reference
-// mock: buildings are painted directly into a single fixed background
-// image (kingdom-background.png) — there's no separate per-building sprite
-// or drag-to-reposition system anymore. Tapping a labeled plaque over a
-// painted building opens that part of the game.
+// Clash-style placement over the existing economy — no new resources or
+// structures, the grid just makes the land system spatial:
+//   · 1 land = 1 tile. The map is a square of side ceil(√land); tiles
+//     beyond your land count render as unbuildable "wilds" forest.
+//   · Footprints are PREFIXED tetris-style polyomino shapes. Level-based
+//     structures (keep/barracks/bank/core/altar) are singletons whose
+//     shape grows with tier; quantity-based ones (farm/field camp) place
+//     one shape PER unit owned — build 8 farms, place 8 strips.
+//   · Shapes rotate in 90° steps while placing/moving (⟳).
+//   · Moving is always free. Losing land never destroys a building: what
+//     no longer fits is auto-relocated or lands in the "displaced" tray.
+//   · Tapping a building shows its info and opens its game function
+//     (bank → collect tax, mana core → release mana, barracks → recruit).
 //
-// To remove this experiment entirely:
-//   1. delete this file
-//   2. remove the "KingdomMap" route in navigation/MainTabs.js
-//   3. remove the 🗺 button in screens/HomeScreen.js
+// Layout ({ instanceId: {x, y, rot} }) persists via services/mapLayout.
 // ═══════════════════════════════════════════════════════════════════
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useCallback, useMemo } from "react";
 import {
   View,
   Text,
   Image,
   StyleSheet,
-  Animated,
-  PanResponder,
-  Dimensions,
   TouchableOpacity,
+  Pressable,
+  ScrollView,
   Modal,
+  Dimensions,
   Platform,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
 import * as api from "../services/api";
-import { PressableScale, ProgressBar } from "../components/ui";
+import { useModal } from "../context/ModalContext";
 import { TabBarVisual, TAB_NAMES } from "../navigation/CustomTabBar";
-import LoadingButton from "../components/LoadingButton";
-import { loadMapLayout, saveMapLayout, clearMapLayout } from "../services/mapLayout";
-import { formatCountdown } from "../utils/time";
-import { ui as art } from "../assets";
+import { LoadingState } from "../components/ui";
+import { loadMapLayout, saveMapLayout } from "../services/mapLayout";
+import { structureImage } from "../assets";
 import { colors, alpha } from "../theme";
 
-// The viewport this screen renders into isn't necessarily the raw window —
-// on web it's whatever size components/DeviceFrame.js decides to give it.
-// So the actual width/height come from the root container's own onLayout
-// (see viewSize state below), not Dimensions.get("window"). This constant
-// is only a same-frame-paint fallback for the brief moment before the
-// first layout fires.
 const { width: INITIAL_W, height: INITIAL_H } = Dimensions.get("window");
 
-// Canvas matches kingdom-background.png's native size exactly, so plaque
-// x/y below are just that image's own pixel coordinates.
-const MAP_W = 941;
-const MAP_H = 1672;
+// Space reserved for the transparent universal header above / tab dock below.
+const TOP_OFFSET = Platform.OS === "web" ? 84 : 122;
+const BOTTOM_DOCK = 120;
 
-// Where each painted building sits in kingdom-background.png (center of its
-// label plaque, tuned by eye against the art) and which part of the game it
-// opens. Every building visible in the art gets an entry; there's no
-// separate building sprite to render — the art already has them.
-const POIS = [
-  { key: "rankings", label: "Hall of Legends", icon: "🏆", x: 433, y: 405, nav: ["War", { subTab: "rankings" }] },
-  { key: "market",   label: "Black Market",    icon: "⚖️", x: 715, y: 622, nav: ["Kingdom", { subTab: "market" }] },
-  { key: "town",     label: "Town Hall",       icon: "🏰", x: 423, y: 958, nav: ["Kingdom", { subTab: "town" }] },
-  { key: "tax",      label: "Treasury",        icon: "💰", x: 772, y: 1008, nav: ["Kingdom", { subTab: "tax" }] },
-  { key: "war",      label: "War Camp",        icon: "⚔️", x: 220, y: 1000, nav: ["War", { subTab: "attack" }] },
-  { key: "magic",    label: "Mage Tower",      icon: "🔮", x: 640, y: 1376, nav: ["Magic", {}] },
-];
+/* ── shapes ───────────────────────────────────────────────────────── */
 
-const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+const R = (w, h) => {
+  const cells = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) cells.push([x, y]);
+  return cells;
+};
+const L4 = [[0, 0], [0, 1], [0, 2], [1, 2]]; // L tetromino (4)
+const T4 = [[0, 0], [1, 0], [2, 0], [1, 1]]; // T tetromino (4)
+const PLUS5 = [[1, 0], [0, 1], [1, 1], [2, 1], [1, 2]]; // plus pentomino (5)
+const RING12 = R(4, 4).filter(([x, y]) => !((x === 0 || x === 3) && (y === 0 || y === 3)));
 
-// Default/minimum zoom is a true "cover" fit — scale by whichever of
-// width/height needs the bigger multiplier so BOTH dimensions are fully
-// covered edge-to-edge (no letterboxed gaps on the sides, ever), same as
-// CSS background-size:cover. The map art is proportionally wider than a
-// phone screen, so height is normally the binding dimension — the bottom
-// of the art running under the footer chrome (tip card, tax/mana buttons,
-// tab bar) is expected and fine; the width filling the frame edge-to-edge
-// matters more than every building staying clear of the menus. Takes the
-// actual measured viewport (not a module-level constant) so it stays
-// correct if that viewport is resized — e.g. DeviceFrame reflowing when a
-// browser window is resized.
-function fitScaleFor(viewW, viewH) {
-  return Math.max(viewW / MAP_W, viewH / MAP_H);
-}
-const MAX_SCALE = 1.4;
-const SCALE_STEP = 0.15;
-
-// Pan bounds shrink/grow with zoom. RN's `scale` transform pivots around the
-// element's own CENTER (not its top-left corner), so a scaled canvas's true
-// on-screen edges are offset from where a naive translate-only calculation
-// would put them — by size*(1-scale)/2 on each side. This accounts for that
-// offset directly, so pan.x/pan.y's neutral resting bound is no longer
-// always 0 once scale != 1.
-function panBounds(scale, viewW, viewH) {
-  const offsetX = (MAP_W - MAP_W * scale) / 2;
-  const offsetY = (MAP_H - MAP_H * scale) / 2;
-  const contentW = MAP_W * scale;
-  const contentH = MAP_H * scale;
-
-  let minX, maxX;
-  if (contentW <= viewW) {
-    minX = maxX = (viewW - contentW) / 2 - offsetX;
-  } else {
-    maxX = -offsetX;
-    minX = viewW - offsetX - contentW;
-  }
-
-  // Y is always top-anchored, never centered — fitScaleFor already leaves
-  // the natural gap (if any) below the image, clear of the footer chrome,
-  // so there's nothing to gain from centering it into that gap too.
-  const maxY = -offsetY;
-  const minY = contentH <= viewH ? maxY : viewH - offsetY - contentH;
-
-  return { minX, maxX, minY, maxY };
-}
-
-const TIER_COLORS = {
-  lenient: colors.success,
-  standard: colors.info,
-  heavy: colors.warning,
-  extortion: colors.danger,
+// Level-based: shape per growth tier (levels 1-3 / 4-6 / 7+).
+// Quantity-based: ONE shape — every unit owned places another copy.
+const SHAPES = {
+  town_center: [R(2, 2), R(3, 3), R(4, 4)],
+  barracks: [L4, R(2, 3), R(3, 3)],
+  bank: [T4, R(2, 3), R(3, 3)],
+  mana_core: [PLUS5, R(3, 3), RING12],
+  altar: [R(1, 2), T4, PLUS5],
+  // One tile per unit owned — the sprawl of many small plots IS the farm
+  // district; shapes stay reserved for the big singleton structures.
+  farm: [R(1, 1)],
+  field_camp: [R(1, 1)],
 };
 
-// Each building gets two independently positioned overlays on top of the
-// painted art: a "hotspot" (a big invisible/dashed-in-edit-mode tap zone
-// sized to cover the building itself) and a "label" (the visible icon+name
-// plaque). They're separate because the label needs to stay small and
-// readable near the building while the hotspot wants to be big and roughly
-// match the building's actual silhouette — dragging one shouldn't move the
-// other. Both default to centering on the POI's tuned x/y; a user can then
-// drag (and, for the hotspot, resize) either one in edit mode, persisted via
-// services/mapLayout.js.
-const DEFAULT_HS_W = 190;
-const DEFAULT_HS_H = 230;
-const MIN_HS = 60;
-
-function defaultLayoutFor(poi) {
-  return {
-    hs: { x: poi.x, y: poi.y, w: DEFAULT_HS_W, h: DEFAULT_HS_H },
-    lbl: { x: poi.x, y: poi.y },
-  };
-}
-
-function defaultLayout(pois) {
-  const out = {};
-  pois.forEach((p) => { out[p.key] = defaultLayoutFor(p); });
+function rotateCells(cells, rot) {
+  let out = cells;
+  for (let i = 0; i < ((rot % 4) + 4) % 4; i++) {
+    // 90° clockwise, then normalize back to origin.
+    const rotated = out.map(([x, y]) => [-y, x]);
+    const minX = Math.min(...rotated.map(([x]) => x));
+    const minY = Math.min(...rotated.map(([, y]) => y));
+    out = rotated.map(([x, y]) => [x - minX, y - minY]);
+  }
   return out;
 }
 
-function EditablePOI({ poi, entry, scale, editMode, onChange, onPress }) {
-  const { hs, lbl } = entry;
+const boundsOf = (cells) => ({
+  w: Math.max(...cells.map(([x]) => x)) + 1,
+  h: Math.max(...cells.map(([, y]) => y)) + 1,
+});
 
-  const hsDragStart = useRef({ x: hs.x, y: hs.y });
-  const hsSizeStart = useRef({ w: hs.w, h: hs.h });
-  const lblDragStart = useRef({ x: lbl.x, y: lbl.y });
+/* ── structure config ─────────────────────────────────────────────── */
 
-  const hsMoveResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) + Math.abs(g.dy) > 4,
-      onPanResponderGrant: () => { hsDragStart.current = { x: hs.x, y: hs.y }; },
-      onPanResponderMove: (_, g) => {
-        onChange(poi.key, "hs", {
-          x: hsDragStart.current.x + g.dx / scale,
-          y: hsDragStart.current.y + g.dy / scale,
-        });
-      },
-    })
-  ).current;
+const STRUCT_META = {
+  town_center: { color: colors.gold, emoji: "🏰" },
+  barracks: { color: colors.danger, emoji: "⚔️" },
+  bank: { color: colors.warning, emoji: "🏦" },
+  mana_core: { color: colors.info, emoji: "🔮" },
+  altar: { color: colors.arcane, emoji: "⛩️" },
+  farm: { color: colors.success, emoji: "🌾" },
+  field_camp: { color: colors.warning, emoji: "⛺" },
+};
 
-  const hsResizeResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => { hsSizeStart.current = { w: hs.w, h: hs.h }; },
-      onPanResponderMove: (_, g) => {
-        onChange(poi.key, "hs", {
-          w: Math.max(MIN_HS, hsSizeStart.current.w + (g.dx / scale) * 2),
-          h: Math.max(MIN_HS, hsSizeStart.current.h + (g.dy / scale) * 2),
-        });
-      },
-    })
-  ).current;
+const OPEN_NAV = {
+  town_center: { nav: ["Kingdom", { subTab: "town_center" }], label: "🏰 Govern" },
+  barracks: { nav: ["Army", { subTab: "recruit" }], label: "📯 Recruit" },
+  bank: { nav: ["Home", { subTab: "tax" }], label: "💰 Collect Tax" },
+  mana_core: { nav: ["Home", { subTab: "mana" }], label: "🔮 Release Mana" },
+  altar: { nav: ["Magic", { subTab: "research" }], label: "✨ Research" },
+  farm: { nav: ["Kingdom", { subTab: "farm" }], label: "🌾 Manage" },
+  field_camp: { nav: ["Army", { subTab: "defense" }], label: "🛡 Defense" },
+};
 
-  const lblMoveResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) + Math.abs(g.dy) > 4,
-      onPanResponderGrant: () => { lblDragStart.current = { x: lbl.x, y: lbl.y }; },
-      onPanResponderMove: (_, g) => {
-        onChange(poi.key, "lbl", {
-          x: lblDragStart.current.x + g.dx / scale,
-          y: lblDragStart.current.y + g.dy / scale,
-        });
-      },
-    })
-  ).current;
+const RES_ICON = { gold: "💰", mana: "🔮", food: "🍖", army_capacity: "👥" };
 
-  const hsBoxStyle = { position: "absolute", left: hs.x - hs.w / 2, top: hs.y - hs.h / 2, width: hs.w, height: hs.h };
-  const lblBoxStyle = { position: "absolute", left: lbl.x - 95, top: lbl.y - 22, width: 190 };
-
-  if (editMode) {
-    return (
-      <>
-        <View {...hsMoveResponder.panHandlers} style={[hsBoxStyle, styles.hotspotEdit]}>
-          <Text style={styles.hotspotTag} numberOfLines={1}>{poi.label} · link</Text>
-          <View {...hsResizeResponder.panHandlers} style={styles.resizeHandle} />
-        </View>
-        <View {...lblMoveResponder.panHandlers} style={lblBoxStyle}>
-          <View style={[styles.poiPlaque, styles.poiPlaqueEdit]}>
-            <Text style={styles.poiPlaqueIcon}>{poi.icon}</Text>
-            <Text style={styles.poiLabel}>{poi.label}</Text>
-          </View>
-        </View>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <TouchableOpacity style={hsBoxStyle} activeOpacity={0.7} onPress={onPress} />
-      <PressableScale scaleTo={0.92} containerStyle={lblBoxStyle} style={styles.poiInner} onPress={onPress}>
-        <View style={styles.poiPlaque}>
-          <Text style={styles.poiPlaqueIcon}>{poi.icon}</Text>
-          <Text style={styles.poiLabel}>{poi.label}</Text>
-        </View>
-      </PressableScale>
-    </>
-  );
+function tierOf(s) {
+  const lvl = s.user_structure?.level || 0;
+  return lvl >= 7 ? 2 : lvl >= 4 ? 1 : 0;
 }
 
-export default function KingdomMapScreen({ navigation }) {
-  const [player, setPlayer] = useState(null);
-  const [unread, setUnread] = useState(0);
+function shapeFor(s) {
+  const set = SHAPES[s.slug] || [R(1, 1)];
+  return s.level_based ? set[Math.min(tierOf(s), set.length - 1)] : set[0];
+}
 
-  // The viewport this screen actually renders into — measured via onLayout
-  // on the root container below, not assumed from the raw window (see
-  // components/DeviceFrame.js, which may give it a smaller bordered box on
-  // web). INITIAL_W/H is only a same-frame guess for the instant before
-  // the first layout callback fires.
-  const [viewSize, setViewSize] = useState({ w: INITIAL_W, h: INITIAL_H });
-  const viewSizeRef = useRef(viewSize);
-  const fitScale = fitScaleFor(viewSize.w, viewSize.h);
+function isOwned(s) {
+  const us = s.user_structure;
+  if (!us) return false;
+  return s.level_based ? us.level > 0 : (us.quantity || 0) > 0;
+}
 
-  const [scale, setScale] = useState(fitScale);
-  const scaleAnim = useRef(new Animated.Value(fitScale)).current;
-  const scaleRef = useRef(fitScale);
+// Every placeable building on the map. Level-based structures are one
+// instance; quantity-based get one per unit owned.
+function instancesOf(structures) {
+  const out = [];
+  structures.forEach((s) => {
+    if (s.level_based) {
+      if (isOwned(s)) out.push({ id: s.slug, s });
+    } else {
+      const qty = s.user_structure?.quantity || 0;
+      for (let i = 0; i < qty; i++) out.push({ id: `${s.slug}#${i}`, s });
+    }
+  });
+  return out;
+}
 
-  function handleContainerLayout(e) {
-    const { width, height } = e.nativeEvent.layout;
-    if (!width || !height) return;
-    if (viewSizeRef.current.w === width && viewSizeRef.current.h === height) return;
-    viewSizeRef.current = { w: width, h: height };
-    setViewSize({ w: width, h: height });
+function productionText(s) {
+  const entries = s.production ? Object.entries(s.production) : [];
+  if (entries.length === 0) return null;
+  return entries.map(([k, v]) => `${RES_ICON[k] || k} +${v}${s.level_based ? "/lvl" : ""}`).join("  ");
+}
 
-    // Re-home the camera to the top-anchored default fit for the new size —
-    // covers both the very first real measurement (correcting the initial
-    // guess) and later resizes (a browser window drag, a rotated device),
-    // so the view is never left zoomed/panned outside the new bounds.
-    const fit = fitScaleFor(width, height);
-    const { minX, maxX, maxY } = panBounds(fit, width, height);
-    scaleRef.current = fit;
-    setScale(fit);
-    scaleAnim.setValue(fit);
-    pan.setValue({ x: (minX + maxX) / 2, y: maxY });
-  }
+/* ── grid math ────────────────────────────────────────────────────── */
 
-  // Building hotspot/label positions — user-editable, persisted across
-  // sessions (see EditablePOI above). Loaded async so the first paint uses
-  // the tuned defaults and never flashes/jumps once the saved layout lands.
-  const [editMode, setEditMode] = useState(false);
-  const [layout, setLayout] = useState(() => defaultLayout(POIS));
-  const layoutLoadedRef = useRef(false);
+const tileOwned = (r, c, side, land) => r * side + c < land;
 
-  useEffect(() => {
-    (async () => {
-      const saved = await loadMapLayout();
-      if (saved) {
-        setLayout((prev) => {
-          const merged = {};
-          POIS.forEach((p) => {
-            merged[p.key] = {
-              hs: { ...prev[p.key].hs, ...(saved[p.key]?.hs || {}) },
-              lbl: { ...prev[p.key].lbl, ...(saved[p.key]?.lbl || {}) },
-            };
-          });
-          return merged;
-        });
+function cellsFit(absCells, side, land, occupied, ignoreId) {
+  return absCells.every(([c, r]) => {
+    if (c < 0 || r < 0 || c >= side || r >= side) return false;
+    if (!tileOwned(r, c, side, land)) return false;
+    const holder = occupied[`${r}:${c}`];
+    return !holder || holder === ignoreId;
+  });
+}
+
+const absCellsOf = (shape, rot, x, y) => rotateCells(shape, rot).map(([cx, cy]) => [cx + x, cy + y]);
+
+function occupancyOf(placements, byId) {
+  const map = {};
+  Object.entries(placements).forEach(([id, p]) => {
+    const inst = byId[id];
+    if (!inst) return;
+    absCellsOf(shapeFor(inst.s), p.rot, p.x, p.y).forEach(([c, r]) => {
+      map[`${r}:${c}`] = id;
+    });
+  });
+  return map;
+}
+
+// Keep stored spots that still fit, auto-relocate the rest (biggest
+// first, trying all four rotations), report the truly homeless.
+function resolveLayout(instances, side, land, stored) {
+  const byId = Object.fromEntries(instances.map((i) => [i.id, i]));
+  const placements = {};
+  const displaced = [];
+  const ordered = [...instances].sort((a, b) => shapeFor(b.s).length - shapeFor(a.s).length);
+
+  ordered.forEach(({ id, s }) => {
+    const pos = stored?.[id];
+    if (!pos) return;
+    const rot = pos.rot || 0;
+    const occ = occupancyOf(placements, byId);
+    if (cellsFit(absCellsOf(shapeFor(s), rot, pos.x, pos.y), side, land, occ, null)) {
+      placements[id] = { x: pos.x, y: pos.y, rot };
+    }
+  });
+  ordered.forEach(({ id, s }) => {
+    if (placements[id]) return;
+    const shape = shapeFor(s);
+    let found = null;
+    for (let rot = 0; rot < 4 && !found; rot++) {
+      const { w, h } = boundsOf(rotateCells(shape, rot));
+      for (let y = 0; y <= side - h && !found; y++) {
+        for (let x = 0; x <= side - w && !found; x++) {
+          if (cellsFit(absCellsOf(shape, rot, x, y), side, land, occupancyOf(placements, byId), null)) {
+            found = { x, y, rot };
+          }
+        }
       }
-      layoutLoadedRef.current = true;
-    })();
+    }
+    if (found) placements[id] = found;
+    else displaced.push(id);
+  });
+  return { placements, displaced };
+}
+
+/* ── screen ───────────────────────────────────────────────────────── */
+
+export default function KingdomMapScreen({ navigation }) {
+  const { showAlert } = useModal();
+  const [town, setTown] = useState(null);
+  const [stored, setStored] = useState(null); // persisted {id: {x,y,rot}}
+  const [viewSize, setViewSize] = useState({ w: INITIAL_W, h: INITIAL_H });
+  const [selected, setSelected] = useState(null); // instance id
+  const [moveMode, setMoveMode] = useState(null); // {id, slug, shape, rot, x, y, isNewBuild, structureId, prevQty}
+  const [buildOpen, setBuildOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const [res, layout] = await Promise.all([api.getTown(), loadMapLayout()]);
+      setTown(res);
+      setStored(layout?.positions || {});
+    } catch (e) {
+      if (e.message !== "UNAUTHORIZED") showAlert("Error", e.message);
+    }
   }, []);
 
-  // Debounced autosave — skips the initial default-layout render so it
-  // never overwrites a saved layout before loadMapLayout() has resolved.
-  useEffect(() => {
-    if (!layoutLoadedRef.current) return;
-    const t = setTimeout(() => { saveMapLayout(layout); }, 400);
-    return () => clearTimeout(t);
-  }, [layout]);
-
-  function handleLayoutChange(key, kind, patch) {
-    setLayout((prev) => ({ ...prev, [key]: { ...prev[key], [kind]: { ...prev[key][kind], ...patch } } }));
-  }
-
-  function handleResetLayout() {
-    const fresh = defaultLayout(POIS);
-    setLayout(fresh);
-    clearMapLayout();
-  }
-
-  function zoomBy(delta) {
-    const { w: viewW, h: viewH } = viewSizeRef.current;
-    const minScale = fitScaleFor(viewW, viewH);
-    const next = clamp(Math.round((scaleRef.current + delta) * 100) / 100, minScale, MAX_SCALE);
-    if (next === scaleRef.current) return;
-    scaleRef.current = next;
-    setScale(next);
-    Animated.spring(scaleAnim, { toValue: next, speed: 14, bounciness: 4, useNativeDriver: Platform.OS !== "web" }).start();
-
-    // Re-clamp the current pan into the new zoom level's bounds so the
-    // camera never ends up parked outside the (now smaller/larger) map.
-    const { minX, maxX, minY, maxY } = panBounds(next, viewW, viewH);
-    pan.stopAnimation((v) => {
-      const clampedX = clamp(v.x, minX, maxX);
-      const clampedY = clamp(v.y, minY, maxY);
-      if (clampedX !== v.x || clampedY !== v.y) {
-        Animated.spring(pan, { toValue: { x: clampedX, y: clampedY }, speed: 14, bounciness: 0, useNativeDriver: Platform.OS !== "web" }).start();
-      }
-    });
-  }
-
-  // Middle zoom-bar button: snap back to the default top-anchored fit view
-  // — a quick "where am I" recenter.
-  function resetView() {
-    const { w: viewW, h: viewH } = viewSizeRef.current;
-    const fit = fitScaleFor(viewW, viewH);
-    const { minX, maxX, maxY } = panBounds(fit, viewW, viewH);
-    scaleRef.current = fit;
-    setScale(fit);
-    Animated.spring(scaleAnim, { toValue: fit, speed: 14, bounciness: 4, useNativeDriver: Platform.OS !== "web" }).start();
-    Animated.spring(pan, { toValue: { x: (minX + maxX) / 2, y: maxY }, speed: 10, bounciness: 0, useNativeDriver: Platform.OS !== "web" }).start();
-  }
-
-  // Quick-action popups: null | "tax" | "mana"
-  const [actionModal, setActionModal] = useState(null);
-  const [treasury, setTreasury] = useState(null);
-  const [actionResult, setActionResult] = useState(null);
-  const [now, setNow] = useState(Date.now());
-
-  // 1s clock for the tax cooldown countdown while a popup is open
-  useEffect(() => {
-    if (!actionModal) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [actionModal]);
-
-  // Start pinned to the TOP of the image (never crop the top) and centered
-  // horizontally. maxY from panBounds is exactly the pan value that puts
-  // the image's top edge at the viewport's top edge (see panBounds's
-  // comment on the center-pivot scale offset) — whatever doesn't fit
-  // vertically is cropped off the bottom, and a taller viewport naturally
-  // shows more of it since less needs to be cropped.
-  const { minX: startMinX, maxX: startMaxX, maxY: startMaxY } = panBounds(fitScale, viewSize.w, viewSize.h);
-  const startX = (startMinX + startMaxX) / 2;
-  const startY = startMaxY;
-  const pan = useRef(new Animated.ValueXY({ x: startX, y: startY })).current;
-  const panStart = useRef({ x: startX, y: startY });
-
-  const panResponder = useRef(
-    PanResponder.create({
-      // Only claim the gesture once it's clearly a drag, so plaque taps work.
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) + Math.abs(g.dy) > 8,
-      onPanResponderGrant: () => {
-        pan.stopAnimation((v) => { panStart.current = v; });
-      },
-      onPanResponderMove: (_, g) => {
-        const { minX, maxX, minY, maxY } = panBounds(scaleRef.current, viewSizeRef.current.w, viewSizeRef.current.h);
-        pan.setValue({
-          x: clamp(panStart.current.x + g.dx, minX, maxX),
-          y: clamp(panStart.current.y + g.dy, minY, maxY),
-        });
-      },
-      onPanResponderRelease: (_, g) => {
-        // A touch of glide, clamped to the map bounds.
-        const { minX, maxX, minY, maxY } = panBounds(scaleRef.current, viewSizeRef.current.w, viewSizeRef.current.h);
-        const toX = clamp(panStart.current.x + g.dx + g.vx * 120, minX, maxX);
-        const toY = clamp(panStart.current.y + g.dy + g.vy * 120, minY, maxY);
-        Animated.spring(pan, {
-          toValue: { x: toX, y: toY },
-          speed: 8,
-          bounciness: 0,
-          useNativeDriver: Platform.OS !== "web",
-        }).start();
-      },
-    })
-  ).current;
-
-  useFocusEffect(
-    useCallback(() => {
-      (async () => {
-        try {
-          const d = await api.getDashboard();
-          setPlayer(d.player);
-          setUnread(d.unread_notifications || 0);
-        } catch (e) {}
-      })();
-    }, [])
-  );
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   function go([tab, params]) {
-    // The game sections live inside the nested tab navigator, so from this
-    // root-stack screen we must address them through the MainTabs route.
     navigation.navigate("MainTabs", { screen: tab, params });
   }
 
-  async function refreshEconomy() {
-    try {
-      const [t, d] = await Promise.all([api.getTreasury(), api.getDashboard()]);
-      setTreasury(t);
-      setPlayer(d.player);
-    } catch (e) {}
+  const structures = town?.structures || [];
+  const land = Math.max(1, town?.land || 1);
+  const freeLand = town?.free_land || 0;
+  const side = Math.max(6, Math.ceil(Math.sqrt(land)));
+
+  const instances = useMemo(() => instancesOf(structures), [town]);
+  const byId = useMemo(() => Object.fromEntries(instances.map((i) => [i.id, i])), [instances]);
+
+  const { placements, displaced } = useMemo(
+    () => (town ? resolveLayout(instances, side, land, stored) : { placements: {}, displaced: [] }),
+    [town, instances, side, land, stored]
+  );
+
+  async function persist(nextPositions) {
+    setStored(nextPositions);
+    await saveMapLayout({ positions: nextPositions });
   }
 
-  function openAction(kind) {
-    setActionResult(null);
-    setActionModal(kind);
-    refreshEconomy();
-  }
+  /* geometry */
+  const gridAreaW = viewSize.w - 14;
+  const gridAreaH = viewSize.h - TOP_OFFSET - BOTTOM_DOCK - 56;
+  const tile = Math.max(8, Math.floor(Math.min(gridAreaW / side, gridAreaH / side)));
+  const gridPx = tile * side;
+  const gridLeft = (viewSize.w - gridPx) / 2;
 
-  async function handleTax(tier) {
-    try {
-      const result = await api.collectTax(tier);
-      setActionResult({ ok: true, text: result.message });
-      await refreshEconomy();
-    } catch (e) {
-      setActionResult({ ok: false, text: e.message });
+  /* interactions */
+
+  // RN-web press events don't reliably carry locationX/locationY, so tile
+  // coordinates come from pageX/pageY minus the grid's measured window
+  // origin (which also handles DeviceFrame's offset on web).
+  const gridRef = useRef(null);
+  const gridOriginRef = useRef({ x: 0, y: 0 });
+  const measureGrid = useCallback(() => {
+    requestAnimationFrame(() => {
+      gridRef.current?.measureInWindow?.((x, y) => {
+        if (Number.isFinite(x) && Number.isFinite(y)) gridOriginRef.current = { x, y };
+      });
+    });
+  }, []);
+
+  function onGridPress(event) {
+    const ne = event.nativeEvent;
+    let lx = ne.locationX;
+    let ly = ne.locationY;
+    if (Platform.OS === "web" || !Number.isFinite(lx) || !Number.isFinite(ly)) {
+      lx = ne.pageX - gridOriginRef.current.x;
+      ly = ne.pageY - gridOriginRef.current.y;
     }
-  }
-
-  async function handleChannelMana() {
-    try {
-      const result = await api.rechargeMana();
-      setActionResult({ ok: true, text: result.message });
-      await refreshEconomy();
-    } catch (e) {
-      setActionResult({ ok: false, text: e.message });
+    const c = Math.floor(lx / tile);
+    const r = Math.floor(ly / tile);
+    if (c < 0 || r < 0 || c >= side || r >= side) return;
+    if (moveMode) {
+      const { w, h } = boundsOf(rotateCells(moveMode.shape, moveMode.rot));
+      const x = Math.min(Math.max(c - Math.floor(w / 2), 0), side - w);
+      const y = Math.min(Math.max(r - Math.floor(h / 2), 0), side - h);
+      setMoveMode({ ...moveMode, x, y });
+      return;
     }
+    const occ = occupancyOf(placements, byId);
+    setSelected(occ[`${r}:${c}`] || null);
   }
 
-  /* ── quick-action popup content ── */
+  function rotateGhost() {
+    if (!moveMode) return;
+    const rot = (moveMode.rot + 1) % 4;
+    const { w, h } = boundsOf(rotateCells(moveMode.shape, rot));
+    setMoveMode({
+      ...moveMode,
+      rot,
+      x: Math.min(moveMode.x, side - w),
+      y: Math.min(moveMode.y, side - h),
+    });
+  }
 
-  function renderTaxModal() {
-    const t = treasury;
-    const cooldownMs = t?.tax_cooldown ? new Date(t.tax_cooldown).getTime() - now : 0;
-    const onCooldown = cooldownMs > 0;
+  function startMove(id) {
+    const inst = byId[id];
+    if (!inst) return;
+    const p = placements[id] || { x: 0, y: 0, rot: 0 };
+    setSelected(null);
+    setMoveMode({ id, slug: inst.s.slug, shape: shapeFor(inst.s), rot: p.rot || 0, x: p.x, y: p.y, isNewBuild: false });
+  }
 
+  function startBuild(s) {
+    setBuildOpen(false);
+    const shape = s.level_based ? (SHAPES[s.slug] || [R(1, 1)])[0] : shapeFor(s);
+    const prevQty = s.user_structure?.quantity || 0;
+    const id = s.level_based ? s.slug : `${s.slug}#${prevQty}`;
+    const { w, h } = boundsOf(shape);
+    setMoveMode({
+      id,
+      slug: s.slug,
+      shape,
+      rot: 0,
+      x: Math.max(0, Math.floor((side - w) / 2)),
+      y: Math.max(0, Math.floor((side - h) / 2)),
+      isNewBuild: true,
+      structureId: s.id,
+    });
+  }
+
+  const moveValid = moveMode
+    ? cellsFit(
+        absCellsOf(moveMode.shape, moveMode.rot, moveMode.x, moveMode.y),
+        side,
+        land,
+        occupancyOf(placements, byId),
+        moveMode.isNewBuild ? null : moveMode.id
+      )
+    : false;
+
+  async function confirmMove() {
+    if (!moveMode || !moveValid) return;
+    const { id, x, y, rot, isNewBuild, structureId } = moveMode;
+    if (isNewBuild) {
+      try {
+        await api.buildStructure(structureId);
+      } catch (e) {
+        showAlert("Can't Build", e.message);
+        setMoveMode(null);
+        return;
+      }
+    }
+    await persist({ ...(stored || {}), [id]: { x, y, rot } });
+    setMoveMode(null);
+    if (isNewBuild) load();
+  }
+
+  /* render */
+
+  if (!town) {
     return (
-      <>
-        <Text style={styles.modalTitle}>💰 Collect Taxes</Text>
-        <Text style={styles.modalInfo}>
-          Squeeze gold from your subjects. Heavier rates yield more but lock the
-          coffers longer — your Town Center and gold production set the base amount.
-        </Text>
-
-        <View style={styles.modalStatRow}>
-          <Text style={styles.modalStat}>Treasury: <Text style={styles.modalStatVal}>💰 {Number(t?.gold ?? 0).toLocaleString()}</Text></Text>
-          <Text style={styles.modalStat}>Base take: <Text style={styles.modalStatVal}>{Number(t?.taxable_amount ?? 0).toLocaleString()}</Text></Text>
-        </View>
-
-        {onCooldown ? (
-          <View style={styles.cooldownBox}>
-            <Text style={styles.cooldownTxt}>⏳ Collectors are resting — ready in {formatCountdown(cooldownMs / 1000)}</Text>
-          </View>
-        ) : (
-          t?.tax_rates &&
-          Object.entries(t.tax_rates).map(([tier, cfg]) => {
-            const color = TIER_COLORS[tier] || colors.muted;
-            const amount = Math.round((t.taxable_amount || 0) * (cfg.multiplier || 1));
-            const cdHrs = cfg.cooldown ? Math.round(cfg.cooldown / 3600) : 0;
-            return (
-              <LoadingButton key={tier} style={[styles.tierBtn, { borderColor: color }]} onPress={() => handleTax(tier)}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.tierName, { color }]}>{cfg.label || tier}</Text>
-                  <Text style={styles.tierMeta}>{cdHrs >= 1 ? `${cdHrs}h cooldown` : "short cooldown"}</Text>
-                </View>
-                <Text style={styles.tierAmount}>+{amount.toLocaleString()} 💰</Text>
-              </LoadingButton>
-            );
-          })
-        )}
-      </>
+      <View style={styles.root}>
+        <LoadingState />
+      </View>
     );
   }
 
-  function renderManaModal() {
-    const t = treasury;
-    const charge = t?.mana_charge ?? 0;
-    const net = t?.net_mana_potential ?? 0;
-    const baseYield = Math.floor(net * 0.6 * charge);
-    const bonusYield = Math.floor(net * 0.4 * charge * charge);
-    const projected = baseYield + bonusYield;
-    const pct = Math.round(charge * 100);
+  const cells = [];
+  for (let r = 0; r < side; r++) {
+    for (let c = 0; c < side; c++) {
+      const ownedTile = tileOwned(r, c, side, land);
+      const checker = (r + c) % 2 === 0;
+      cells.push(
+        <View
+          key={`${r}:${c}`}
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: c * tile,
+            top: r * tile,
+            width: tile,
+            height: tile,
+            backgroundColor: ownedTile ? (checker ? "#31672f" : "#2b5c2a") : checker ? "#1b3a1e" : "#183319",
+          }}
+        >
+          {!ownedTile && (r * 7 + c * 3) % 4 === 0 && (
+            <Text style={{ fontSize: Math.max(8, tile * 0.55), textAlign: "center", opacity: 0.55 }}>🌲</Text>
+          )}
+        </View>
+      );
+    }
+  }
 
+  const selectedInst = selected ? byId[selected] : null;
+  const movingStruct = moveMode ? structures.find((s) => s.slug === moveMode.slug) : null;
+
+  // Build list: level-based only while unbuilt (they upgrade in place);
+  // quantity-based ALWAYS — each build drops another copy on the grid.
+  const buildable = structures.filter((s) => (s.level_based ? !isOwned(s) : true));
+
+  function renderShape({ key, s, x, y, rot, dim, highlight, ghost, ghostValid }) {
+    const meta = STRUCT_META[s.slug] || { color: colors.accent, emoji: "🏗️" };
+    const shapeCells = rotateCells(shapeFor(s), rot || 0);
+    const { w, h } = boundsOf(shapeCells);
+    const color = ghost ? (ghostValid ? colors.success : colors.danger) : meta.color;
+    const img = ghost ? null : structureImage(s.slug, s.level_based ? tierOf(s) : 0);
+    const artPx = Math.min(w, h) * tile * 0.9;
+    const badge = !ghost && s.level_based ? `L${s.user_structure?.level || 0}` : null;
     return (
-      <>
-        <Text style={styles.modalTitle}>🔮 Channel Mana</Text>
-        <Text style={styles.modalInfo}>
-          Your Mana Core charges over ~4 hours. Release it to bank the mana —
-          waiting for a fuller charge pays a growing bonus, but an overloaded
-          core risks nothing extra. Upkeep drains what your army and spells consume.
-        </Text>
-
-        <View style={styles.chargeRow}>
-          <Text style={styles.modalStat}>Battery charge</Text>
-          <Text style={[styles.modalStatVal, { color: pct >= 75 ? colors.warning : colors.info }]}>{pct}%</Text>
+      <View
+        key={key}
+        pointerEvents="none"
+        style={{ position: "absolute", left: x * tile, top: y * tile, width: w * tile, height: h * tile, opacity: dim ? 0.25 : 1, zIndex: ghost ? 20 : 4 }}
+      >
+        {shapeCells.map(([cx, cy], i) => (
+          <View
+            key={i}
+            style={{
+              position: "absolute",
+              left: cx * tile,
+              top: cy * tile,
+              width: tile,
+              height: tile,
+              backgroundColor: alpha(color, ghost ? "40" : "38"),
+              borderWidth: ghost ? 2 : 1.5,
+              borderColor: highlight ? colors.white : alpha(color, ghost ? "ff" : "cc"),
+              borderStyle: ghost ? "dashed" : "solid",
+              borderRadius: 3,
+            }}
+          />
+        ))}
+        <View style={{ position: "absolute", left: 0, top: 0, width: w * tile, height: h * tile, alignItems: "center", justifyContent: "center" }}>
+          {img ? (
+            <Image source={img} resizeMode="contain" style={{ width: artPx, height: artPx }} />
+          ) : (
+            <Text style={{ fontSize: Math.max(10, artPx * 0.55), opacity: ghost ? 0.8 : 1 }}>{meta.emoji}</Text>
+          )}
         </View>
-        <ProgressBar percent={pct} color={pct >= 75 ? colors.warning : colors.info} height={9} style={{ marginBottom: 10 }} />
-
-        <View style={styles.modalStatRow}>
-          <Text style={styles.modalStat}>Mana: <Text style={styles.modalStatVal}>🔮 {Number(t?.mana ?? 0).toLocaleString()}</Text></Text>
-          <Text style={styles.modalStat}>
-            Projected: <Text style={[styles.modalStatVal, { color: projected >= 0 ? colors.success : colors.danger }]}>
-              {projected >= 0 ? "+" : ""}{projected.toLocaleString()}
-            </Text>
-          </Text>
-        </View>
-
-        <LoadingButton style={styles.channelBtn} onPress={handleChannelMana}>
-          <Text style={styles.channelTxt}>🔮 Release the Charge</Text>
-        </LoadingButton>
-      </>
+        {badge && (
+          <View style={[styles.badge, { backgroundColor: meta.color }]}>
+            <Text style={styles.badgeTxt}>{badge}</Text>
+          </View>
+        )}
+        {!ghost && s.user_structure?.burning && <Text style={styles.fire}>🔥</Text>}
+      </View>
     );
   }
 
   return (
-    <View style={styles.container} onLayout={handleContainerLayout}>
-      {/* ── PANNABLE / ZOOMABLE MAP ── */}
-      <View style={styles.viewport} {...(editMode ? {} : panResponder.panHandlers)}>
-        <Animated.View
-          style={[
-            styles.canvas,
-            { transform: [{ translateX: pan.x }, { translateY: pan.y }, { scale: scaleAnim }] },
-          ]}
-        >
-          <Image source={art.kingdomBackground} resizeMode="cover" style={styles.mapArt} />
-
-          {POIS.map((p) => (
-            <EditablePOI
-              key={p.key}
-              poi={p}
-              entry={layout[p.key]}
-              scale={scale}
-              editMode={editMode}
-              onChange={handleLayoutChange}
-              onPress={() => go(p.nav)}
-            />
-          ))}
-        </Animated.View>
+    <View style={styles.root}>
+      {/* controls row (below the transparent universal header) */}
+      <View style={styles.controls}>
+        <View style={styles.landChip}>
+          <Text style={styles.landChipTxt}>🏔 {freeLand} free / {land} land</Text>
+        </View>
+        <View style={{ flex: 1 }} />
+        {!moveMode && (
+          <TouchableOpacity style={styles.buildBtn} onPress={() => setBuildOpen(true)} activeOpacity={0.85}>
+            <Text style={styles.buildBtnTxt}>🔨 Build</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* bottom vignette — fades the map into the footer HUD instead of
-          buildings clipping abruptly behind it (fixed to the screen, not
-          the pannable canvas). */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={["transparent", alpha(colors.bg, "dd"), colors.bg]}
-        locations={[0, 0.45, 0.72]}
-        style={styles.bottomScrim}
-      />
-
-      {/* zoom controls — one image, three overlaid tap zones (+ / reset / −) */}
-      <View style={styles.zoomStack} pointerEvents="box-none">
-        <Image source={art.zoomBar} style={styles.zoomBarImg} resizeMode="contain" />
-        <TouchableOpacity
-          style={styles.zoomHitIn}
-          onPress={() => zoomBy(SCALE_STEP)}
-          disabled={scale >= MAX_SCALE}
-        />
-        <TouchableOpacity style={styles.zoomHitReset} onPress={resetView} />
-        <TouchableOpacity
-          style={styles.zoomHitOut}
-          onPress={() => zoomBy(-SCALE_STEP)}
-          disabled={scale <= fitScale}
-        />
-      </View>
-
-      {/* ── FIXED HUD ── */}
-      {/* top: resources */}
-      <View style={styles.hudTop} pointerEvents="box-none">
-        <View style={styles.currencyBar}>
-          <Image source={art.currencyTop} style={styles.currencyBarImg} resizeMode="stretch" />
-          <View style={styles.currencySlots} pointerEvents="none">
-            <View style={styles.currencySlot}>
-              <Image source={art.coinIcon} style={styles.currencyIcon} resizeMode="contain" />
-              <Text style={styles.currencyVal}>{player ? Number(player.gold).toLocaleString() : "—"}</Text>
-            </View>
-            <View style={styles.currencySlot}>
-              <Image source={art.manaIcon} style={styles.currencyIcon} resizeMode="contain" />
-              <Text style={[styles.currencyVal, { color: colors.info }]}>{player ? Number(player.mana).toLocaleString() : "—"}</Text>
-            </View>
-            <View style={styles.currencySlot}>
-              <Image source={art.diamondIcon} style={styles.currencyIcon} resizeMode="contain" />
-              <Text style={[styles.currencyVal, { color: "#5fb8ff" }]}>0</Text>
-            </View>
+      {/* the land grid */}
+      <View
+        ref={gridRef}
+        onLayout={measureGrid}
+        style={{ position: "absolute", top: TOP_OFFSET + 46, left: gridLeft, width: gridPx, height: gridPx }}
+      >
+        <Pressable onPress={onGridPress} style={{ width: gridPx, height: gridPx }}>
+          <View pointerEvents="none" style={styles.gridFrame}>
+            {cells}
+            {instances.map(({ id, s }) => {
+              const p = placements[id];
+              if (!p) return null;
+              return renderShape({
+                key: id,
+                s,
+                x: p.x,
+                y: p.y,
+                rot: p.rot,
+                dim: moveMode?.id === id,
+                highlight: selected === id,
+              });
+            })}
+            {moveMode && movingStruct &&
+              renderShape({
+                key: "ghost",
+                s: movingStruct,
+                x: moveMode.x,
+                y: moveMode.y,
+                rot: moveMode.rot,
+                ghost: true,
+                ghostValid: moveValid,
+              })}
           </View>
-        </View>
-        <View style={styles.hudButtons}>
-          {editMode && (
-            <TouchableOpacity style={styles.hudBtn} onPress={handleResetLayout}>
-              <Text style={styles.hudBtnTxt}>↺</Text>
+        </Pressable>
+      </View>
+
+      {/* displaced tray */}
+      {displaced.length > 0 && !moveMode && (
+        <View style={styles.trayWrap}>
+          {displaced.slice(0, 3).map((id) => (
+            <TouchableOpacity key={id} style={styles.trayChip} onPress={() => startMove(id)}>
+              <Text style={styles.trayChipTxt}>⚠️ {byId[id]?.s?.name || id} displaced — tap to place</Text>
             </TouchableOpacity>
-          )}
+          ))}
+        </View>
+      )}
+
+      {/* move/place bar with rotate */}
+      {moveMode && (
+        <View style={styles.moveBar}>
+          <Text style={styles.moveBarTxt} numberOfLines={1}>
+            {moveMode.isNewBuild ? "Place" : "Move"} {movingStruct?.name || moveMode.slug}
+          </Text>
+          <TouchableOpacity style={styles.rotateBtn} onPress={rotateGhost}>
+            <Text style={styles.rotateTxt}>⟳</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.moveCancel} onPress={() => setMoveMode(null)}>
+            <Text style={styles.moveCancelTxt}>✕</Text>
+          </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.hudBtn, editMode && styles.hudBtnActive]}
-            onPress={() => setEditMode((e) => !e)}
+            style={[styles.moveConfirm, !moveValid && { opacity: 0.35 }]}
+            disabled={!moveValid}
+            onPress={confirmMove}
           >
-            <Text style={styles.hudBtnTxt}>{editMode ? "✅" : "✏️"}</Text>
+            <Text style={styles.moveConfirmTxt}>✓ {moveMode.isNewBuild ? "Build" : "Confirm"}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.hudBtn} onPress={() => navigation.navigate("Notifications")}>
-            <Text style={styles.hudBtnTxt}>🔔</Text>
-            {unread > 0 && (
-              <View style={styles.hudDot}>
-                <Text style={styles.hudDotTxt}>{unread > 9 ? "9+" : unread}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.avatarBtn} onPress={() => navigation.navigate("Profile")}>
-            <Image source={art.avatarDefault} style={styles.avatarImg} resizeMode="cover" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {editMode && (
-        <View style={styles.editBanner} pointerEvents="none">
-          <Text style={styles.editBannerTxt}>Edit mode — drag boxes to move, corner dot to resize the link zone</Text>
         </View>
       )}
 
-      {/* quick actions: tax + mana, straight from the map */}
-      <View style={styles.quickRow} pointerEvents="box-none">
-        <PressableScale containerStyle={styles.quickBtnWrap} style={styles.quickBtnInner} scaleTo={0.96} onPress={() => openAction("tax")}>
-          <Image source={art.collectTaxesBtn} style={styles.quickBtnImg} resizeMode="contain" />
-        </PressableScale>
-        <PressableScale containerStyle={styles.quickBtnWrap} style={styles.quickBtnInner} scaleTo={0.96} onPress={() => openAction("mana")}>
-          <Image source={art.collectManaBtn} style={styles.quickBtnImg} resizeMode="contain" />
-        </PressableScale>
-      </View>
+      {/* selected building info card */}
+      {selectedInst && !moveMode && (
+        <View style={styles.actionCard}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.actionName} numberOfLines={1}>
+              {selectedInst.s.name}{" "}
+              <Text style={styles.actionBadge}>
+                {selectedInst.s.level_based
+                  ? `L${selectedInst.s.user_structure?.level || 0}`
+                  : `×${selectedInst.s.user_structure?.quantity || 0} built`}
+              </Text>
+            </Text>
+            <Text style={styles.actionMeta} numberOfLines={1}>
+              {shapeFor(selectedInst.s).length} tiles
+              {productionText(selectedInst.s) ? `  ·  ${productionText(selectedInst.s)}` : ""}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: (STRUCT_META[selectedInst.s.slug] || {}).color || colors.accent }]}
+            onPress={() => go(OPEN_NAV[selectedInst.s.slug]?.nav || ["Kingdom", { subTab: selectedInst.s.slug }])}
+          >
+            <Text style={styles.actionBtnTxt}>{OPEN_NAV[selectedInst.s.slug]?.label || "Open"}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionGhostBtn} onPress={() => startMove(selected)}>
+            <Text style={styles.actionGhostTxt}>Move</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionGhostBtn} onPress={() => go(["Kingdom", { subTab: selectedInst.s.slug }])}>
+            <Text style={styles.actionGhostTxt}>⬆</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-      {/* bottom: same tab bar as the rest of the app, floating on top of the
-          map art (not squeezed above it in normal flow) — tapping "Home" is
-          the way back to the classic dashboard. */}
+      {/* bottom tab dock */}
       <View style={styles.tabBarDock} pointerEvents="box-none">
-        <TabBarVisual
-          names={TAB_NAMES}
-          activeIndex={0}
-          onPress={(name) => go([name, {}])}
-        />
+        <TabBarVisual names={TAB_NAMES} activeIndex={0} onPress={(name) => go([name, {}])} />
       </View>
 
-      {/* ── QUICK-ACTION POPUP ── */}
-      {actionModal && (
-        <Modal transparent visible animationType="fade" onRequestClose={() => setActionModal(null)}>
-          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setActionModal(null)}>
-            <TouchableOpacity activeOpacity={1} style={styles.modalCard} onPress={() => {}}>
-              {treasury ? (
-                actionModal === "tax" ? renderTaxModal() : renderManaModal()
-              ) : (
-                <Text style={styles.modalInfo}>Consulting the ledgers…</Text>
+      {/* build list */}
+      <Modal transparent visible={buildOpen} animationType="slide" onRequestClose={() => setBuildOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setBuildOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>🔨 Build a Structure</Text>
+            <ScrollView style={{ maxHeight: 380 }}>
+              {buildable.length === 0 && (
+                <Text style={styles.modalEmpty}>Every structure is built — upgrade them from their plots.</Text>
               )}
-
-              {actionResult && (
-                <View style={[styles.resultBox, { borderColor: actionResult.ok ? colors.success : colors.danger }]}>
-                  <Text style={[styles.resultTxt, { color: actionResult.ok ? colors.success : colors.danger }]}>
-                    {actionResult.text}
-                  </Text>
-                </View>
-              )}
-
-              <TouchableOpacity style={styles.modalClose} onPress={() => setActionModal(null)}>
-                <Text style={styles.modalCloseTxt}>Close</Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
+              {buildable.map((s) => {
+                const meta = STRUCT_META[s.slug] || { color: colors.accent, emoji: "🏗️" };
+                const costs = s.resource_cost || {};
+                const locked = !!s.tc_required;
+                const shape = s.level_based ? (SHAPES[s.slug] || [R(1, 1)])[0] : shapeFor(s);
+                const qty = s.user_structure?.quantity || 0;
+                return (
+                  <TouchableOpacity
+                    key={s.slug}
+                    style={[styles.buildRow, locked && { opacity: 0.45 }]}
+                    disabled={locked}
+                    onPress={() => startBuild(s)}
+                  >
+                    <Text style={styles.buildRowEmoji}>{meta.emoji}</Text>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[styles.buildRowName, { color: meta.color }]}>
+                        {s.name}
+                        {!s.level_based && qty > 0 ? `  ·  ×${qty} built` : ""}
+                      </Text>
+                      <Text style={styles.buildRowMeta} numberOfLines={1}>
+                        {shape.length} tiles
+                        {costs.gold ? ` · 💰 ${Number(costs.gold).toLocaleString()}` : ""}
+                        {costs.mana ? ` · 🔮 ${Number(costs.mana).toLocaleString()}` : ""}
+                        {s.land_cost ? ` · 🏔 ${s.land_cost}` : ""}
+                        {locked ? ` · 🔒 needs Town Center L${s.tc_required}` : ""}
+                      </Text>
+                    </View>
+                    <Text style={styles.buildRowArrow}>›</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </TouchableOpacity>
-        </Modal>
-      )}
+        </TouchableOpacity>
+      </Modal>
+
+      {/* measure actual viewport */}
+      <View
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+        onLayout={(e) => setViewSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+      />
     </View>
   );
 }
 
+/* ── styles ───────────────────────────────────────────────────────── */
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-    overflow: "hidden",
-  },
-  viewport: { flex: 1, overflow: "hidden" },
-  tabBarDock: { position: "absolute", left: 0, right: 0, bottom: 0 },
-  bottomScrim: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 340,
-  },
-  canvas: { width: MAP_W, height: MAP_H },
-  mapArt: { position: "absolute", width: MAP_W, height: MAP_H },
+  root: { flex: 1, backgroundColor: "#0d1a10" },
 
-  /* building plaques */
-  poiInner: { alignItems: "center" },
-  poiPlaque: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    backgroundColor: alpha("#1a1128", "e0"),
-    borderWidth: 1.5,
-    borderColor: alpha(colors.gold, "99"),
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    shadowColor: colors.black,
-    shadowOpacity: 0.6,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  poiPlaqueIcon: { fontSize: 15 },
-  poiLabel: { color: colors.gold, fontSize: 14, fontWeight: "800" },
-  poiPlaqueEdit: { borderColor: colors.info, borderWidth: 2 },
-
-  /* edit-mode hotspot (the "link" tap zone over a painted building) */
-  hotspotEdit: {
-    borderWidth: 2,
-    borderColor: alpha(colors.info, "cc"),
-    borderStyle: "dashed",
-    backgroundColor: alpha(colors.info, "22"),
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  hotspotTag: {
-    color: colors.white,
-    fontSize: 11,
-    fontWeight: "700",
-    backgroundColor: alpha(colors.black, "88"),
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  resizeHandle: {
+  controls: {
     position: "absolute",
-    right: -11,
-    bottom: -11,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.info,
-    borderWidth: 2,
-    borderColor: colors.white,
-  },
-  editBanner: {
-    position: "absolute",
-    top: Platform.OS === "web" ? 54 : 90,
+    top: TOP_OFFSET,
     left: 10,
     right: 10,
-    backgroundColor: alpha(colors.info, "ee"),
-    borderRadius: 8,
-    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    zIndex: 5,
+  },
+  landChip: {
+    backgroundColor: alpha("#0a140c", "dd"),
+    borderWidth: 1,
+    borderColor: alpha(colors.goldDim, "66"),
+    borderRadius: 9,
     paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  editBannerTxt: { color: colors.white, fontSize: 11, fontWeight: "700", textAlign: "center" },
+  landChipTxt: { color: colors.text, fontSize: 11, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  buildBtn: {
+    backgroundColor: colors.gold,
+    borderRadius: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  buildBtnTxt: { color: "#1a1405", fontSize: 12, fontWeight: "900" },
 
-  /* HUD */
-  hudTop: {
-    position: "absolute",
-    top: Platform.OS === "web" ? 10 : 46,
-    left: 10,
-    right: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  currencyBar: { flex: 1, height: 30, marginRight: 8 },
-  currencyBarImg: { width: "100%", height: "100%" },
-  currencySlots: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: "7%",
-  },
-  currencySlot: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 3 },
-  currencyIcon: { width: 15, height: 15 },
-  currencyVal: { color: colors.gold, fontSize: 11, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  hudButtons: { flexDirection: "row", alignItems: "center", gap: 8 },
-  hudBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: alpha("#1a1128", "e6"),
-    borderWidth: 1.25,
-    borderColor: alpha(colors.gold, "77"),
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  hudBtnTxt: { fontSize: 15 },
-  hudBtnActive: { borderColor: colors.info, backgroundColor: alpha(colors.info, "33") },
-  avatarBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  gridFrame: {
+    ...StyleSheet.absoluteFillObject,
     borderWidth: 2,
-    borderColor: colors.gold,
+    borderColor: alpha(colors.goldDim, "55"),
     overflow: "hidden",
-    backgroundColor: "#1a1128",
-    shadowColor: colors.gold,
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
-    elevation: 5,
+    borderRadius: 6,
   },
-  avatarImg: { width: "100%", height: "100%" },
-  hudDot: {
+  badge: {
     position: "absolute",
-    top: -4,
-    right: -4,
-    backgroundColor: colors.danger,
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
-    paddingHorizontal: 3,
-    alignItems: "center",
-    justifyContent: "center",
+    top: -1,
+    right: -1,
+    borderBottomLeftRadius: 6,
+    borderTopRightRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    zIndex: 6,
   },
-  hudDotTxt: { color: colors.white, fontSize: 9, fontWeight: "800" },
+  badgeTxt: { color: "#141414", fontSize: 9, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  fire: { position: "absolute", bottom: 1, left: 2, fontSize: 14 },
 
-  /* zoom controls */
-  zoomStack: {
-    position: "absolute",
-    right: 10,
-    bottom: 164,
-    width: 46,
-    height: 46 * (1554 / 468),
+  trayWrap: { position: "absolute", left: 10, right: 10, bottom: BOTTOM_DOCK + 6, gap: 5, zIndex: 6 },
+  trayChip: {
+    backgroundColor: alpha(colors.danger, "22"),
+    borderWidth: 1,
+    borderColor: alpha(colors.danger, "77"),
+    borderRadius: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  zoomBarImg: { width: "100%", height: "100%" },
-  zoomHitIn: { position: "absolute", left: 0, right: 0, top: "0%", height: "33%" },
-  zoomHitReset: { position: "absolute", left: 0, right: 0, top: "33%", height: "34%" },
-  zoomHitOut: { position: "absolute", left: 0, right: 0, top: "67%", height: "33%" },
+  trayChipTxt: { color: colors.dangerSoft, fontSize: 11, fontWeight: "700" },
 
-
-  /* quick actions */
-  quickRow: {
+  moveBar: {
     position: "absolute",
-    bottom: 96,
     left: 10,
     right: 10,
+    bottom: BOTTOM_DOCK + 6,
     flexDirection: "row",
-    gap: 10,
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: alpha("#0a140c", "f0"),
+    borderWidth: 1,
+    borderColor: alpha(colors.goldDim, "77"),
+    borderRadius: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    zIndex: 6,
   },
-  quickBtnWrap: { flex: 1, height: 58 },
-  quickBtnInner: { width: "100%", height: "100%" },
-  quickBtnImg: { width: "100%", height: "100%" },
+  moveBarTxt: { flex: 1, color: colors.text, fontSize: 11, fontWeight: "700" },
+  rotateBtn: {
+    borderWidth: 1,
+    borderColor: alpha(colors.info, "99"),
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  rotateTxt: { color: colors.info, fontSize: 15, fontWeight: "900" },
+  moveCancel: {
+    borderWidth: 1,
+    borderColor: alpha(colors.danger, "88"),
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  moveCancelTxt: { color: colors.danger, fontSize: 12, fontWeight: "900" },
+  moveConfirm: { backgroundColor: colors.success, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5 },
+  moveConfirmTxt: { color: colors.white, fontSize: 12, fontWeight: "900" },
 
-  /* quick-action popup */
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.75)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  modalCard: {
-    width: "100%",
-    maxWidth: 360,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: alpha(colors.gold, "77"),
-    padding: 18,
-  },
-  modalTitle: { color: colors.gold, fontSize: 18, fontWeight: "800", textAlign: "center", marginBottom: 8 },
-  modalInfo: { color: colors.textDim, fontSize: 12, lineHeight: 18, textAlign: "center", marginBottom: 12 },
-  modalStatRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
-  modalStat: { color: colors.muted, fontSize: 12 },
-  modalStatVal: { color: colors.text, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  chargeRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
-  cooldownBox: {
-    backgroundColor: alpha(colors.danger, "18"),
-    borderWidth: 1,
-    borderColor: alpha(colors.danger, "55"),
-    borderRadius: 10,
-    padding: 12,
-    alignItems: "center",
-  },
-  cooldownTxt: { color: colors.dangerSoft, fontSize: 13, fontWeight: "600", fontVariant: ["tabular-nums"] },
-  tierBtn: {
+  actionCard: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    bottom: BOTTOM_DOCK + 6,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.cardAlt,
+    gap: 7,
+    backgroundColor: alpha("#0a140c", "f0"),
     borderWidth: 1,
-    borderRadius: 10,
-    padding: 11,
-    marginBottom: 7,
+    borderColor: alpha(colors.goldDim, "77"),
+    borderRadius: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    zIndex: 6,
   },
-  tierName: { fontSize: 14, fontWeight: "800" },
-  tierMeta: { color: colors.muted, fontSize: 10, marginTop: 1 },
-  tierAmount: { color: colors.gold, fontSize: 14, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  channelBtn: {
-    backgroundColor: colors.info,
-    borderRadius: 10,
-    paddingVertical: 12,
+  actionName: { color: colors.text, fontSize: 13, fontWeight: "800" },
+  actionBadge: { color: colors.gold, fontSize: 11, fontWeight: "800" },
+  actionMeta: { color: colors.muted, fontSize: 10, marginTop: 1 },
+  actionBtn: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
+  actionBtnTxt: { color: "#101010", fontSize: 11, fontWeight: "900" },
+  actionGhostBtn: {
+    borderWidth: 1,
+    borderColor: alpha(colors.goldDim, "88"),
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  actionGhostTxt: { color: colors.goldDim, fontSize: 11, fontWeight: "800" },
+
+  tabBarDock: { position: "absolute", left: 0, right: 0, bottom: 0 },
+
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", justifyContent: "flex-end" },
+  modalCard: {
+    ...(Platform.OS === "web" ? { maxWidth: 480, width: "100%", alignSelf: "center" } : {}),
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    paddingBottom: 24,
+  },
+  modalTitle: { color: colors.gold, fontSize: 15, fontWeight: "900", textAlign: "center", marginBottom: 10 },
+  modalEmpty: { color: colors.muted, fontSize: 12, textAlign: "center", paddingVertical: 16 },
+  buildRow: {
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: 4,
-  },
-  channelTxt: { color: colors.white, fontSize: 14, fontWeight: "800" },
-  resultBox: {
-    borderWidth: 1,
+    gap: 10,
+    backgroundColor: colors.cardAlt,
     borderRadius: 10,
-    padding: 10,
-    marginTop: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    marginBottom: 6,
   },
-  resultTxt: { fontSize: 12, fontWeight: "600", textAlign: "center" },
-  modalClose: { alignItems: "center", paddingVertical: 10, marginTop: 4 },
-  modalCloseTxt: { color: colors.muted, fontSize: 13 },
+  buildRowEmoji: { fontSize: 20 },
+  buildRowName: { fontSize: 13, fontWeight: "800" },
+  buildRowMeta: { color: colors.muted, fontSize: 10, marginTop: 2 },
+  buildRowArrow: { color: colors.goldDim, fontSize: 18, fontWeight: "700" },
 });

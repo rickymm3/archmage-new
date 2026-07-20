@@ -42,3 +42,15 @@ mobile.zip
 mobile.zip:Zone.Identifier
 *.Zone.Identifier
 *:Zone.Identifier
+
+# Generated mobile art working files (production-ready assets live in final/)
+/mobile/assets/concepts/
+/mobile/assets/ui/chroma/
+/mobile/assets/ui/current-top.png
+/mobile/assets/ui/kingdom-background2.png
+/mobile/assets/ui/submenu-atlases/
+/mobile/assets/ui/submenu-icons/chroma/
+/mobile/assets/ui/universal-hud/
+/mobile/assets/ui/universal-hud-v2/chroma/
+/mobile/assets/ui/universal-hud-v3/chroma/
+/mobile/assets/ui/universal-hud-v4/chroma/

@@ -65,6 +65,21 @@ class User < ApplicationRecord
     protection_expires_at.present? && protection_expires_at > Time.current
   end
 
+  # Affinity synergy: which unit element the chosen color empowers in
+  # battle, and how much stronger native-color spell casts are.
+  AFFINITY_ELEMENTS = {
+    'pyromancer' => 'fire',
+    'mindweaver' => 'water',
+    'geomancer'  => 'nature',
+    'tempest'    => 'holy',
+    'voidwalker' => 'void'
+  }.freeze
+  NATIVE_SPELL_BONUS = 1.15
+
+  def affinity_element
+    AFFINITY_ELEMENTS[color]
+  end
+
   def affinity
     @affinity ||= Affinity.find(color) || Affinity.all.first
   end

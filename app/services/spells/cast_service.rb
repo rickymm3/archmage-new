@@ -103,13 +103,16 @@ module Spells
       # Logarithmic Scaling Formula: Effect = Base * log2((Invested / BaseCost) + 1)
       ratio = @amount.to_f / base_cost
       factor = Math.log2(ratio + 1)
-      
-      (base_mag * factor).round(2)
+
+      value = base_mag * factor
+      # Affinity synergy for legacy-path spells too (+15% native color).
+      value *= User::NATIVE_SPELL_BONUS if spell.affinity.to_s == user.color.to_s
+      value.round(2)
     end
     
     def cast_self_buff(user_spell)
       # New Calculation Service
-      effect = Spells::CalculateEffect.new(spell, @amount).call
+      effect = Spells::CalculateEffect.new(spell, @amount, user: user).call
       
       # Legacy fallback logic for spells not yet using the new system
       if effect[:value].nil?
@@ -209,7 +212,7 @@ module Spells
     
     def cast_summon(user_spell)
       # New Calculation Service
-      effect = Spells::CalculateEffect.new(spell, @amount).call
+      effect = Spells::CalculateEffect.new(spell, @amount, user: user).call
       
       config = spell.configuration || {}
       target_slug = (config['unit_slug'] || config[:unit_slug])&.to_s&.strip

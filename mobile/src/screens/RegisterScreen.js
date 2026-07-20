@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { useModal } from "../context/ModalContext";
-import { colors } from "../theme";
+import { colors, webColumn } from "../theme";
 
 const AFFINITIES = [
   { id: "pyromancer", name: "Pyromancer", color: colors.danger, emoji: "🔥" },
@@ -128,6 +128,7 @@ export default function RegisterScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    ...webColumn,
     flex: 1,
     backgroundColor: colors.bg,
   },

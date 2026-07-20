@@ -14,19 +14,22 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
-import { LoadingState, EmptyState, ProgressBar, ArtPlaceholder, SubTabs, FadeSlideIn, SceneBackground } from "../components/ui";
-import { heroImage, unitImage, sceneImage } from "../assets";
+import { LoadingState, EmptyState, ProgressBar, ArtPlaceholder, FadeSlideIn } from "../components/ui";
+import { heroImage, unitImage, sceneImage, submenuIcon } from "../assets";
 import { colors, alpha } from "../theme";
+import GameHubShell, { DrawerModeSwitch } from "../components/GameHubShell";
+import { CompactShell, StatStrip, CompactNote } from "../components/DrawerCompact";
+import HScroll from "../components/HScroll";
 import DefenseScreen from "./DefenseScreen";
 import RecruitScreen from "./RecruitScreen";
 import InventoryScreen from "./InventoryScreen";
 
 const SUB_TABS = [
-  { key: "overview", icon: "🏰", label: "Overview" },
-  { key: "units", icon: "⚔️", label: "Units" },
-  { key: "defense", icon: "🛡", label: "Defense" },
-  { key: "recruit", icon: "📯", label: "Recruit" },
-  { key: "inventory", icon: "🎒", label: "Gear" },
+  { key: "overview", iconSource: submenuIcon("army-overview"), label: "Overview" },
+  { key: "units", iconSource: submenuIcon("army-units"), label: "Units" },
+  { key: "defense", iconSource: submenuIcon("army-defense"), label: "Defense" },
+  { key: "recruit", iconSource: submenuIcon("army-recruit"), label: "Recruit" },
+  { key: "inventory", iconSource: submenuIcon("army-gear"), label: "Gear" },
 ];
 
 // Backend sends abilities as an object (e.g. { passive: "...", trigger: "..." }).
@@ -114,7 +117,91 @@ export default function ArmyScreen({ route }) {
     }
   }
 
+  async function payTroops(payCost) {
+    try {
+      const result = await api.payUpkeep(payCost);
+      showAlert("Troops Paid!", `${result.message}. Morale restored to ${Math.round(result.morale)}%.`);
+      loadArmy();
+    } catch (e) {
+      showAlert("Error", e.message);
+    }
+  }
+
   /* ────────────────────────────────────────────────────────────── */
+
+  // Collapsed drawer: the three numbers that matter (power, capacity,
+  // morale) plus the pay-troops action when wages are due.
+  function renderOverviewCompact() {
+    if (!data) return <LoadingState />;
+    const s = data.stats;
+    const morale = Math.round(s.morale);
+    const meta = moraleMeta(morale);
+    const capacity = s.army_capacity || 0;
+    const size = s.total_quantity || 0;
+    const overcrowded = capacity > 0 && size > capacity;
+    const baseMorale = s.base_morale ?? s.morale;
+    const missingMorale = Math.max(0, 100 - baseMorale);
+    const payCost = Math.ceil((missingMorale / 100) * (s.daily_upkeep || 0));
+    const canPay = payCost > 0 && s.daily_upkeep > 0;
+    const canAfford = data.gold >= payCost;
+
+    return (
+      <CompactShell hint="Pull up for full army details">
+        <StatStrip
+          items={[
+            { value: `⚡ ${Number(s.army_power || 0).toLocaleString()}`, label: "Army power", color: colors.gold },
+            { value: `${size}/${capacity}`, label: "Capacity", color: overcrowded ? colors.danger : colors.text },
+            { value: `${morale}%`, label: meta.label, color: meta.color },
+          ]}
+        />
+        <ProgressBar percent={morale} color={meta.color} height={5} />
+        {overcrowded && <CompactNote color={colors.danger}>⚠️ Overcrowded — morale drains faster</CompactNote>}
+        {canPay ? (
+          <LoadingButton
+            style={[styles.payBtn, { marginTop: 0, paddingVertical: 7 }, !canAfford && styles.btnDisabled]}
+            onPress={() => payTroops(payCost)}
+            disabled={!canAfford}
+          >
+            <Text style={styles.payBtnTxt}>
+              {canAfford ? `Pay Troops — 💰 ${payCost.toLocaleString()}` : `Need 💰 ${payCost.toLocaleString()} to pay troops`}
+            </Text>
+          </LoadingButton>
+        ) : (
+          s.daily_upkeep > 0 && <CompactNote color={colors.success}>✓ Troops are fully paid</CompactNote>
+        )}
+      </CompactShell>
+    );
+  }
+
+  // Collapsed drawer: aggregate strength + the roster's biggest stacks.
+  function renderUnitsCompact() {
+    if (!data) return <LoadingState />;
+    const s = data.stats;
+    const regularUnits = data.units.filter((u) => u.unit_type !== "hero");
+    const heroes = data.units.filter((u) => u.unit_type === "hero");
+    const top = [...regularUnits].sort((a, b) => (b.quantity || 0) - (a.quantity || 0)).slice(0, 3);
+    return (
+      <CompactShell hint="Pull up for the full roster">
+        <StatStrip
+          items={[
+            { value: `⚔️ ${Number(s.total_attack).toLocaleString()}`, label: "Attack", color: colors.dangerSoft },
+            { value: `🛡 ${Number(s.total_defense).toLocaleString()}`, label: "Defense", color: colors.info },
+            { value: `${s.total_quantity || 0}`, label: "Units" },
+          ]}
+        />
+        <CompactNote>
+          {regularUnits.length === 0 && heroes.length === 0
+            ? "No units — recruit soldiers or summon creatures"
+            : [
+                top.map((u) => `${u.quantity}× ${u.name}`).join(" · "),
+                heroes.length > 0 ? `🦸 ${heroes.length} hero${heroes.length > 1 ? "es" : ""}` : null,
+              ]
+                .filter(Boolean)
+                .join("   ·   ")}
+        </CompactNote>
+      </CompactShell>
+    );
+  }
 
   function renderOverview() {
     if (!data) return <LoadingState />;
@@ -156,6 +243,7 @@ export default function ArmyScreen({ route }) {
             </>
           )}
         </View>
+
 
         {/* the armory itself breathes here; UI sits on the floor below */}
         <ScrollView
@@ -207,15 +295,7 @@ export default function ArmyScreen({ route }) {
             canPay ? (
               <LoadingButton
                 style={[styles.payBtn, !canAfford && styles.btnDisabled]}
-                onPress={async () => {
-                  try {
-                    const result = await api.payUpkeep(payCost);
-                    showAlert("Troops Paid!", `${result.message}. Morale restored to ${Math.round(result.morale)}%.`);
-                    loadArmy();
-                  } catch (e) {
-                    showAlert("Error", e.message);
-                  }
-                }}
+                onPress={() => payTroops(payCost)}
                 disabled={!canAfford}
               >
                 <Text style={styles.payBtnTxt}>
@@ -260,7 +340,7 @@ export default function ArmyScreen({ route }) {
       <ScrollView contentContainerStyle={{ paddingBottom: 16, paddingTop: 10 }}>
         {regularUnits.length > 0 && (
           <>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
+            <HScroll contentContainerStyle={styles.carousel}>
               {regularUnits.map((u) => {
                 const isSel = u.id === selectedId;
                 return (
@@ -270,7 +350,7 @@ export default function ArmyScreen({ route }) {
                     onPress={() => setSelectedUnitId(u.id)}
                     activeOpacity={0.85}
                   >
-                    <ArtPlaceholder emoji="⚔️" label={null} size={92} source={unitImage(u.slug)} />
+                    <ArtPlaceholder emoji="⚔️" label={null} size={134} source={unitImage(u.slug)} />
                     <Text style={[styles.caroName, isSel && { color: colors.gold }]} numberOfLines={1}>
                       {u.name}
                     </Text>
@@ -280,44 +360,36 @@ export default function ArmyScreen({ route }) {
                   </TouchableOpacity>
                 );
               })}
-            </ScrollView>
+            </HScroll>
 
             {selUnit && (
               <View style={styles.detailPanel}>
                 <View style={styles.detailHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.detailName}>{selUnit.name}</Text>
-                    <Text style={styles.detailType}>
-                      {selUnit.element ? `${selUnit.element} ` : ""}{selUnit.unit_type}
-                      {selUnit.hero ? `  ·  led by ${selUnit.hero.name}` : ""}
-                    </Text>
-                  </View>
+                  <Text style={styles.detailName} numberOfLines={1}>{selUnit.name}</Text>
+                  <Text style={styles.detailType} numberOfLines={1}>
+                    {selUnit.element ? `${selUnit.element} ` : ""}{selUnit.unit_type}
+                    {selUnit.hero ? ` · led by ${selUnit.hero.name}` : ""}
+                  </Text>
                   <Text style={styles.detailQty}>×{selUnit.quantity}</Text>
                 </View>
 
-                <View style={styles.unitChips}>
-                  <Chip icon="⚔️" value={`${selUnit.attack} ATK`} />
-                  <Chip icon="🛡" value={`${selUnit.defense} DEF`} />
-                  <Chip icon="💨" value={`${selUnit.speed} SPD`} />
-                  <Chip icon="💰" value={`${selUnit.upkeep_cost}/d`} color={colors.warning} />
-                  {selUnit.mana_upkeep > 0 && <Chip icon="🔮" value={`${selUnit.mana_upkeep}/d`} color={colors.info} />}
-                </View>
+                <Text style={styles.statLine}>
+                  ⚔️ {selUnit.attack}  ·  🛡 {selUnit.defense}  ·  💨 {selUnit.speed}  ·{"  "}
+                  <Text style={{ color: colors.warning }}>💰 {selUnit.upkeep_cost}/d</Text>
+                  {selUnit.mana_upkeep > 0 && <Text style={{ color: colors.info }}>  ·  🔮 {selUnit.mana_upkeep}/d</Text>}
+                </Text>
 
-                <View style={styles.dutyRow}>
-                  {selUnit.garrison > 0 && (
-                    <View style={[styles.dutyBadge, { borderColor: alpha(colors.info, "66") }]}>
-                      <Text style={[styles.dutyTxt, { color: colors.info }]}>🛡 {selUnit.garrison} defending</Text>
-                    </View>
-                  )}
-                  {selUnit.exploring > 0 && (
-                    <View style={[styles.dutyBadge, { borderColor: alpha(colors.success, "66") }]}>
-                      <Text style={[styles.dutyTxt, { color: colors.success }]}>🧭 {selUnit.exploring} exploring</Text>
-                    </View>
-                  )}
-                  <View style={[styles.dutyBadge, { borderColor: colors.border }]}>
-                    <Text style={styles.dutyTxt}>{selUnit.available} free</Text>
-                  </View>
-                </View>
+                {(selUnit.garrison > 0 || selUnit.exploring > 0) && (
+                  <Text style={styles.dutyLine}>
+                    {[
+                      selUnit.garrison > 0 ? `🛡 ${selUnit.garrison} defending` : null,
+                      selUnit.exploring > 0 ? `🧭 ${selUnit.exploring} exploring` : null,
+                      `${selUnit.available} free`,
+                    ]
+                      .filter(Boolean)
+                      .join("  ·  ")}
+                  </Text>
+                )}
 
                 <View style={styles.detailActions}>
                   {selUnit.recruitable ? (
@@ -329,11 +401,10 @@ export default function ArmyScreen({ route }) {
                       <Text style={styles.recruitMoreTxt}>📯 Recruit More</Text>
                     </TouchableOpacity>
                   ) : (
-                    <View style={[styles.recruitMoreBtn, styles.summonedNote]}>
-                      <Text style={styles.summonedNoteTxt}>✨ Summoned — bolster via spells</Text>
-                    </View>
+                    <Text style={styles.summonedNoteTxt}>✨ Summoned — bolster via spells</Text>
                   )}
-                  <TouchableOpacity style={styles.disbandBtn} onPress={() => openDisband(selUnit)}>
+                  <View style={{ flex: 1 }} />
+                  <TouchableOpacity style={styles.disbandBtn} onPress={() => openDisband(selUnit)} hitSlop={{ top: 6, bottom: 6 }}>
                     <Text style={styles.disbandTxt}>Disband</Text>
                   </TouchableOpacity>
                 </View>
@@ -368,20 +439,37 @@ export default function ArmyScreen({ route }) {
     );
   }
 
+  const armyScenes = {
+    overview: ["Standing Army", "Review the strength, cost, and morale of your forces."],
+    units: ["Army Roster", "Inspect every soldier, creature, and hero under your banner."],
+    defense: ["Realm Defense", "Assign defenders and prepare the kingdom for attack."],
+    recruit: ["Royal Recruitment", "Raise new forces from your barracks and mustering grounds."],
+    inventory: ["Royal Armory", "Equip the weapons and relics carried into battle."],
+  };
+  const [armyTitle, armySubtitle] = armyScenes[subTab] || armyScenes.overview;
+
   return (
     <View style={styles.container}>
-      <SceneBackground source={sceneImage("barracks")} />
+      <GameHubShell
+        source={sceneImage("army_command_v2")}
+        section="Army"
+        title={armyTitle}
+        subtitle={armySubtitle}
+        tabs={SUB_TABS}
+        active={subTab}
+        onChange={changeSubTab}
+        drawerTitle={SUB_TABS.find((tab) => tab.key === subTab)?.label}
+      >
       <FadeSlideIn key={subTab} style={{ flex: 1 }}>
-        {subTab === "overview" && renderOverview()}
-        {subTab === "units" && renderUnits()}
+        {subTab === "overview" && <DrawerModeSwitch compact={renderOverviewCompact()} expanded={renderOverview()} />}
+        {subTab === "units" && <DrawerModeSwitch compact={renderUnitsCompact()} expanded={renderUnits()} />}
         {subTab === "defense" && <DefenseScreen />}
         {subTab === "recruit" && (
           <RecruitScreen route={{ params: { unitId: recruitUnitId } }} />
         )}
         {subTab === "inventory" && <InventoryScreen />}
       </FadeSlideIn>
-
-      <SubTabs tabs={SUB_TABS} active={subTab} onChange={changeSubTab} />
+      </GameHubShell>
 
       {/* disband modal */}
       {disbandModal && (
@@ -501,23 +589,23 @@ const styles = StyleSheet.create({
   chipIcon: { fontSize: 10 },
   chipTxt: { fontSize: 11, fontWeight: "700", fontVariant: ["tabular-nums"] },
 
-  /* carousel */
+  /* carousel — the art IS the card; chrome kept to a thin frame */
   carousel: { paddingHorizontal: 12, gap: 10, paddingBottom: 4 },
   caroCard: {
-    width: 116,
+    width: 148,
     alignItems: "center",
     backgroundColor: colors.card,
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: colors.border,
-    paddingVertical: 12,
+    paddingVertical: 7,
     paddingHorizontal: 6,
   },
   caroCardSelected: {
     borderColor: colors.gold,
     backgroundColor: alpha(colors.gold, "12"),
   },
-  caroName: { color: colors.textDim, fontSize: 11, fontWeight: "700", marginTop: 6 },
+  caroName: { color: colors.textDim, fontSize: 11, fontWeight: "700", marginTop: 4 },
   caroCount: {
     position: "absolute",
     top: 6,
@@ -531,52 +619,43 @@ const styles = StyleSheet.create({
   },
   caroCountTxt: { color: colors.text, fontSize: 11, fontWeight: "800", fontVariant: ["tabular-nums"] },
 
-  /* detail panel */
+  /* detail panel — one tight card: header line, stat line, duty line,
+     slim action row. The carousel art above is the star; this is a caption. */
   detailPanel: {
     backgroundColor: colors.card,
     marginHorizontal: 12,
-    marginTop: 10,
-    padding: 14,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: alpha(colors.gold, "55"),
+    gap: 4,
   },
-  detailHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
-  detailName: { color: colors.text, fontSize: 17, fontWeight: "800" },
-  detailType: { color: colors.accent, fontSize: 11, marginTop: 2, textTransform: "capitalize" },
-  detailQty: { color: colors.gold, fontSize: 22, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  unitChips: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
-  detailActions: { flexDirection: "row", gap: 8, marginTop: 12, alignItems: "center" },
+  detailHeader: { flexDirection: "row", alignItems: "baseline", gap: 6 },
+  detailName: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  detailType: { flex: 1, color: colors.accent, fontSize: 10, textTransform: "capitalize" },
+  detailQty: { color: colors.gold, fontSize: 15, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  statLine: { color: colors.textDim, fontSize: 11, fontVariant: ["tabular-nums"] },
+  dutyLine: { color: colors.muted, fontSize: 10, fontVariant: ["tabular-nums"] },
+  detailActions: { flexDirection: "row", gap: 8, marginTop: 3, alignItems: "center" },
   recruitMoreBtn: {
-    flex: 1,
     backgroundColor: colors.success,
-    borderRadius: 10,
-    paddingVertical: 11,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
     alignItems: "center",
   },
-  recruitMoreTxt: { color: colors.white, fontSize: 14, fontWeight: "800" },
-  summonedNote: {
-    backgroundColor: alpha(colors.accent, "1a"),
-    borderWidth: 1,
-    borderColor: alpha(colors.accent, "55"),
-  },
-  summonedNoteTxt: { color: colors.accent, fontSize: 12, fontWeight: "600" },
+  recruitMoreTxt: { color: colors.white, fontSize: 12, fontWeight: "800" },
+  summonedNoteTxt: { color: colors.accent, fontSize: 11, fontWeight: "600" },
   disbandBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: alpha(colors.danger, "77"),
   },
-  disbandTxt: { color: colors.danger, fontSize: 12, fontWeight: "700" },
-  dutyRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 },
-  dutyBadge: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  dutyTxt: { color: colors.muted, fontSize: 11, fontWeight: "600" },
+  disbandTxt: { color: colors.danger, fontSize: 11, fontWeight: "700" },
 
   /* heroes */
   heroCard: {

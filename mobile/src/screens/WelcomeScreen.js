@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { colors } from "../theme";
+import { colors, webColumn } from "../theme";
 import { ArtPlaceholder } from "../components/ui";
 import { ui as art } from "../assets";
 
@@ -32,6 +32,7 @@ export default function WelcomeScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: {
+    ...webColumn,
     flex: 1,
     backgroundColor: colors.bg,
     justifyContent: "center",

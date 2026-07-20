@@ -18,6 +18,8 @@ import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
 import { LoadingState } from "../components/ui";
+import { useDrawer } from "../components/GameHubShell";
+import { CompactShell } from "../components/DrawerCompact";
 import { colors, alpha } from "../theme";
 import { ui as art, structureImage } from "../assets";
 
@@ -191,7 +193,7 @@ function StructureTile({ s, selected, onPress }) {
 function TownMap({ structures, selectedSlug, onSelect }) {
   const burningCount = structures.filter((s) => s.user_structure?.burning).length;
   return (
-    <View style={styles.map}>
+    <View style={styles.map} pointerEvents="none">
       {/* painted panorama backdrop, with colored bands as fallback */}
       <View style={styles.mapSky} />
       <View style={styles.mapGround} />
@@ -223,7 +225,7 @@ function TownMap({ structures, selectedSlug, onSelect }) {
 /* ================================================================
    DETAIL PANEL — build / upgrade / downgrade the selected structure.
    ================================================================ */
-function DetailPanel({ s, gold, mana, freeLand, onBuild, onDemolish }) {
+function DetailPanel({ s, gold, mana, freeLand, onBuild, onDemolish, dense = false }) {
   const { showAlert } = useModal();
   const cfg = cfgFor(s.slug);
   const us = s.user_structure;
@@ -256,18 +258,22 @@ function DetailPanel({ s, gold, mana, freeLand, onBuild, onDemolish }) {
     showAlert("Requirements", lines.join("\n"));
   };
 
-  return (
-    <ScrollView style={styles.panel} contentContainerStyle={styles.panelContent}>
-      <View style={styles.panelHeader}>
-        <View style={[styles.panelIconWrap, { borderColor: cfg.color }]}>
+  // `dense` = collapsed-drawer layout: identity, cost, and the build/
+  // upgrade action only — description and production detail live in the
+  // expanded drawer. Rendered as a plain View because the collapsed drawer
+  // is a fixed layout (the shell provides the overflow fallback).
+  const body = (
+    <>
+      <View style={[styles.panelHeader, dense && styles.panelHeaderDense]}>
+        <View style={[styles.panelIconWrap, { borderColor: cfg.color }, dense && styles.panelIconWrapDense]}>
           {structureImage(s.slug, tier) ? (
-            <Image source={structureImage(s.slug, tier)} resizeMode="contain" style={styles.panelIconImg} />
+            <Image source={structureImage(s.slug, tier)} resizeMode="contain" style={dense ? styles.panelIconImgDense : styles.panelIconImg} />
           ) : (
             <Text style={styles.panelIcon}>{cfg.tiers[Math.min(tier, cfg.tiers.length - 1)]}</Text>
           )}
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.panelName}>{s.name}</Text>
+          <Text style={[styles.panelName, dense && styles.panelNameDense]}>{s.name}</Text>
           <Text style={styles.panelSub}>
             {s.level_based ? `Level ${lvl} / ${s.max_level}` : `Owned: ${qty}`}
             {owned ? `  ·  Tier ${tier + 1}` : "  ·  Not built"}
@@ -278,9 +284,9 @@ function DetailPanel({ s, gold, mana, freeLand, onBuild, onDemolish }) {
         </TouchableOpacity>
       </View>
 
-      {s.description ? <Text style={styles.panelDesc}>{s.description}</Text> : null}
+      {!dense && s.description ? <Text style={styles.panelDesc}>{s.description}</Text> : null}
 
-      {prodEntries.length > 0 && (
+      {!dense && prodEntries.length > 0 && (
         <View style={styles.chipRow}>
           {prodEntries.map(([k, v]) => (
             <View key={k} style={styles.prodChip}>
@@ -305,28 +311,36 @@ function DetailPanel({ s, gold, mana, freeLand, onBuild, onDemolish }) {
         </View>
       )}
 
-      <View style={styles.actionBar}>
+      <View style={[styles.actionBar, dense && styles.actionBarDense]}>
         {owned && (
-          <LoadingButton style={styles.demolishBtn} onPress={() => onDemolish(s)}>
+          <LoadingButton style={[styles.demolishBtn, dense && styles.actionBtnDense]} onPress={() => onDemolish(s)}>
             <Text style={styles.demolishTxt}>{s.level_based ? "⬇ Downgrade" : "\u{1F5D1} Demolish"}</Text>
           </LoadingButton>
         )}
 
         {atMaxLevel ? (
-          <View style={[styles.buildBtn, { backgroundColor: colors.border }]}>
+          <View style={[styles.buildBtn, dense && styles.actionBtnDense, { backgroundColor: colors.border }]}>
             <Text style={[styles.buildTxt, { opacity: 0.4 }]}>Max Level</Text>
           </View>
         ) : canBuild ? (
-          <LoadingButton style={[styles.buildBtn, { backgroundColor: cfg.color }]} onPress={() => onBuild(s)}>
+          <LoadingButton style={[styles.buildBtn, dense && styles.actionBtnDense, { backgroundColor: cfg.color }]} onPress={() => onBuild(s)}>
             <Text style={styles.buildTxt}>{buildLabel}</Text>
           </LoadingButton>
         ) : (
-          <TouchableOpacity style={[styles.buildBtn, { backgroundColor: colors.border }]} onPress={showRequirements}>
+          <TouchableOpacity style={[styles.buildBtn, dense && styles.actionBtnDense, { backgroundColor: colors.border }]} onPress={showRequirements}>
             <Text style={[styles.buildTxt, { opacity: 0.5 }]}>{tcGated ? "\u{1F512} Locked" : buildLabel}</Text>
             <Text style={styles.reqInfo}>{"ℹ"}</Text>
           </TouchableOpacity>
         )}
       </View>
+    </>
+  );
+
+  if (dense) return <View style={styles.panelDense}>{body}</View>;
+
+  return (
+    <ScrollView style={styles.panel} contentContainerStyle={styles.panelContent}>
+      {body}
     </ScrollView>
   );
 }
@@ -341,7 +355,7 @@ function IdlePanel({ hasFires }) {
       <Text style={styles.idleText}>
         {hasFires
           ? "One of your buildings is on fire! Tap it to see what happened."
-          : "Tap a building on the map to build, upgrade, or manage it."}
+          : "Choose a structure from the menu below to build, upgrade, or manage it."}
       </Text>
     </View>
   );
@@ -386,15 +400,17 @@ function DamageModal({ s, onExtinguish, onClose, busy }) {
 /* ================================================================
    MAIN SCREEN
    ================================================================ */
-export default function TownScreen() {
+export default function TownScreen({ selectedSlug = null, compact = false }) {
   const { showAlert, showConfirm } = useModal();
+  const drawer = useDrawer();
+  const drawerCollapsed = !!drawer && !drawer.expanded;
   const [structures, setStructures] = useState([]);
   const [gold, setGold] = useState(0);
   const [mana, setMana] = useState(0);
   const [freeLand, setFreeLand] = useState(0);
   const [totalLand, setTotalLand] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState(null); // slug for detail panel
+  const [selected, setSelected] = useState(selectedSlug); // slug for detail panel
   const [damageSlug, setDamageSlug] = useState(null); // slug for fire modal
   const [extinguishing, setExtinguishing] = useState(false);
 
@@ -414,6 +430,16 @@ export default function TownScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  useEffect(() => {
+    if (!selectedSlug) return;
+    const structure = structures.find((item) => item.slug === selectedSlug);
+    if (structure?.user_structure?.burning) {
+      setDamageSlug(selectedSlug);
+    } else {
+      setSelected(selectedSlug);
+    }
+  }, [selectedSlug, structures]);
 
   const handleSelect = (slug) => {
     const s = structures.find((x) => x.slug === slug);
@@ -467,7 +493,7 @@ export default function TownScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, compact && styles.compactContainer]}>
         <LoadingState />
       </SafeAreaView>
     );
@@ -477,9 +503,29 @@ export default function TownScreen() {
   const damageStruct = damageSlug ? structures.find((s) => s.slug === damageSlug) : null;
   const hasFires = structures.some((s) => s.user_structure?.burning);
 
+  // Collapsed drawer: just the selected structure's identity, cost, and
+  // build/upgrade action — description, production, and the resource bar
+  // (which duplicates the universal HUD) wait for the expanded drawer.
+  if (compact && drawerCollapsed) {
+    return (
+      <SafeAreaView style={[styles.container, styles.compactContainer]}>
+        <CompactShell hint="Pull up for structure details">
+          {selStruct ? (
+            <DetailPanel s={selStruct} gold={gold} mana={mana} freeLand={freeLand} onBuild={handleBuild} onDemolish={handleDemolish} dense />
+          ) : (
+            <IdlePanel hasFires={hasFires} />
+          )}
+        </CompactShell>
+        {damageStruct && (
+          <DamageModal s={damageStruct} busy={extinguishing} onExtinguish={handleExtinguish} onClose={() => setDamageSlug(null)} />
+        )}
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container}>
-      <TownMap structures={structures} selectedSlug={selected} onSelect={handleSelect} />
+    <SafeAreaView style={[styles.container, compact && styles.compactContainer]}>
+      {!compact && <TownMap structures={structures} selectedSlug={selected} onSelect={handleSelect} />}
 
       {/* stats bar */}
       <View style={styles.statsBar}>
@@ -537,6 +583,7 @@ const styles = StyleSheet.create({
     ...(Platform.OS === "web" ? { maxWidth: 480, width: "100%", alignSelf: "center" } : {}),
   },
 
+  compactContainer: { backgroundColor: "transparent" },
   /* ── map ── */
   map: {
     height: "46%",
@@ -678,6 +725,13 @@ const styles = StyleSheet.create({
   /* ── detail panel ── */
   panel: { flex: 1 },
   panelContent: { padding: 14, paddingBottom: 28 },
+  panelDense: { paddingTop: 1 },
+  panelHeaderDense: { marginBottom: 5 },
+  panelIconWrapDense: { width: 36, height: 36, borderRadius: 9, borderWidth: 1.5 },
+  panelIconImgDense: { width: 30, height: 30 },
+  panelNameDense: { fontSize: 14 },
+  actionBarDense: { marginTop: 2 },
+  actionBtnDense: { paddingVertical: 6 },
   panelHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
   panelIconWrap: {
     width: 52,

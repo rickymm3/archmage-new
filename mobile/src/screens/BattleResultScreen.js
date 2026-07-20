@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { colors, alpha } from "../theme";
+import { colors, alpha, webColumn } from "../theme";
 import { ArtPlaceholder } from "../components/ui";
 import { ui as art } from "../assets";
 import { TYPE_ICONS, ELEM_COLORS } from "../battleVisuals";
@@ -308,7 +308,7 @@ export default function BattleResultScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: colors.bg, ...webColumn },
   banner: { alignItems: "center", paddingVertical: 28, marginBottom: 4 },
   victory: { backgroundColor: alpha(colors.success, "22") },
   defeat: { backgroundColor: alpha(colors.danger, "18") },

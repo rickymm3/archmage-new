@@ -1,3 +1,5 @@
+require "ostruct"
+
 module Barbarians
   class AttackService
     def initialize(user:, settlement_id:, unit_allocations:)
@@ -80,7 +82,7 @@ module Barbarians
       end
       return nil if stacks.empty?
 
-      Battle::EquipmentBonus.apply!(@user, stacks)
+      Battle::AffinityBonus.apply!(@user, Battle::EquipmentBonus.apply!(@user, stacks))
     end
 
     def build_defender_stacks(settlement)

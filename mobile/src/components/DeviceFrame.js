@@ -1,20 +1,26 @@
 // Every screen in this app is designed against one "expected" phone-shaped
 // viewport. On a real device that's just... the device, so this is a
 // transparent passthrough. On web (desktop browser testing), the browser
-// window is rarely that shape or size, so this renders a bordered frame at
-// the target aspect ratio, scaled to fit whatever window it's given —
-// shrinking on small windows, capped at the reference size on large ones —
-// and centers it. Screens measure their OWN rendered box via onLayout
-// (see KingdomMapScreen's viewSize state) rather than the raw window, so
-// anything built inside this frame is automatically correct at any size.
+// window is rarely that shape or size, so this renders a bordered frame,
+// scaled to fit whatever window it's given, and centers it. The frame is
+// allowed to grow WIDER than the reference phone shape: screens keep their
+// interactive UI in a centered phone-width column and let background art
+// bleed outward to fill the extra width, so a wide window shows more scene
+// instead of a stretched app. Screens measure their OWN rendered box via
+// onLayout (see KingdomMapScreen's viewSize state) rather than the raw
+// window, so anything built inside this frame is correct at any size.
 import React from "react";
 import { View, StyleSheet, Platform, useWindowDimensions } from "react-native";
 import { colors, alpha } from "../theme";
 
-const DEVICE_W = 402;
-const DEVICE_H = 874;
+const DEVICE_W = 432;
+const DEVICE_H = 910;
 const DEVICE_ASPECT = DEVICE_H / DEVICE_W;
 const FRAME_PADDING = 24;
+// The widest the frame may grow. Scene art is portrait-ish — much past
+// double the reference width, a "cover" crop is zoomed into a narrow
+// horizontal band of the image and stops reading as a scene.
+const FRAME_MAX_W = 900;
 
 export default function DeviceFrame({ children }) {
   const { width: winW, height: winH } = useWindowDimensions();
@@ -23,14 +29,11 @@ export default function DeviceFrame({ children }) {
     return <View style={styles.fill}>{children}</View>;
   }
 
-  const maxW = Math.max(1, Math.min(DEVICE_W, winW - FRAME_PADDING * 2));
-  const maxH = Math.max(1, Math.min(DEVICE_H, winH - FRAME_PADDING * 2));
-  let frameW = maxW;
-  let frameH = frameW * DEVICE_ASPECT;
-  if (frameH > maxH) {
-    frameH = maxH;
-    frameW = frameH / DEVICE_ASPECT;
-  }
+  let frameW = Math.max(1, Math.min(FRAME_MAX_W, winW - FRAME_PADDING * 2));
+  let frameH = Math.max(1, Math.min(DEVICE_H, winH - FRAME_PADDING * 2));
+  // Windows narrower than the reference still shrink like a phone — keep
+  // the reference aspect so the UI column isn't squeezed into a sliver.
+  if (frameW < DEVICE_W) frameH = Math.min(frameH, frameW * DEVICE_ASPECT);
 
   return (
     <View style={styles.backdrop}>

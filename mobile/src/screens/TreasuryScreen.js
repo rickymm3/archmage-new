@@ -12,6 +12,8 @@ import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
 import { LoadingState, SubTabs, FadeSlideIn } from "../components/ui";
+import { useDrawer, DrawerExpandHint } from "../components/GameHubShell";
+import { useFlyEffects } from "../components/FlyEffects";
 import { formatCountdown } from "../utils/time";
 import { colors, alpha } from "../theme";
 
@@ -24,6 +26,12 @@ const TABS = [
 // renders just that tab's content with no internal sub-menu.
 export default function TreasuryScreen({ fixedTab }) {
   const { showAlert } = useModal();
+  // Inside a GameHubShell drawer this follows the drawer's two modes: a
+  // fixed action-first layout while collapsed, full detail when expanded.
+  // Standalone (no drawer context) it always shows the full layout.
+  const drawer = useDrawer();
+  const expanded = drawer ? drawer.expanded : true;
+  const flyFx = useFlyEffects();
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [tabState, setTabState] = useState("tax");
@@ -64,20 +72,45 @@ export default function TreasuryScreen({ fixedTab }) {
 
   useFocusEffect(useCallback(() => { loadData(); }, []));
 
-  async function handleTax(tier) {
+  // Grab the press position BEFORE any await — RN recycles the synthetic
+  // event, so pageX/pageY are gone by the time the request resolves.
+  function pressOrigin(event) {
+    const ne = event?.nativeEvent;
+    return ne && Number.isFinite(ne.pageX) ? { x: ne.pageX, y: ne.pageY } : null;
+  }
+
+  async function handleTax(tier, event) {
+    const origin = pressOrigin(event);
+    // Same figure the button advertised — shown as "+N" once the coins land.
+    const amount = Math.round((data?.taxable_amount || 0) * (data?.tax_rates?.[tier]?.multiplier || 1));
     try {
-      const result = await api.collectTax(tier);
-      showAlert("Success", result.message);
+      await api.collectTax(tier);
+      // The payoff IS the feedback: coins fly into the HUD's gold counter
+      // (which refreshes as they land) — no success modal in the way.
+      if (origin) flyFx?.fly("gold", origin, 9, { amount });
       loadData();
     } catch (e) {
       showAlert("Error", e.message);
     }
   }
 
-  async function handleRecharge() {
+  async function handleRecharge(event) {
+    const origin = pressOrigin(event);
+    const net = data?.net_mana_potential || 0;
+    const charge = data?.mana_charge || 0;
+    const projected = Math.floor(net * 0.6 * charge) + Math.floor(net * 0.4 * charge * charge);
+    // Yield past the mana cap isn't granted (the capacitor keeps that
+    // charge instead) — celebrate only what actually lands.
+    const capacityLeft = Math.max(0, (data?.max_mana || 0) - (data?.mana || 0));
+    const gain = Math.min(projected, capacityLeft);
     try {
       const result = await api.rechargeMana();
-      showAlert("Success", result.message);
+      if (gain > 0 && origin) {
+        flyFx?.fly("mana", origin, 10, { amount: gain });
+      } else {
+        // Draining/breach releases aren't a celebration — say what happened.
+        showAlert("Mana Released", result.message);
+      }
       loadData();
     } catch (e) {
       showAlert("Error", e.message);
@@ -110,6 +143,49 @@ export default function TreasuryScreen({ fixedTab }) {
   const onCooldown = cooldownRemaining != null && cooldownRemaining > 0;
 
   function renderTaxTab() {
+    // Collapsed drawer: everything needed to act — balance summary,
+    // cooldown state, and all four tiers as a 2×2 grid. The ScrollView is
+    // a fallback only: sized to fit it can't scroll, but on a squat
+    // viewport the grid can't shrink, so overflow scrolls instead of
+    // getting cut off.
+    if (!expanded) {
+      return (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.compactWrap} showsVerticalScrollIndicator={false}>
+          <View style={styles.compactHeader}>
+            <Text style={styles.compactBalance}>💰 {data.gold?.toLocaleString()}</Text>
+            <Text style={styles.compactMeta}>
+              +{data.production_rates?.gold || 0}/hr · taxable {data.taxable_amount}
+            </Text>
+          </View>
+          {onCooldown && (
+            <Text style={styles.compactCooldown}>⏳ Next collection in {formatCountdown(cooldownRemaining)}</Text>
+          )}
+          <View style={styles.tierGrid}>
+            {data.tax_rates &&
+              Object.entries(data.tax_rates).map(([tier, config]) => {
+                const color = tierColors[tier] || colors.muted;
+                const amount = Math.round(data.taxable_amount * (config.multiplier || 1));
+                return (
+                  <LoadingButton
+                    key={tier}
+                    style={[styles.tierTile, { borderColor: alpha(color, "77") }, onCooldown && styles.tierTileDisabled]}
+                    onPress={(event) => handleTax(tier, event)}
+                    disabled={onCooldown}
+                  >
+                    <Text style={[styles.tierTileName, { color: onCooldown ? colors.faint : color }]} numberOfLines={1}>
+                      {config.label || tier}
+                    </Text>
+                    <Text style={[styles.tierTileAmount, onCooldown && { color: colors.faint }]}>+{amount} gold</Text>
+                  </LoadingButton>
+                );
+              })}
+          </View>
+          <View style={{ flex: 1 }} />
+          <DrawerExpandHint label="Pull up for rates & cooldowns" />
+        </ScrollView>
+      );
+    }
+
     return (
       <ScrollView
         style={styles.tabContent}
@@ -159,7 +235,7 @@ export default function TreasuryScreen({ fixedTab }) {
               <LoadingButton
                 key={tier}
                 style={[styles.tierCard, onCooldown && styles.tierCardDisabled]}
-                onPress={() => handleTax(tier)}
+                onPress={(event) => handleTax(tier, event)}
                 disabled={onCooldown}
               >
                 <View style={[styles.tierStripe, { backgroundColor: onCooldown ? colors.border : color }]} />
@@ -197,9 +273,14 @@ export default function TreasuryScreen({ fixedTab }) {
     // Yield: base (60% linear) + bonus (40% quadratic) to reward waiting
     const baseYield = Math.floor(net * 0.6 * charge);
     const bonusYield = Math.floor(net * 0.4 * charge * charge);
-    const projectedChange = baseYield + bonusYield;
+    const rawChange = baseYield + bonusYield;
+    // Yield past the cap is never wasted — the capacitor keeps that charge
+    // (see backend ChannelMana) — so show what will actually be granted.
+    const capacityLeft = Math.max(0, (data.max_mana || 0) - (data.mana || 0));
+    const projectedChange = rawChange > 0 ? Math.min(rawChange, capacityLeft) : rawChange;
+    const keptOverflow = rawChange > 0 ? rawChange - projectedChange : 0;
     const projectedMana = (data.mana || 0) + projectedChange;
-    const wouldBreach = projectedMana < 0;
+    const wouldBreach = (data.mana || 0) + rawChange < 0;
     const isOverloaded = charge >= 1.0;
     const isHighCharge = charge >= 0.75;
 
@@ -207,6 +288,54 @@ export default function TreasuryScreen({ fixedTab }) {
     const projColor = wouldBreach ? colors.danger : projectedChange >= 0 ? colors.success : colors.warning;
     const chargePercent = Math.round(charge * 100);
     const barColor = isOverloaded ? colors.danger : isHighCharge ? colors.warning : chargePercent > 30 ? colors.accent : colors.info;
+    const releaseLabel = wouldBreach
+      ? "⚠️  Release Mana (Risk Breach)"
+      : isOverloaded
+        ? "⚡  Release Now!"
+        : "🔮  Release Mana";
+
+    // Collapsed drawer: reserves + net flow, charge bar, projected yield,
+    // and the release button — the full breakdown lives in the expansion.
+    // ScrollView is an overflow fallback, same as the tax grid above.
+    if (!expanded) {
+      return (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.compactWrap} showsVerticalScrollIndicator={false}>
+          <View style={styles.compactHeader}>
+            <Text style={[styles.compactBalance, { color: colors.accent }]}>
+              🔮 {data.mana?.toLocaleString()}
+              <Text style={styles.compactMeta}> / {data.max_mana?.toLocaleString()}</Text>
+            </Text>
+            <Text style={[styles.compactMeta, { color: netColor, fontWeight: "800" }]}>
+              {net >= 0 ? "+" : ""}{net}/cycle
+            </Text>
+          </View>
+          <View style={styles.compactBatteryOuter}>
+            <View style={[styles.compactBatteryFill, { width: `${chargePercent}%`, backgroundColor: barColor }]} />
+          </View>
+          <View style={styles.compactHeader}>
+            <Text style={[styles.compactMeta, { color: isOverloaded ? colors.danger : isHighCharge ? colors.warning : colors.textDim, fontWeight: "800" }]}>
+              {isOverloaded ? "⚡ OVERLOADED" : `${chargePercent}% charged`}
+            </Text>
+            <Text style={[styles.compactMeta, { color: projColor, fontWeight: "800" }]}>
+              release: {projectedChange >= 0 ? "+" : ""}{projectedChange} mana
+            </Text>
+          </View>
+          {keptOverflow > 0 && (
+            <Text style={[styles.compactMeta, { color: colors.info, textAlign: "center" }]}>
+              ♻️ reserves cap — {keptOverflow} worth of charge stays in the capacitor
+            </Text>
+          )}
+          <LoadingButton
+            style={[styles.channelBtn, styles.channelBtnCompact, wouldBreach && styles.channelBtnDanger, isOverloaded && !wouldBreach && styles.channelBtnOverload]}
+            onPress={handleRecharge}
+          >
+            <Text style={styles.channelBtnText}>{releaseLabel}</Text>
+          </LoadingButton>
+          <View style={{ flex: 1 }} />
+          <DrawerExpandHint label="Pull up for flow & yield details" />
+        </ScrollView>
+      );
+    }
 
     return (
       <ScrollView
@@ -279,6 +408,11 @@ export default function TreasuryScreen({ fixedTab }) {
               <Text style={styles.yieldBase}>Base: {baseYield >= 0 ? "+" : ""}{baseYield}</Text>
               <Text style={styles.yieldBonus}>✨ Bonus: {bonusYield >= 0 ? "+" : ""}{bonusYield}</Text>
             </View>
+            {keptOverflow > 0 && (
+              <Text style={styles.overflowNote}>
+                ♻️ Reserves would overflow — {keptOverflow} mana worth of charge stays in the capacitor instead of being wasted.
+              </Text>
+            )}
             {wouldBreach && (
               <Text style={styles.breachBadge}>⚠️ VOID BREACH</Text>
             )}
@@ -288,18 +422,14 @@ export default function TreasuryScreen({ fixedTab }) {
             style={[styles.channelBtn, wouldBreach && styles.channelBtnDanger, isOverloaded && !wouldBreach && styles.channelBtnOverload]}
             onPress={handleRecharge}
           >
-            <Text style={styles.channelBtnText}>
-              {wouldBreach
-                ? "⚠️  Release Mana (Risk Breach)"
-                : isOverloaded
-                  ? "⚡  Release Now!"
-                  : "🔮  Release Mana"}
-            </Text>
+            <Text style={styles.channelBtnText}>{releaseLabel}</Text>
           </LoadingButton>
 
           {isHighCharge && !wouldBreach && (
             <Text style={styles.overloadWarning}>
-              ⚡ Capacitor charge is high! Release soon to avoid overload.
+              {isOverloaded
+                ? "⚡ Fully charged — nothing more accrues. Release to bank the yield."
+                : "⚡ Capacitor almost full — the bonus maxes out at 100%."}
             </Text>
           )}
 
@@ -550,6 +680,13 @@ const styles = StyleSheet.create({
   },
   yieldBase: { color: colors.muted, fontSize: 12, fontWeight: "600" },
   yieldBonus: { color: colors.gold, fontSize: 12, fontWeight: "700" },
+  overflowNote: {
+    color: colors.info,
+    fontSize: 11,
+    textAlign: "center",
+    lineHeight: 15,
+    marginTop: 6,
+  },
   breachBadge: {
     color: colors.danger,
     fontSize: 13,
@@ -589,4 +726,27 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 18,
   },
+
+  // ── Collapsed-drawer fixed layouts ──
+  compactWrap: { flexGrow: 1, paddingHorizontal: 10, paddingTop: 6, paddingBottom: 3, gap: 6 },
+  compactHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
+  compactBalance: { color: colors.gold, fontSize: 14, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  compactMeta: { color: colors.muted, fontSize: 10, fontVariant: ["tabular-nums"] },
+  compactCooldown: { color: colors.dangerSoft, fontSize: 10, fontWeight: "700", textAlign: "center" },
+  tierGrid: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
+  tierTile: {
+    flexBasis: "45%",
+    flexGrow: 1,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderRadius: 9,
+    paddingVertical: 5,
+    alignItems: "center",
+  },
+  tierTileDisabled: { borderColor: colors.border },
+  tierTileName: { fontSize: 11, fontWeight: "800" },
+  tierTileAmount: { color: colors.text, fontSize: 10, fontWeight: "700", marginTop: 1, fontVariant: ["tabular-nums"] },
+  compactBatteryOuter: { height: 10, backgroundColor: colors.border, borderRadius: 5, overflow: "hidden" },
+  compactBatteryFill: { height: 10, borderRadius: 5 },
+  channelBtnCompact: { paddingVertical: 8, marginBottom: 0 },
 });

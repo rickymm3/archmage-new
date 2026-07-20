@@ -5,6 +5,7 @@ import { ModalProvider, useModal } from "./src/context/ModalContext";
 import AuthStack from "./src/navigation/AuthStack";
 import MainTabs from "./src/navigation/MainTabs";
 import DeviceFrame from "./src/components/DeviceFrame";
+import { FlyEffectsProvider } from "./src/components/FlyEffects";
 import { ActivityIndicator, View, Platform } from "react-native";
 import { useEffect, useRef } from "react";
 import * as api from "./src/services/api";
@@ -24,6 +25,12 @@ if (Platform.OS === "web" && typeof document !== "undefined") {
     }
     input, textarea { user-select: text; -webkit-user-select: text; }
     [role="button"], a { cursor: pointer; }
+
+    /* Every scroll area is a game panel, not a webpage — no visible
+       browser scrollbar chrome, ever. Scrolling itself still works via
+       touch/wheel/trackpad, this only hides the thumb/track. */
+    * { scrollbar-width: none; -ms-overflow-style: none; }
+    *::-webkit-scrollbar { display: none; width: 0; height: 0; }
   `;
   document.head.appendChild(style);
 }
@@ -74,14 +81,16 @@ function Root() {
 export default function App() {
   return (
     <DeviceFrame>
-      <AuthProvider>
-        <ModalProvider>
-          <NavigationContainer theme={navTheme}>
-            <StatusBar style="light" />
-            <Root />
-          </NavigationContainer>
-        </ModalProvider>
-      </AuthProvider>
+      <FlyEffectsProvider>
+        <AuthProvider>
+          <ModalProvider>
+            <NavigationContainer theme={navTheme}>
+              <StatusBar style="light" />
+              <Root />
+            </NavigationContainer>
+          </ModalProvider>
+        </AuthProvider>
+      </FlyEffectsProvider>
     </DeviceFrame>
   );
 }

@@ -7,11 +7,13 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Pressable,
+  ScrollView,
   Animated,
   Easing,
   Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import HScroll from "./HScroll";
 import { colors, spacing, radius, type, alpha } from "../theme";
 
 const NATIVE_DRIVER = Platform.OS !== "web";
@@ -203,20 +205,25 @@ export function PrimaryButton({ label, onPress, color = colors.accent, disabled,
 // the main tab bar — switches sub-views without pushing new screens.
 
 export function SubTabs({ tabs, active, onChange }) {
-  return (
-    <View style={styles.subTabs}>
-      {tabs.map((t) => {
+  const isScrollable = tabs.length > 8;
+  const isDense = tabs.length > 5 && tabs.length <= 8;
+  const usesQuarterSlots = !isScrollable && tabs.length < 5;
+  const buttons = tabs.map((t) => {
         const isActive = t.key === active;
         return (
           <PressableScale
             key={t.key}
-            containerStyle={{ flex: 1 }}
-            style={[styles.subTab, isActive && styles.subTabActive]}
+            containerStyle={isScrollable ? styles.scrollTabSlot : usesQuarterSlots ? styles.quarterTabSlot : { flex: 1 }}
+            style={[styles.subTab, isDense && styles.subTabDense, isActive && styles.subTabActive]}
             onPress={() => onChange(t.key)}
             scaleTo={0.9}
           >
-            <Text style={[styles.subTabIcon, !isActive && { opacity: 0.5 }]}>{t.icon}</Text>
-            <Text style={[styles.subTabLabel, isActive && styles.subTabLabelActive]}>
+            {t.iconSource ? (
+              <Image source={t.iconSource} resizeMode="contain" style={[styles.subTabIconImage, isDense && styles.subTabIconImageDense, !isActive && styles.subTabIconMuted]} />
+            ) : (
+              <Text style={[styles.subTabIcon, !isActive && styles.subTabIconMuted]}>{t.icon}</Text>
+            )}
+            <Text style={[styles.subTabLabel, isDense && styles.subTabLabelDense, isActive && styles.subTabLabelActive]}>
               {t.label}
             </Text>
             {t.badge ? (
@@ -226,8 +233,21 @@ export function SubTabs({ tabs, active, onChange }) {
             ) : null}
           </PressableScale>
         );
-      })}
-    </View>
+      });
+
+  if (isScrollable) {
+    return (
+      <HScroll
+        style={styles.subTabsScroll}
+        contentContainerStyle={[styles.subTabs, isDense && styles.subTabsDense]}
+      >
+        {buttons}
+      </HScroll>
+    );
+  }
+
+  return (
+    <View style={[styles.subTabs, isDense && styles.subTabsDense]}>{buttons}</View>
   );
 }
 
@@ -366,28 +386,61 @@ const styles = StyleSheet.create({
   },
   subTabs: {
     flexDirection: "row",
-    backgroundColor: colors.card,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingVertical: 5,
-    paddingHorizontal: 6,
-    gap: 4,
+    height: 68,
+    justifyContent: "center",
+    backgroundColor: alpha("#090711", "f5"),
+    borderTopWidth: 2,
+    borderTopColor: alpha(colors.goldDim, "88"),
+    paddingVertical: 3,
+    paddingHorizontal: 4,
+    gap: 3,
   },
+  subTabsDense: { paddingHorizontal: 2, gap: 1 },
+  subTabsScroll: { flexGrow: 0, height: 68, backgroundColor: alpha("#090711", "f5") },
+  scrollTabSlot: { width: 68, height: 62 },
+  quarterTabSlot: { width: "24%", height: 62 },
   subTab: {
-    flexDirection: "row",
+    height: 62,
+    overflow: "hidden",
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    paddingVertical: 7,
-    borderRadius: radius.md,
+    gap: 1,
+    paddingTop: 3,
+    paddingBottom: 3,
+    paddingHorizontal: 3,
+    backgroundColor: alpha("#171224", "f0"),
+    borderWidth: 1,
+    borderColor: alpha(colors.goldDim, "55"),
+    borderRadius: 7,
   },
+  subTabDense: { paddingHorizontal: 0, borderRadius: 5 },
   subTabActive: {
-    backgroundColor: alpha(colors.accent, "26"),
+    backgroundColor: alpha("#3b2452", "f2"),
+    borderWidth: 1.5,
+    borderColor: colors.gold,
   },
-  subTabIcon: { fontSize: 13 },
-  subTabLabel: { color: colors.muted, fontSize: 11, fontWeight: "700" },
-  subTabLabelActive: { color: colors.accent },
+  subTabIconImage: { zIndex: 2, width: 35, height: 35, marginBottom: -2 },
+  subTabIcon: { zIndex: 2, fontSize: 22, lineHeight: 34 },
+  subTabIconMuted: { opacity: 0.72 },
+  subTabIconImageDense: { width: 28, height: 28, marginBottom: 0 },
+  subTabLabel: {
+    zIndex: 2,
+    color: colors.textDim,
+    fontSize: 8,
+    lineHeight: 11,
+    fontWeight: "900",
+    textAlign: "center",
+    textShadowColor: colors.black,
+    textShadowRadius: 4,
+  },
+  subTabLabelDense: { fontSize: 6.5, lineHeight: 8, letterSpacing: -0.15 },
+  subTabLabelActive: { color: colors.gold },
   subTabBadge: {
+    position: "absolute",
+    top: 3,
+    right: 3,
+    zIndex: 3,
     backgroundColor: colors.danger,
     borderRadius: 8,
     minWidth: 15,

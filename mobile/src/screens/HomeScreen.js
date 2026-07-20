@@ -6,15 +6,23 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Modal,
-  Platform,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import * as api from "../services/api";
-import { LoadingState, ProgressBar } from "../components/ui";
+import { LoadingState, ProgressBar, FadeSlideIn } from "../components/ui";
 import LoadingButton from "../components/LoadingButton";
-import { ui as art } from "../assets";
+import { ui as art, submenuIcon } from "../assets";
 import { colors, alpha } from "../theme";
+import TreasuryScreen from "./TreasuryScreen";
+import MarketplaceScreen from "./MarketplaceScreen";
+import GameHubShell, { DrawerModeSwitch, DrawerExpandHint } from "../components/GameHubShell";
+
+const HOME_TABS = [
+  { key: "overview", iconSource: submenuIcon("home-overview"), label: "Overview" },
+  { key: "tax", iconSource: submenuIcon("home-tax"), label: "Collect Tax" },
+  { key: "mana", iconSource: submenuIcon("home-mana"), label: "Channel Mana" },
+  { key: "market", iconSource: submenuIcon("kingdom-market"), label: "Market" },
+];
 
 function formatCountdown(isoDate, now) {
   const diff = Math.max(0, new Date(isoDate).getTime() - now);
@@ -32,10 +40,34 @@ function moraleColor(m) {
   return colors.danger;
 }
 
-export default function HomeScreen() {
+// One system's at-a-glance state in the collapsed drawer: a fixed 2×2 grid
+// of these covers every core loop regardless of how much is happening —
+// state is AGGREGATED into the tile (counts, next countdown), never a
+// variable-length list that could outgrow the fixed drawer.
+function StatusTile({ icon, label, status, statusColor, pct, pctColor, onPress }) {
+  return (
+    <TouchableOpacity style={styles.tile} activeOpacity={0.75} onPress={onPress} disabled={!onPress}>
+      <View style={styles.tileTop}>
+        <Text style={styles.tileIcon}>{icon}</Text>
+        <Text style={styles.tileLabel} numberOfLines={1}>{label}</Text>
+      </View>
+      <Text style={[styles.tileStatus, statusColor != null && { color: statusColor }]} numberOfLines={1}>
+        {status}
+      </Text>
+      {pct != null && <ProgressBar percent={pct} color={pctColor || colors.gold} height={3} style={{ marginTop: 3 }} />}
+    </TouchableOpacity>
+  );
+}
+
+export default function HomeScreen({ route }) {
   const navigation = useNavigation();
   const [data, setData] = useState(null);
-  const [showReport, setShowReport] = useState(false);
+  const [subTab, setSubTab] = useState("overview");
+
+  // Deep links (e.g. the kingdom map's Black Market node)
+  useEffect(() => {
+    if (route?.params?.subTab) setSubTab(route.params.subTab);
+  }, [route?.params?.subTab]);
   const [collectingId, setCollectingId] = useState(null);
   const [now, setNow] = useState(Date.now());
   const pollRef = useRef(null);
@@ -82,6 +114,29 @@ export default function HomeScreen() {
 
   const hasActivity = orders.length > 0 || activeExp || completedExp.length > 0;
 
+
+  async function collectOrder(order) {
+    if (collectingId) return;
+    setCollectingId(order.id);
+    try {
+      await api.acceptRecruitOrder(order.id);
+      await loadDashboard();
+    } catch (e) {}
+    setCollectingId(null);
+  }
+
+  async function collectAllReady() {
+    if (collectingId) return;
+    setCollectingId("all");
+    try {
+      for (const order of orders) {
+        if (order.available_to_accept > 0) await api.acceptRecruitOrder(order.id);
+      }
+      await loadDashboard();
+    } catch (e) {}
+    setCollectingId(null);
+  }
+
   /* ── activity cards ── */
 
   function renderOrderCard(order) {
@@ -103,14 +158,7 @@ export default function HomeScreen() {
           {order.available_to_accept > 0 && (
             <LoadingButton
               style={styles.smallBtn}
-              onPress={async () => {
-                setCollectingId(order.id);
-                try {
-                  await api.acceptRecruitOrder(order.id);
-                  await loadDashboard();
-                } catch (e) {}
-                setCollectingId(null);
-              }}
+              onPress={() => collectOrder(order)}
               disabled={collectingId === order.id}
             >
               <Text style={styles.smallBtnTxt}>Collect {order.available_to_accept}</Text>
@@ -184,6 +232,18 @@ export default function HomeScreen() {
         <TouchableOpacity
           style={styles.ctaCard}
           activeOpacity={0.8}
+          onPress={() => navigation.navigate("KingdomMap")}
+        >
+          <Text style={styles.ctaIcon}>🗺</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.ctaTitle}>View Realm Map</Text>
+            <Text style={styles.ctaSub}>Survey your kingdom's lands</Text>
+          </View>
+          <Text style={styles.ctaArrow}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.ctaCard}
+          activeOpacity={0.8}
           onPress={() => navigation.navigate("War", { subTab: "explore" })}
         >
           <Text style={styles.ctaIcon}>🧭</Text>
@@ -221,161 +281,181 @@ export default function HomeScreen() {
     );
   }
 
+  /* ── overview drawer: fixed collapsed layout ──
+     One tile per core loop, always exactly four, each aggregating its
+     system's state: actionable (green, tap acts) → in progress (countdown
+     + bar) → idle (CTA into that system). */
+
+  function renderCompactOverview() {
+    // Expedition tile
+    let expTile;
+    if (completedExp.length > 0) {
+      expTile = { status: `Returned — claim${completedExp.length > 1 ? ` ×${completedExp.length}` : ""}!`, statusColor: colors.success };
+    } else if (activeExp) {
+      const startMs = new Date(activeExp.started_at).getTime();
+      const endMs = new Date(activeExp.finishes_at).getTime();
+      const pct = Math.round(Math.max(0, Math.min(1, (now - startMs) / Math.max(1, endMs - startMs))) * 100);
+      expTile = {
+        status: now >= endMs ? "Returning…" : `Back in ${formatCountdown(activeExp.finishes_at, now)}`,
+        statusColor: colors.gold,
+        pct,
+        pctColor: colors.gold,
+      };
+    } else {
+      expTile = { status: "Send a party", statusColor: colors.muted };
+    }
+
+    // Recruitment tile — aggregate across all orders
+    const readyTroops = orders.reduce((sum, o) => sum + (o.available_to_accept || 0), 0);
+    const inProgress = orders.find((o) => (o.progress_percent || 0) < 100);
+    let recruitTile;
+    if (readyTroops > 0) {
+      recruitTile = {
+        status: `Collect ${readyTroops} troops`,
+        statusColor: colors.success,
+        onPress: collectAllReady,
+      };
+    } else if (inProgress) {
+      recruitTile = {
+        status: `${inProgress.accepted_quantity}/${inProgress.total_quantity} · ${formatCountdown(inProgress.estimated_completion, now)}`,
+        statusColor: colors.gold,
+        pct: inProgress.progress_percent || 0,
+        pctColor: colors.success,
+      };
+    } else {
+      recruitTile = { status: "Barracks idle", statusColor: colors.muted };
+    }
+
+    // War tile — protection state doubles as the raid CTA's counterpart
+    const warTile = p.under_protection
+      ? {
+          icon: "🛡",
+          status: `Protected til ${new Date(p.protection_expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+          statusColor: colors.success,
+        }
+      : { icon: "⚔️", status: "Raid a kingdom", statusColor: colors.accent };
+
+    return (
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.compactBody} showsVerticalScrollIndicator={false}>
+        <View style={styles.tileGrid}>
+          <StatusTile
+            icon="🧭"
+            label="Expedition"
+            {...expTile}
+            onPress={expTile.onPress || (() => navigation.navigate("War", { subTab: "explore" }))}
+          />
+          <StatusTile
+            icon="📯"
+            label="Recruitment"
+            {...recruitTile}
+            onPress={recruitTile.onPress || (() => navigation.navigate("Army", { subTab: "recruit" }))}
+          />
+          <StatusTile
+            label="War"
+            {...warTile}
+            onPress={() => navigation.navigate("War", { subTab: "attack" })}
+          />
+          <StatusTile
+            icon="💰"
+            label="Economy"
+            status={`+${rates.gold || 0}g · +${rates.mana || 0}m /hr`}
+            onPress={() => setSubTab("tax")}
+          />
+        </View>
+        <View style={{ flex: 1 }} />
+        <DrawerExpandHint label="Pull up for full report" />
+      </ScrollView>
+    );
+  }
+
+  /* ── overview drawer: scrollable expanded layout ── */
+
+  function renderExpandedOverview() {
+    return (
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.activityList}>
+        {hasActivity && (
+          <>
+            <Text style={styles.drawerSection}>Happening Now</Text>
+            {completedExp.map(renderCompletedExpedition)}
+            {orders.map(renderOrderCard)}
+            {activeExp && renderActiveExpedition()}
+          </>
+        )}
+        <Text style={styles.drawerSection}>What Next?</Text>
+        {renderIdleCTAs()}
+        <Text style={styles.drawerSection}>Kingdom Report</Text>
+        <View style={styles.reportCard}>
+          <ReportRow label="Gold production" value={`+${rates.gold || 0} / hr`} />
+          <ReportRow label="Mana production" value={`+${rates.mana || 0} / hr`} />
+          <ReportRow label="Mana battery charge" value={`${Math.round((p.mana_charge || 0) * 100)}%`} />
+          <ReportRow label="Land" value={`${p.land - p.free_land} used · ${p.free_land} free · ${p.land} total`} />
+          <ReportRow label="Morale" value={`${morale}%`} valueColor={moraleColor(morale)} />
+          <ReportRow label="Net power" value={Number(p.net_power).toLocaleString()} />
+          <ReportRow label="Magic power" value={p.magic_power} />
+          <ReportRow label="Army" value={`${army.total_units || 0} units · ${Number(army.total_strength || 0).toLocaleString()} strength`} />
+          <ReportRow label="Army upkeep" value={`💰 ${Number(army.total_upkeep || 0).toLocaleString()} / day`} />
+          {p.under_protection && (
+            <ReportRow
+              label="Protection"
+              value={`until ${new Date(p.protection_expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+              valueColor={colors.success}
+            />
+          )}
+        </View>
+        <View style={{ height: 14 }} />
+      </ScrollView>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* ── HERO ── */}
-      <View style={styles.hero}>
-        <Image source={art.kingdomBanner} resizeMode="cover" style={StyleSheet.absoluteFill} />
-        <View style={styles.heroTint} />
-
-        {/* floating badges */}
-        <View style={styles.heroTopRow}>
-          {p.under_protection ? (
-            <View style={styles.shieldBadge}>
-              <Text style={styles.shieldTxt}>🛡 Protected</Text>
-            </View>
-          ) : <View />}
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            {/* EXPERIMENTAL: pannable map home entry */}
-            <TouchableOpacity
-              style={styles.bellBtn}
-              onPress={() => navigation.navigate("KingdomMap")}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.bellIcon}>🗺</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.bellBtn}
-              onPress={() => navigation.navigate("Profile")}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.bellIcon}>👤</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.bellBtn}
-              onPress={() => navigation.navigate("Notifications")}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.bellIcon}>🔔</Text>
-              {unread > 0 && (
-                <View style={styles.bellDot}>
-                  <Text style={styles.bellDotTxt}>{unread > 9 ? "9+" : unread}</Text>
+      <GameHubShell
+        source={art.townPanorama}
+        section="Home"
+        title={p.kingdom_name || p.username}
+        subtitle={`${p.affinity} · ${Number(p.net_power).toLocaleString()} power`}
+        tabs={HOME_TABS}
+        active={subTab}
+        onChange={setSubTab}
+        drawerTitle={subTab === "overview" ? "Overview" : subTab === "tax" ? "Royal Tax Office" : subTab === "mana" ? "Mana Conduit" : "Black Market"}
+        drawerRatio={0.21}
+      >
+        {subTab === "overview" ? (
+          <View style={{ flex: 1 }}>
+            <View style={styles.vitalsRow}>
+              <View style={styles.moraleBox}>
+                <View style={styles.moraleTop}>
+                  <Text style={styles.vitalLabel}>Morale</Text>
+                  <Text style={[styles.moraleVal, { color: moraleColor(morale) }]}>{morale}%</Text>
                 </View>
-              )}
-            </TouchableOpacity>
+                <ProgressBar percent={morale} color={moraleColor(morale)} height={5} />
+              </View>
+              <TouchableOpacity style={styles.spellChip} onPress={() => navigation.navigate("Magic", { subTab: "active" })}>
+                <Text style={styles.spellChipIcon}>✨</Text>
+                <Text style={styles.spellChipTxt}>{spells.length}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.spellChip, unread > 0 && { borderColor: alpha(colors.danger, "88") }]}
+                onPress={() => navigation.navigate("Notifications")}
+              >
+                <Text style={styles.spellChipIcon}>🔔</Text>
+                <Text style={[styles.spellChipTxt, unread > 0 && { color: colors.danger }]}>
+                  {unread > 9 ? "9+" : unread}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <DrawerModeSwitch compact={renderCompactOverview()} expanded={renderExpandedOverview()} />
           </View>
-        </View>
-
-        <View style={styles.heroScrim}>
-          <Text style={styles.heroTitle}>{p.kingdom_name || p.username}</Text>
-          <Text style={styles.heroSub}>
-            {p.affinity} · 💪 {Number(p.net_power).toLocaleString()} power
-          </Text>
-        </View>
-      </View>
-
-      {/* ── RESOURCE STRIP — each cell jumps to its Kingdom section ── */}
-      <View style={styles.resourceStrip}>
-        <TouchableOpacity
-          style={styles.resItem}
-          activeOpacity={0.6}
-          onPress={() => navigation.navigate("Kingdom", { subTab: "tax" })}
-        >
-          <Text style={[styles.resValue, { color: colors.gold }]}>💰 {Number(p.gold).toLocaleString()}</Text>
-          <Text style={styles.resHint}>+{rates.gold || 0}/hr · tax</Text>
-        </TouchableOpacity>
-        <View style={styles.resDivider} />
-        <TouchableOpacity
-          style={styles.resItem}
-          activeOpacity={0.6}
-          onPress={() => navigation.navigate("Kingdom", { subTab: "mana" })}
-        >
-          <Text style={[styles.resValue, { color: colors.info }]}>🔮 {Number(p.mana).toLocaleString()}</Text>
-          <Text style={styles.resHint}>
-            battery {Math.round((p.mana_charge || 0) * 100)}% · channel
-          </Text>
-        </TouchableOpacity>
-        <View style={styles.resDivider} />
-        <TouchableOpacity
-          style={styles.resItem}
-          activeOpacity={0.6}
-          onPress={() => navigation.navigate("Kingdom", { subTab: "town" })}
-        >
-          <Text style={[styles.resValue, { color: colors.success }]}>🏔 {p.free_land}</Text>
-          <Text style={styles.resHint}>of {p.land} free · build</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.reportBtn} activeOpacity={0.7} onPress={() => setShowReport(true)}>
-          <Text style={styles.reportBtnTxt}>📜</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── VITALS ROW ── */}
-      <View style={styles.vitalsRow}>
-        <View style={styles.moraleBox}>
-          <View style={styles.moraleTop}>
-            <Text style={styles.vitalLabel}>Morale</Text>
-            <Text style={[styles.moraleVal, { color: moraleColor(morale) }]}>{morale}%</Text>
-          </View>
-          <ProgressBar percent={morale} color={moraleColor(morale)} height={5} />
-        </View>
-        <TouchableOpacity
-          style={styles.spellChip}
-          activeOpacity={0.8}
-          onPress={() => navigation.navigate("Magic", { subTab: "active" })}
-        >
-          <Text style={styles.spellChipIcon}>✨</Text>
-          <Text style={styles.spellChipTxt}>{spells.length}</Text>
-          <Text style={styles.spellChipLabel}>{spells.length === 1 ? "spell" : "spells"}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── HAPPENING NOW (fixed window, internal scroll) ── */}
-      <Text style={styles.sectionLabel}>{hasActivity ? "Happening Now" : "What Next?"}</Text>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.activityList}>
-        {completedExp.map(renderCompletedExpedition)}
-        {orders.map(renderOrderCard)}
-        {activeExp && renderActiveExpedition()}
-        {!hasActivity && renderIdleCTAs()}
-        <View style={{ height: 8 }} />
-      </ScrollView>
-
-      {/* ── KINGDOM REPORT SHEET ── */}
-      <Modal visible={showReport} transparent animationType="slide" onRequestClose={() => setShowReport(false)}>
-        <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setShowReport(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.sheet} onPress={() => {}}>
-            <View style={styles.sheetGrip} />
-            <Text style={styles.sheetTitle}>📜 Kingdom Report</Text>
-
-            <Text style={styles.reportSection}>Economy</Text>
-            <ReportRow label="Gold production" value={`+${rates.gold || 0} / hr`} />
-            <ReportRow label="Mana production" value={`+${rates.mana || 0} / hr`} />
-            <ReportRow label="Mana battery charge" value={`${Math.round((p.mana_charge || 0) * 100)}%`} />
-            <ReportRow label="Land" value={`${p.land - p.free_land} used · ${p.free_land} free · ${p.land} total`} />
-
-            <Text style={styles.reportSection}>Might</Text>
-            <ReportRow label="Net power" value={Number(p.net_power).toLocaleString()} />
-            <ReportRow label="Magic power" value={p.magic_power} />
-            <ReportRow label="Army" value={`${army.total_units || 0} units · ${Number(army.total_strength || 0).toLocaleString()} strength`} />
-            <ReportRow label="Army upkeep" value={`💰 ${Number(army.total_upkeep || 0).toLocaleString()} / day`} />
-            <ReportRow label="Morale" value={`${morale}%`} valueColor={moraleColor(morale)} />
-
-            {p.under_protection && (
-              <>
-                <Text style={styles.reportSection}>Status</Text>
-                <ReportRow
-                  label="Magical protection"
-                  value={`until ${new Date(p.protection_expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
-                  valueColor={colors.success}
-                />
-              </>
-            )}
-
-            <TouchableOpacity style={styles.sheetClose} onPress={() => setShowReport(false)}>
-              <Text style={styles.sheetCloseTxt}>Close</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        ) : subTab === "market" ? (
+          <FadeSlideIn key={subTab} style={{ flex: 1 }}>
+            <MarketplaceScreen />
+          </FadeSlideIn>
+        ) : (
+          <FadeSlideIn key={subTab} style={{ flex: 1 }}>
+            <TreasuryScreen fixedTab={subTab} />
+          </FadeSlideIn>
+        )}
+      </GameHubShell>
     </View>
   );
 }
@@ -390,10 +470,11 @@ function ReportRow({ label, value, valueColor = colors.text }) {
 }
 
 const styles = StyleSheet.create({
+  // No web maxWidth cap here — GameHubShell lets its scene art span the
+  // full (possibly widened) frame and centers the interactive column itself.
   container: {
     flex: 1,
     backgroundColor: colors.bg,
-    ...(Platform.OS === "web" ? { maxWidth: 480, width: "100%", alignSelf: "center" } : {}),
   },
 
   /* hero */
@@ -492,37 +573,36 @@ const styles = StyleSheet.create({
   /* vitals */
   vitalsRow: {
     flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingTop: 10,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingTop: 5,
     alignItems: "stretch",
   },
   moraleBox: {
     flex: 1,
     backgroundColor: colors.card,
-    borderRadius: 10,
+    borderRadius: 9,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     justifyContent: "center",
   },
-  moraleTop: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
-  vitalLabel: { color: colors.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
-  moraleVal: { fontSize: 12, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  moraleTop: { flexDirection: "row", justifyContent: "space-between", marginBottom: 3 },
+  vitalLabel: { color: colors.muted, fontSize: 9, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  moraleVal: { fontSize: 11, fontWeight: "800", fontVariant: ["tabular-nums"] },
   spellChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     backgroundColor: colors.card,
-    borderRadius: 10,
+    borderRadius: 9,
     borderWidth: 1,
     borderColor: alpha(colors.accent, "66"),
-    paddingHorizontal: 12,
+    paddingHorizontal: 9,
   },
-  spellChipIcon: { fontSize: 14 },
-  spellChipTxt: { color: colors.accent, fontSize: 16, fontWeight: "800" },
-  spellChipLabel: { color: colors.muted, fontSize: 10 },
+  spellChipIcon: { fontSize: 12 },
+  spellChipTxt: { color: colors.accent, fontSize: 13, fontWeight: "800" },
 
   /* activity zone */
   sectionLabel: {
@@ -536,6 +616,50 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   activityList: { paddingHorizontal: 12 },
+
+  /* collapsed-drawer fixed layout: 2×2 status tile grid */
+  compactBody: { flexGrow: 1, paddingHorizontal: 10, paddingTop: 5, paddingBottom: 2, gap: 5 },
+  tileGrid: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
+  tile: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    backgroundColor: colors.card,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  tileTop: { flexDirection: "row", alignItems: "center", gap: 4 },
+  tileIcon: { fontSize: 11 },
+  tileLabel: {
+    flex: 1,
+    color: colors.muted,
+    fontSize: 8,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  tileStatus: { color: colors.text, fontSize: 11, fontWeight: "800", marginTop: 2, fontVariant: ["tabular-nums"] },
+
+  /* expanded-drawer sections */
+  drawerSection: {
+    color: colors.goldDim,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  reportCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 2,
+  },
   activityCard: {
     backgroundColor: colors.card,
     borderRadius: 12,
@@ -576,35 +700,7 @@ const styles = StyleSheet.create({
   ctaSub: { color: colors.muted, fontSize: 11, marginTop: 2 },
   ctaArrow: { color: colors.accent, fontSize: 22, fontWeight: "700" },
 
-  /* kingdom report sheet */
-  sheetOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
-  sheet: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    paddingBottom: 26,
-  },
-  sheetGrip: {
-    alignSelf: "center",
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    marginBottom: 10,
-  },
-  sheetTitle: { color: colors.gold, fontSize: 17, fontWeight: "800", textAlign: "center", marginBottom: 6 },
-  reportSection: {
-    color: colors.accent,
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginTop: 12,
-    marginBottom: 4,
-  },
+  /* kingdom report rows (expanded drawer) */
   reportRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -615,6 +711,4 @@ const styles = StyleSheet.create({
   },
   reportLabel: { color: colors.muted, fontSize: 13 },
   reportValue: { fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  sheetClose: { alignItems: "center", paddingVertical: 12, marginTop: 8 },
-  sheetCloseTxt: { color: colors.muted, fontSize: 14 },
 });

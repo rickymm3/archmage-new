@@ -13,46 +13,37 @@
 // outside the Tab.Navigator, which wants the same bar/highlight look without
 // real tab-navigation state). `CustomTabBar` (default export) is the thin
 // adapter React Navigation's `tabBar` render prop expects.
-import React from "react";
-import { View, Text, Image, TouchableOpacity, StyleSheet, Platform, Dimensions } from "react-native";
+import React, { useState } from "react";
+import { View, Image, TouchableOpacity, StyleSheet, Platform } from "react-native";
 import { ui as art } from "../assets";
 import { colors, alpha } from "../theme";
 
 export const TAB_NAMES = ["Home", "Kingdom", "Army", "War", "Magic"];
-
-const TAB_ICONS = {
-  Home: "🏠",
-  Kingdom: "👑",
-  Army: "⚔️",
-  War: "🔥",
-  Magic: "✨",
-};
 
 // menu-bar-bg.png (cropped from menu-empty.png) is 1536x452 natively, but
 // rendered with resizeMode="stretch" below — so height doesn't have to
 // track that aspect ratio. Capping it well short of the natural aspect
 // keeps the bar compact (full width, shallow height) instead of the tall
 // slab the source art's own proportions would otherwise give it.
-const BAR_ASPECT = 1536 / 452;
-const { width: SCREEN_W } = Dimensions.get("window");
-const BAR_WIDTH = Math.min(SCREEN_W, 480) * 0.96;
-const BAR_HEIGHT = Math.min(BAR_WIDTH / BAR_ASPECT, 62);
+const BAR_ASPECT = 1955 / 521;
 
 function TabSlot({ name, isActive, onPress }) {
   return (
     <TouchableOpacity style={styles.slotTouchable} onPress={onPress} activeOpacity={0.75}>
       {isActive && <View style={styles.activeGlow} pointerEvents="none" />}
-      <Text style={[styles.icon, { opacity: isActive ? 1 : 0.55 }]}>{TAB_ICONS[name] || "•"}</Text>
-      <Text style={[styles.label, isActive && styles.labelActive]}>{name.toUpperCase()}</Text>
     </TouchableOpacity>
   );
 }
 
 export function TabBarVisual({ names = TAB_NAMES, activeIndex, onPress }) {
+  const [containerWidth, setContainerWidth] = useState(0);
+  const barWidth = Math.min(containerWidth || 360, 520);
+  const barHeight = Math.min(124, Math.max(86, barWidth / BAR_ASPECT));
+
   return (
-    <View style={styles.wrap}>
-      <View style={styles.barBox}>
-        <Image source={art.menuBarBg} style={styles.barImg} resizeMode="stretch" />
+    <View style={styles.wrap} onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}>
+      <View style={[styles.barBox, { width: barWidth, height: barHeight }]}>
+        <Image source={art.gameNav} style={styles.barImg} resizeMode="stretch" />
         <View style={styles.slotsRow}>
           {names.map((name, i) => (
             <TabSlot key={name} name={name} isActive={activeIndex === i} onPress={() => onPress(name, i)} />
@@ -80,19 +71,19 @@ export default function CustomTabBar({ state, navigation }) {
 const styles = StyleSheet.create({
   wrap: {
     backgroundColor: colors.bg,
+    width: "100%",
+    overflow: "hidden",
     alignItems: "center",
-    paddingTop: 4,
-    paddingBottom: Platform.OS === "web" ? 4 : 18,
+    paddingTop: 0,
+    paddingBottom: Platform.OS === "web" ? 0 : 12,
   },
   barBox: {
-    width: BAR_WIDTH,
-    height: BAR_HEIGHT,
   },
   barImg: { width: "100%", height: "100%" },
   slotsRow: {
     ...StyleSheet.absoluteFillObject,
     flexDirection: "row",
-    paddingHorizontal: "6%",
+    paddingHorizontal: "1.8%",
   },
   slotTouchable: { flex: 1, alignItems: "center", justifyContent: "center" },
   activeGlow: {
@@ -101,10 +92,9 @@ const styles = StyleSheet.create({
     bottom: 4,
     left: 2,
     right: 2,
-    borderRadius: 10,
-    backgroundColor: alpha(colors.gold, "22"),
+    borderRadius: 8,
+    backgroundColor: alpha(colors.gold, "1f"),
+    borderWidth: 2,
+    borderColor: alpha(colors.gold, "b8"),
   },
-  icon: { fontSize: 17 },
-  label: { color: colors.muted, fontSize: 8, fontWeight: "800", marginTop: 2, letterSpacing: 0.3 },
-  labelActive: { color: colors.gold },
 });

@@ -12,7 +12,17 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import { LoadingState, EmptyState } from "../components/ui";
+import { useDrawer } from "../components/GameHubShell";
+import { CompactShell, StatStrip, CompactNote } from "../components/DrawerCompact";
 import { colors, alpha } from "../theme";
+
+// 48,154 → "48.2k" — the compact strip has no room for full thousands.
+function kFmt(n) {
+  const num = Number(n) || 0;
+  if (num >= 10000) return `${Math.round(num / 1000)}k`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}k`;
+  return `${num}`;
+}
 
 // Threat rating relative to your power (target power / your power).
 function threatMeta(ratio) {
@@ -74,6 +84,8 @@ function TargetCard({ t, onAttack, dim }) {
 
 export default function BattlesScreen({ navigation }) {
   const { showAlert } = useModal();
+  const drawer = useDrawer();
+  const expanded = drawer ? drawer.expanded : true;
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState("");
@@ -124,6 +136,41 @@ export default function BattlesScreen({ navigation }) {
 
   const showingSearch = results !== null;
   const list = showingSearch ? results : (data.targets || []);
+
+  // Collapsed drawer: your standing + the best target you can hit right
+  // now, ready to attack in one tap. Full list and search live above.
+  if (!expanded) {
+    const best = (data.targets || []).find((t) => !t.under_protection && t.in_range !== false);
+    return (
+      <CompactShell hint="Pull up for all targets & search">
+        <StatStrip
+          items={[
+            { value: `#${data.my_rank}`, label: "Rank" },
+            { value: `💪 ${kFmt(data.my_power)}`, label: "Power", color: colors.gold },
+            { value: `${kFmt(data.range?.min || 0)}–${kFmt(data.range?.max || 0)}`, label: "Strike range", color: colors.danger },
+          ]}
+        />
+        {best ? (
+          <View style={styles.compactTarget}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.compactTargetName} numberOfLines={1}>
+                #{best.rank} {best.kingdom_name || best.username}
+              </Text>
+              <Text style={styles.compactTargetMeta} numberOfLines={1}>
+                💪 {kFmt(best.net_power)} · 🏔 {best.land} ·{" "}
+                <Text style={{ color: threatMeta(best.ratio || 1).color }}>{threatMeta(best.ratio || 1).label}</Text>
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.compactAttackBtn} activeOpacity={0.85} onPress={() => handleAttack(best)}>
+              <Text style={styles.compactAttackTxt}>⚔️ Attack</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <CompactNote>No targets in your strike range right now — pull up to search.</CompactNote>
+        )}
+      </CompactShell>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -200,6 +247,27 @@ export default function BattlesScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  // Collapsed-drawer layout
+  compactTarget: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.card,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  compactTargetName: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  compactTargetMeta: { color: colors.muted, fontSize: 10, marginTop: 1, fontVariant: ["tabular-nums"] },
+  compactAttackBtn: {
+    backgroundColor: colors.danger,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  compactAttackTxt: { color: colors.white, fontSize: 11, fontWeight: "800" },
   container: { flex: 1, backgroundColor: colors.bg },
 
   /* plaque */
