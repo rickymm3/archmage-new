@@ -39,22 +39,22 @@ function navigateTo(navigationRef, destination) {
 }
 
 export default function TutorialOverlay({ navigationRef }) {
-  const { isAuthenticated, user } = useAuth();
-  const { showConfirm } = useModal();
+  const { isAuthenticated, user, refreshUser } = useAuth();
+  const { showConfirm, showPrompt } = useModal();
   const [tutorial, setTutorial] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
 
   const load = useCallback(async () => {
-    if (!isAuthenticated || !user?.has_kingdom_name) return;
+    if (!isAuthenticated) return;
     try {
       const data = await api.getTutorial();
       setTutorial(data.tutorial);
     } catch (e) {
       if (e.message !== "UNAUTHORIZED") setError(e.message);
     }
-  }, [isAuthenticated, user?.has_kingdom_name]);
+  }, [isAuthenticated]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -69,13 +69,23 @@ export default function TutorialOverlay({ navigationRef }) {
     return value ? Math.max(0, Math.ceil((new Date(value).getTime() - now) / 1000)) : 0;
   }, [copy, tutorial, now]);
 
-  if (!isAuthenticated || !user?.has_kingdom_name || !tutorial || tutorial.completed || !copy) return null;
+  if (!isAuthenticated || !tutorial || tutorial.completed || !copy) return null;
 
   async function advance() {
     if (waitSeconds > 0 || busy) return;
     setBusy(true);
     setError("");
     try {
+      if (!user?.has_kingdom_name) {
+        const name = await showPrompt(
+          'Name Your Kingdom',
+          'Before the Steward begins, choose a name for your kingdom (3-15 characters, letters, numbers, and spaces).',
+          { submitText: 'Claim Name', defaultValue: '' }
+        );
+        if (!name?.trim()) return;
+        await api.updateKingdomName(name.trim());
+        await refreshUser();
+      }
       navigateTo(navigationRef, copy.nav);
       const data = await api.advanceTutorial(tutorial.step);
       if (data.result?.battle_result) navigationRef.navigate("BattleResult", { result: data.result.battle_result });
@@ -112,7 +122,7 @@ export default function TutorialOverlay({ navigationRef }) {
         <View style={styles.card}>
           <View style={styles.topRow}>
             <Text style={styles.eyebrow}>THE STEWARD · {tutorial.progress + 1}/{tutorial.total}</Text>
-            <TouchableOpacity onPress={skip} disabled={busy} hitSlop={10}><Text style={styles.skip}>Skip</Text></TouchableOpacity>
+            <TouchableOpacity onPress={skip} disabled={busy || !user?.has_kingdom_name} hitSlop={10}><Text style={styles.skip}>Skip</Text></TouchableOpacity>
           </View>
           <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${progress}%` }]} /></View>
           <Text style={styles.title}>{copy.title}</Text>

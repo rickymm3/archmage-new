@@ -1,15 +1,13 @@
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer, DarkTheme, createNavigationContainerRef } from "@react-navigation/native";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
-import { ModalProvider, useModal } from "./src/context/ModalContext";
+import { ModalProvider } from "./src/context/ModalContext";
 import AuthStack from "./src/navigation/AuthStack";
 import MainTabs from "./src/navigation/MainTabs";
 import DeviceFrame from "./src/components/DeviceFrame";
 import { FlyEffectsProvider } from "./src/components/FlyEffects";
 import TutorialOverlay from "./src/components/TutorialOverlay";
 import { ActivityIndicator, View, Platform } from "react-native";
-import { useEffect, useRef } from "react";
-import * as api from "./src/services/api";
 
 // De-webify the web build: no text selection, no tap highlight, no
 // rubber-band overscroll, no I-beam cursors. Inputs stay selectable.
@@ -44,31 +42,7 @@ const navTheme = {
 const navigationRef = createNavigationContainerRef();
 
 function Root() {
-  const { isAuthenticated, isLoading, user, refreshUser } = useAuth();
-  const { showPrompt, showAlert } = useModal();
-  const prompted = useRef(false);
-
-  useEffect(() => {
-    if (isAuthenticated && user && !user.has_kingdom_name && !prompted.current) {
-      prompted.current = true;
-      promptKingdomName();
-    }
-  }, [isAuthenticated, user]);
-
-  async function promptKingdomName() {
-    const name = await showPrompt(
-      "Name Your Kingdom",
-      "Choose a name for your kingdom (3-15 characters, letters, numbers, and spaces).",
-      { submitText: "Claim Name", defaultValue: "" }
-    );
-    if (name === null || name.trim() === "") return;
-    try {
-      await api.updateKingdomName(name.trim());
-      await refreshUser();
-    } catch (e) {
-      showAlert("Error", e.message);
-    }
-  }
+  const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (
