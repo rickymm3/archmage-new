@@ -36,6 +36,7 @@ module Api
           payload = serialize_battle_result(result)
           payload[:loot] = result.loot ? {
             gold: result.loot[:gold],
+            land: result.loot[:land],
             item: result.loot[:item] ? { name: result.loot[:item].name, rarity: result.loot[:item].rarity } : nil
           } : nil
           render json: { result: payload }

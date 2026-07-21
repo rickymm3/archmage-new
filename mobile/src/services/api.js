@@ -105,6 +105,22 @@ export async function getDashboard() {
   return apiRequest("/dashboard");
 }
 
+// First-time game walkthrough
+export async function getTutorial() {
+  return apiRequest("/tutorial");
+}
+
+export async function advanceTutorial(step) {
+  return apiRequest("/tutorial/advance", {
+    method: "POST",
+    body: JSON.stringify({ step }),
+  });
+}
+
+export async function skipTutorial() {
+  return apiRequest("/tutorial/skip", { method: "POST" });
+}
+
 // Town
 export async function getTown() {
   return apiRequest("/town");

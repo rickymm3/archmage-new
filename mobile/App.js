@@ -1,11 +1,12 @@
 import { StatusBar } from "expo-status-bar";
-import { NavigationContainer, DarkTheme } from "@react-navigation/native";
+import { NavigationContainer, DarkTheme, createNavigationContainerRef } from "@react-navigation/native";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { ModalProvider, useModal } from "./src/context/ModalContext";
 import AuthStack from "./src/navigation/AuthStack";
 import MainTabs from "./src/navigation/MainTabs";
 import DeviceFrame from "./src/components/DeviceFrame";
 import { FlyEffectsProvider } from "./src/components/FlyEffects";
+import TutorialOverlay from "./src/components/TutorialOverlay";
 import { ActivityIndicator, View, Platform } from "react-native";
 import { useEffect, useRef } from "react";
 import * as api from "./src/services/api";
@@ -39,6 +40,8 @@ const navTheme = {
   ...DarkTheme,
   colors: { ...DarkTheme.colors, background: "#0f0f1a", card: "#1a1a2e", border: "#2a2a4a", primary: "#7c5cbf" },
 };
+
+const navigationRef = createNavigationContainerRef();
 
 function Root() {
   const { isAuthenticated, isLoading, user, refreshUser } = useAuth();
@@ -84,10 +87,11 @@ export default function App() {
       <FlyEffectsProvider>
         <AuthProvider>
           <ModalProvider>
-            <NavigationContainer theme={navTheme}>
+            <NavigationContainer ref={navigationRef} theme={navTheme}>
               <StatusBar style="light" />
               <Root />
             </NavigationContainer>
+            <TutorialOverlay navigationRef={navigationRef} />
           </ModalProvider>
         </AuthProvider>
       </FlyEffectsProvider>
