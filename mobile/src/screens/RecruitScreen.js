@@ -13,7 +13,9 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
-import { LoadingState, ArtPlaceholder } from "../components/ui";
+import { LoadingState, ArtPlaceholder, ProgressBar } from "../components/ui";
+import { useDrawer } from "../components/GameHubShell";
+import { CompactShell, StatStrip } from "../components/DrawerCompact";
 import { unitImage } from "../assets";
 import { colors, alpha } from "../theme";
 
@@ -91,6 +93,8 @@ function PulsingStrip() {
 
 export default function RecruitScreen({ route }) {
   const { showAlert, showConfirm } = useModal();
+  const drawer = useDrawer();
+  const expanded = drawer ? drawer.expanded : true;
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [recruiting, setRecruiting] = useState(false);
@@ -184,6 +188,49 @@ export default function RecruitScreen({ route }) {
   const slotsUsed = data.used_slots || 0;
   const slotsMax = data.max_slots || 1;
   const slotsFull = slotsUsed >= slotsMax;
+
+  // Collapsed drawer: barracks status + the active order's progress with a
+  // one-tap collect. Choosing units/tiers happens above.
+  if (!expanded) {
+    const order = activeOrders[0];
+    const prog = order ? getOrderProgress(order) : null;
+    return (
+      <CompactShell hint="Pull up to choose units">
+        <StatStrip
+          items={[
+            { value: `🏰 L${data.barracks_level}`, label: "Barracks" },
+            { value: `${slotsUsed}/${slotsMax}`, label: "Recruiting", color: slotsFull ? colors.danger : colors.info },
+            { value: `💰 ${Number(data.gold || 0).toLocaleString()}`, label: "Gold", color: colors.gold },
+          ]}
+        />
+        {order && prog ? (
+          <>
+            <View style={styles.compactOrderRow}>
+              <Text style={styles.compactOrderName} numberOfLines={1}>
+                📯 {order.unit.name} · {prog.arrived}/{order.total_quantity}
+              </Text>
+              <Text style={[styles.compactOrderMeta, prog.available > 0 && { color: colors.success }]}>
+                {prog.fraction >= 1 ? "All arrived!" : formatCountdown(prog.remaining)}
+              </Text>
+            </View>
+            <ProgressBar percent={prog.percent} color={colors.success} height={5} />
+            {prog.available > 0 && (
+              <LoadingButton style={styles.compactCollectBtn} onPress={() => handleCollect(order.id)}>
+                <Text style={styles.compactCollectTxt}>Collect {prog.available} troops</Text>
+              </LoadingButton>
+            )}
+            {activeOrders.length > 1 && (
+              <Text style={styles.compactOrderMeta}>+{activeOrders.length - 1} more order{activeOrders.length > 2 ? "s" : ""} running</Text>
+            )}
+          </>
+        ) : (
+          <Text style={styles.compactOrderMeta}>
+            Barracks idle — {unlocked.length} unit type{unlocked.length === 1 ? "" : "s"} ready to muster
+          </Text>
+        )}
+      </CompactShell>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -454,6 +501,13 @@ export default function RecruitScreen({ route }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "transparent" },
   loading: { color: colors.faint, textAlign: "center", marginTop: 60 },
+
+  // Collapsed-drawer layout
+  compactOrderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  compactOrderName: { flex: 1, color: colors.text, fontSize: 12, fontWeight: "800" },
+  compactOrderMeta: { color: colors.muted, fontSize: 11, fontWeight: "700", fontVariant: ["tabular-nums"], textAlign: "center" },
+  compactCollectBtn: { backgroundColor: colors.success, borderRadius: 9, paddingVertical: 7, alignItems: "center" },
+  compactCollectTxt: { color: colors.white, fontSize: 12, fontWeight: "800" },
 
   // Header
   headerBar: {

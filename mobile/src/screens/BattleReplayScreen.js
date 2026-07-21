@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from "react-native";
 import { ProgressBar, PressableScale, FadeSlideIn, Badge } from "../components/ui";
 import { TYPE_ICONS, ELEM_COLORS } from "../battleVisuals";
-import { colors, alpha } from "../theme";
+import { colors, alpha, webColumn } from "../theme";
 
 const SIDE_COLOR = { attacker: colors.info, defender: colors.dangerSoft };
 
@@ -300,7 +300,7 @@ export default function BattleReplayScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: colors.bg, ...webColumn },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",

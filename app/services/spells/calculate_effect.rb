@@ -1,15 +1,23 @@
 module Spells
   class CalculateEffect
-    attr_reader :spell, :amount
+    attr_reader :spell, :amount, :user
 
-    def initialize(spell, amount)
+    def initialize(spell, amount, user: nil)
       @spell = spell
       @amount = amount.to_i
+      @user = user
+    end
+
+    # Affinity synergy: casting a spell of your OWN color hits +15% harder
+    # (magnitude, summon count, or duration alike). Modest on purpose —
+    # off-color spells stay worth casting.
+    def native_bonus?
+      user.present? && spell.affinity.to_s == user.color.to_s
     end
 
     def call
       config = spell.configuration&.dig('scaling') || {}
-      
+
       # Fallback for spells without new scaling config
       return legacy_fallback(config) if config.empty?
 
@@ -24,10 +32,13 @@ module Spells
                 0
               end
 
+      value = (value * User::NATIVE_SPELL_BONUS).round(2) if native_bonus?
+
       {
         value: value,
         attribute: config['attribute'],
         unit: config['unit'],
+        native_bonus: native_bonus?,
         description: format_description(value, config)
       }
     end

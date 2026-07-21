@@ -72,13 +72,13 @@ class ApiFlowTest < ActionDispatch::IntegrationTest
 
   test "spell research invests mana" do
     register!
-    # Spells unlock linearly within an affinity — research the first one.
-    api_get "/spells"
+    # Research applies to the affinity's currently rolled target.
+    api_post "/spells/general/roll", {}
     assert_response :success
-    first_spell = response.parsed_body.dig("affinities", "general").find { |s| s["unlocked"] }
-    assert first_spell, "expected an unlocked spell to research"
+    target = response.parsed_body["spell"]
+    assert target, "expected a rolled spell target"
 
-    api_post "/spells/#{first_spell["id"]}/research", { amount: 50 }
+    api_post "/spells/#{target["id"]}/research", { amount: 50 }
     assert_response :success
     assert_equal 50, response.parsed_body.dig("result", "invested")
   end

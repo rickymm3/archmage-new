@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_14_200630) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_20_194500) do
   create_table "active_spells", force: :cascade do |t|
     t.integer "user_id", null: false
     t.integer "spell_id", null: false
@@ -400,6 +400,10 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_14_200630) do
     t.string "username"
     t.string "auth_token"
     t.string "kingdom_name", limit: 15
+    t.string "onboarding_step", default: "welcome", null: false
+    t.json "onboarding_state", default: {}, null: false
+    t.datetime "onboarding_completed_at"
+    t.datetime "onboarding_skipped_at"
     t.index ["auth_token"], name: "index_users_on_auth_token", unique: true
     t.index ["color"], name: "index_users_on_color"
     t.index ["email_address"], name: "index_users_on_email_address", unique: true

@@ -13,9 +13,14 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import { LoadingState } from "../components/ui";
+import LoadingButton from "../components/LoadingButton";
+import { useDrawer } from "../components/GameHubShell";
+import { CompactShell, StatStrip, CompactNote } from "../components/DrawerCompact";
 import { colors, alpha } from "../theme";
 
 export default function DefenseScreen({ navigation }) {
+  const drawer = useDrawer();
+  const expanded = drawer ? drawer.expanded : true;
   const { showAlert } = useModal();
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -135,6 +140,33 @@ export default function DefenseScreen({ navigation }) {
   // Live defense strength — updates as sliders change, before saving.
   const garrisonCount = nonHeroUnits.reduce((n, u) => n + (garrisonValues[u.id] || 0), 0);
   const garrisonDefense = nonHeroUnits.reduce((n, u) => n + (garrisonValues[u.id] || 0) * (u.defense || 0), 0);
+
+  // Collapsed drawer: garrison strength at a glance, plus save if there's
+  // an unsaved plan. Assigning units/heroes/spells happens above.
+  if (!expanded) {
+    return (
+      <CompactShell hint="Pull up to assign defenders">
+        <StatStrip
+          items={[
+            { value: `🛡 ${garrisonCount}`, label: "Garrisoned" },
+            { value: garrisonDefense.toLocaleString(), label: "Defense power", color: colors.info },
+            { value: dirty ? "Unsaved" : "Saved", label: "Plan", color: dirty ? colors.warning : colors.success },
+          ]}
+        />
+        <CompactNote>
+          {defendingUnits.length > 0
+            ? defendingUnits.slice(0, 3).map((u) => `${garrisonValues[u.id]}× ${u.name}`).join(" · ") +
+              (defendingUnits.length > 3 ? ` · +${defendingUnits.length - 3} more` : "")
+            : "No units garrisoned — your kingdom is undefended!"}
+        </CompactNote>
+        {dirty && (
+          <LoadingButton style={styles.compactSaveBtn} onPress={handleSave} disabled={saving}>
+            <Text style={styles.compactSaveTxt}>💾 Save Defense Plan</Text>
+          </LoadingButton>
+        )}
+      </CompactShell>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -439,6 +471,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   saveBtnTxt: { color: colors.white, fontSize: 15, fontWeight: "800" },
+  compactSaveBtn: {
+    backgroundColor: colors.info,
+    borderRadius: 9,
+    paddingVertical: 7,
+    alignItems: "center",
+  },
+  compactSaveTxt: { color: colors.white, fontSize: 12, fontWeight: "800" },
 
   // Section label
   sectionLabel: {

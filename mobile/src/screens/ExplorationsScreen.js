@@ -17,6 +17,8 @@ import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
 import { LoadingState, ProgressBar } from "../components/ui";
+import { useDrawer } from "../components/GameHubShell";
+import { CompactShell, StatStrip, CompactNote } from "../components/DrawerCompact";
 import { ui as art, unitImage } from "../assets";
 import { colors, alpha } from "../theme";
 
@@ -136,6 +138,8 @@ function Hero({ title, subtitle, accent = colors.gold, onHistory, historyCount }
    MAIN SCREEN
    ================================================================ */
 export default function ExplorationsScreen() {
+  const drawer = useDrawer();
+  const expanded = drawer ? drawer.expanded : true;
   const { showAlert } = useModal();
   const [data, setData] = useState(null);
   const [selectedUnit, setSelectedUnit] = useState(null); // null = solo
@@ -251,6 +255,25 @@ export default function ExplorationsScreen() {
     const moreWaiting = data.completed.length - 1;
     const events = e.events || [];
 
+    // Collapsed: outcome + rewards + claim, one tap. Log lives above.
+    if (!expanded) {
+      return (
+        <CompactShell hint="Pull up for the expedition log">
+          <CompactNote color={isFailed ? colors.danger : colors.gold}>
+            {isFailed ? "💀 Expedition lost" : "🏆 Expedition returned!"}
+            {e.quantity > 0 ? ` · ${survived}/${e.quantity} escorts survived` : ""}
+          </CompactNote>
+          <CompactNote color={colors.text}>{parts.length > 0 ? parts.join("   ") : "No rewards recovered"}</CompactNote>
+          <LoadingButton style={[styles.actionBtn, styles.actionBtnCompact, { backgroundColor: colors.success }]} onPress={() => handleClaim(e.id)}>
+            <Text style={styles.actionBtnTxt}>🎁 Claim & Recover</Text>
+          </LoadingButton>
+          {moreWaiting > 0 && (
+            <CompactNote>+{moreWaiting} more expedition{moreWaiting > 1 ? "s" : ""} waiting</CompactNote>
+          )}
+        </CompactShell>
+      );
+    }
+
     return (
       <View style={styles.container}>
         <Hero
@@ -332,6 +355,29 @@ export default function ExplorationsScreen() {
     const potential = e.resources_found?.potential_land || "?";
     const partyEmoji = e.unit_name ? "🐎" : "🚶";
 
+    // Collapsed: the trail + countdown — the only things that matter while
+    // the party is out. Nothing to act on until they return.
+    if (!expanded) {
+      return (
+        <CompactShell hint="Pull up for expedition details">
+          <CompactNote color={colors.gold}>
+            🧭 {partyLabel} · {returning ? "returning home…" : `back in ${countdown}`}
+          </CompactNote>
+          <View style={styles.trailRow}>
+            <Text style={styles.trailEnd}>🏰</Text>
+            <View style={styles.trailBarWrap}>
+              <ProgressBar percent={pct} color={colors.gold} height={8} />
+              <Text style={[styles.trailMarker, { left: `${Math.min(94, Math.max(0, pct))}%` }]}>{partyEmoji}</Text>
+            </View>
+            <Text style={styles.trailEnd}>🏔</Text>
+          </View>
+          <CompactNote>
+            🏔 ~{potential} land potential · returns at {formatClock(e.finishes_at)}
+          </CompactNote>
+        </CompactShell>
+      );
+    }
+
     return (
       <View style={styles.container}>
         <Hero
@@ -396,6 +442,32 @@ export default function ExplorationsScreen() {
   const previewPotential = calcPotential(escorted ? sliderValue : 0, speed);
   const previewDanger = calcDanger(land, escorted);
   const danger = dangerMeta(previewDanger);
+
+  // Collapsed: no expedition out — just the standing facts and an Explore
+  // button that OPENS the full drawer to build a party. Deliberately no
+  // preview stats (danger/trip time depend on a selection that hasn't been
+  // made yet) and no one-tap dispatch (too easy to send a solo scout by
+  // accident).
+  if (!expanded) {
+    return (
+      <CompactShell hint="Pull up to muster a party">
+        <StatStrip
+          items={[
+            { value: `🏔 ${land}`, label: "Acres held" },
+            { value: `${data.available_units.length}`, label: "Escort types" },
+            { value: `${historyCount}`, label: "Past treks" },
+          ]}
+        />
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.actionBtnCompact, { backgroundColor: colors.gold }]}
+          activeOpacity={0.85}
+          onPress={drawer?.expand}
+        >
+          <Text style={[styles.actionBtnTxt, { color: colors.bg }]}>🧭 Explore the Wilds</Text>
+        </TouchableOpacity>
+      </CompactShell>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -782,6 +854,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   actionBtnTxt: { color: colors.white, fontSize: 15, fontWeight: "800" },
+  actionBtnCompact: { paddingVertical: 7, borderRadius: 9 },
   actionBtnGhost: {
     backgroundColor: colors.card,
     borderWidth: 1,

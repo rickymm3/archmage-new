@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { useModal } from "../context/ModalContext";
-import { colors } from "../theme";
+import { colors, webColumn } from "../theme";
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -73,6 +73,7 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    ...webColumn,
     flex: 1,
     backgroundColor: colors.bg,
     padding: 24,

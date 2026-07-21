@@ -12,6 +12,8 @@ import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
 import { LoadingState, ArtPlaceholder, EmptyState } from "../components/ui";
+import { useDrawer } from "../components/GameHubShell";
+import { CompactShell, StatStrip, CompactNote } from "../components/DrawerCompact";
 import { anyUnitImage, spellImage } from "../assets";
 import { colors, rarityColors } from "../theme";
 
@@ -19,6 +21,8 @@ const ITEM_TYPE_EMOJI = { weapon: "⚔️", armor: "🛡", accessory: "💍", co
 
 export default function MarketplaceScreen() {
   const { showAlert, showPrompt } = useModal();
+  const drawer = useDrawer();
+  const expanded = drawer ? drawer.expanded : true;
   const [data, setData] = useState(null);
   const [filter, setFilter] = useState("regular");
   const [refreshing, setRefreshing] = useState(false);
@@ -57,6 +61,41 @@ export default function MarketplaceScreen() {
 
   if (!data) {
     return <View style={styles.container}><LoadingState /></View>;
+  }
+
+  // Collapsed drawer: market pulse — gold, live auctions, won lots ready
+  // to collect (with a one-tap collect). Browsing/bidding happens above.
+  if (!expanded) {
+    const won = data.won_listings || [];
+    const soonest = (data.listings || []).reduce(
+      (min, l) => (min == null || new Date(l.expires_at) < new Date(min.expires_at) ? l : min),
+      null
+    );
+    return (
+      <CompactShell hint="Pull up to browse & bid">
+        <StatStrip
+          items={[
+            { value: `💰 ${Number(data.gold).toLocaleString()}`, label: "Gold", color: colors.gold },
+            { value: `${(data.listings || []).length}`, label: "Auctions live" },
+            { value: `${won.length}`, label: "Won lots", color: won.length > 0 ? colors.success : colors.muted },
+          ]}
+        />
+        {won.length > 0 ? (
+          <LoadingButton style={styles.compactCollectBtn} onPress={() => handleCollect(won[0].id)}>
+            <Text style={styles.compactCollectTxt}>
+              🏆 Collect {won[0].item?.name}
+              {won.length > 1 ? ` (+${won.length - 1} more)` : ""}
+            </Text>
+          </LoadingButton>
+        ) : soonest ? (
+          <CompactNote>
+            Ending soonest: {soonest.item?.name} · {soonest.current_price} 💰 · {new Date(soonest.expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </CompactNote>
+        ) : (
+          <CompactNote>No listings right now — the market restocks over time.</CompactNote>
+        )}
+      </CompactShell>
+    );
   }
 
   return (
@@ -170,5 +209,7 @@ const styles = StyleSheet.create({
   bidText: { color: colors.white, fontWeight: "600" },
   collectButton: { backgroundColor: colors.success, paddingVertical: 8, borderRadius: 6, alignItems: "center", marginTop: 8 },
   collectText: { color: colors.white, fontWeight: "600" },
+  compactCollectBtn: { backgroundColor: colors.success, borderRadius: 9, paddingVertical: 7, alignItems: "center" },
+  compactCollectTxt: { color: colors.white, fontSize: 12, fontWeight: "800" },
   emptyText: { color: colors.faint, textAlign: "center", padding: 24 },
 });

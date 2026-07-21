@@ -36,15 +36,20 @@ export default function LoadingButton({
   const [busy, setBusy] = useState(false);
   const scale = useRef(new Animated.Value(1)).current;
 
-  const handlePress = useCallback(async () => {
-    if (busy || !onPress) return;
-    setBusy(true);
-    try {
-      await onPress();
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, onPress]);
+  // The press event is forwarded so handlers can read pageX/pageY (e.g.
+  // FlyEffects launches coins from where the finger actually was).
+  const handlePress = useCallback(
+    async (event) => {
+      if (busy || !onPress) return;
+      setBusy(true);
+      try {
+        await onPress(event);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, onPress]
+  );
 
   const pressIn = () =>
     Animated.spring(scale, { toValue: 0.95, speed: 40, bounciness: 0, useNativeDriver: NATIVE_DRIVER }).start();

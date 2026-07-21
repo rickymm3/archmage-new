@@ -1,10 +1,13 @@
 require 'ostruct'
 
 module Treasury
+  # Releasing banks the capacitor's accumulated yield. The RISK mechanic is
+  # the Void Breach: if a release would drag reserves negative (upkeep from
+  # spells/armies outpacing generation), the Void forces a garrison battle.
+  # Overload (100% charge) is NOT a threat — it just means the bonus is
+  # maxed and nothing more accrues until you release.
   class ChannelMana
-    BREACH_THRESHOLD_YIELD = 0.5 # If channeling < 50% charged
-    BASE_RISK_FACTOR = 0.5       # Max 50% base chance at 0% yield
-    
+
     attr_reader :result
 
     def initialize(user)
@@ -44,26 +47,47 @@ module Treasury
       
       # Breach Logic
       # Breach occurs if projected_mana < 0
+      # Overflow protection: never waste yield past the mana cap. Instead
+      # of burning the whole capacitor and clamping, consume only the
+      # charge needed to fill reserves and LEAVE the rest charged (by
+      # winding last_mana_recharge_at back by the unused fraction).
+      leftover_charge = 0.0
+      capacity_left = @user.max_mana - @user.mana
+
       if projected_mana < 0
         breach_occurred = true
         breach_result = handle_breach(projected_mana)
         breach_message = breach_result[:message]
         penalty_details = breach_result[:penalty]
-        
+
         # Reset Mana to 0 (or keep negative? usually 0 after breach)
         final_mana = 0
+        new_last_recharge = Time.current
+      elsif mana_change > capacity_left
+        breach_occurred = false
+        # Solve yield(t) = 0.6t + 0.4t² for the charge that grants exactly
+        # what fits: 0.4t² + 0.6t - needed = 0.
+        needed_fraction = net_potential > 0 ? capacity_left.to_f / net_potential : 0.0
+        t_needed = (-0.6 + Math.sqrt(0.36 + 1.6 * [needed_fraction, 0.0].max)) / 0.8
+        t_needed = t_needed.clamp(0.0, time_factor)
+        leftover_charge = time_factor - t_needed
+
+        mana_change = [capacity_left, 0].max
+        final_mana = @user.max_mana
+        new_last_recharge = Time.current - (leftover_charge * cycle_duration)
       else
         breach_occurred = false
         final_mana = [projected_mana, @user.max_mana].min
+        new_last_recharge = Time.current
       end
 
       # Execute Transaction
       ActiveRecord::Base.transaction do
         @user.update!(
-          mana: final_mana, 
-          last_mana_recharge_at: Time.current
+          mana: final_mana,
+          last_mana_recharge_at: new_last_recharge
         )
-        
+
         if breach_occurred && penalty_details
            apply_penalties(penalty_details)
         end
@@ -101,6 +125,14 @@ module Treasury
         end
       elsif mana_change < 0
         message = "Channeled... but the upkeep drained #{mana_change.abs} Mana!"
+        type = :warning
+      elsif leftover_charge > 0
+        message =
+          if mana_change > 0
+            "Channeled #{mana_change} Mana — reserves full! The capacitor kept #{(leftover_charge * 100).round}% charge."
+          else
+            "Reserves already full — the capacitor holds its charge."
+          end
         type = :warning
       end
 
@@ -167,7 +199,7 @@ module Treasury
       {
         name: "Garrison",
         power: @user.current_power,
-        stacks: stacks
+        stacks: Battle::AffinityBonus.apply!(@user, stacks)
       }
     end
 

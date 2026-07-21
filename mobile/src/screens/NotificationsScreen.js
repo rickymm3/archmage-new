@@ -12,7 +12,7 @@ import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import { useAuth } from "../context/AuthContext";
 import { LoadingState, EmptyState } from "../components/ui";
-import { colors } from "../theme";
+import { colors, webColumn } from "../theme";
 
 // Older stored battle reports used initial_quantity / remaining_quantity keys.
 function normalizeArmy(army) {
@@ -131,7 +131,7 @@ export default function NotificationsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: colors.bg, ...webColumn },
   loading: { color: colors.faint, textAlign: "center", marginTop: 60 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 14 },
   headerText: { color: colors.text, fontSize: 16 },

@@ -9,9 +9,13 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { LoadingState } from "../components/ui";
+import { useDrawer } from "../components/GameHubShell";
+import { CompactShell } from "../components/DrawerCompact";
 import { colors } from "../theme";
 
 export default function RankingsScreen() {
+  const drawer = useDrawer();
+  const expanded = drawer ? drawer.expanded : true;
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -27,6 +31,23 @@ export default function RankingsScreen() {
 
   if (!data) {
     return <View style={styles.container}><LoadingState /></View>;
+  }
+
+  // Collapsed drawer: the podium — top three kingdoms in slim rows.
+  if (!expanded) {
+    return (
+      <CompactShell hint="Pull up for the full rankings">
+        {data.rankings.slice(0, 3).map((r) => (
+          <View key={r.id} style={styles.compactRow}>
+            <Text style={[styles.rank, r.rank <= 3 && styles.topRank, { width: 26, fontSize: 14 }]}>{r.rank}</Text>
+            <Text style={[styles.username, { flex: 1, fontSize: 13 }]} numberOfLines={1}>
+              {r.has_fog ? "???" : (r.kingdom_name || r.username)}
+            </Text>
+            <Text style={[styles.power, { fontSize: 12 }]}>{r.has_fog ? "???" : r.power}</Text>
+          </View>
+        ))}
+      </CompactShell>
+    );
   }
 
   return (
@@ -80,6 +101,16 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.card,
   },
   rank: { color: colors.muted, fontSize: 16, fontWeight: "bold", width: 30 },
+  compactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
   topRank: { color: colors.gold },
   username: { color: colors.text, fontSize: 15, fontWeight: "600" },
   affinity: { color: colors.accent, fontSize: 11, marginTop: 1 },

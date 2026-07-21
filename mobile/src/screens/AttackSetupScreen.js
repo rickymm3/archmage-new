@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
-import { colors, alpha } from "../theme";
+import { colors, alpha, webColumn } from "../theme";
 
 export default function AttackSetupScreen({ route, navigation }) {
   const { targetId, targetName } = route.params;
@@ -290,7 +290,7 @@ export default function AttackSetupScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: colors.bg, ...webColumn },
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.bg },
   loadingText: { color: colors.muted, marginTop: 12 },
   scroll: { flex: 1 },

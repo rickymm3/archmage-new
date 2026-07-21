@@ -13,7 +13,7 @@ import * as api from "../services/api";
 import LoadingButton from "../components/LoadingButton";
 import { ArtPlaceholder } from "../components/ui";
 import { ui as art } from "../assets";
-import { colors } from "../theme";
+import { colors, webColumn } from "../theme";
 
 export default function ProfileScreen() {
   const { user, refreshUser, logout } = useAuth();
@@ -120,7 +120,7 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: colors.bg, ...webColumn },
   content: { padding: 12, paddingBottom: 40 },
   card: {
     backgroundColor: colors.card,

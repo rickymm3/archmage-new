@@ -15,9 +15,11 @@ import BarbarianAttackSetupScreen from "../screens/BarbarianAttackSetupScreen";
 import BattleResultScreen from "../screens/BattleResultScreen";
 import BattleReplayScreen from "../screens/BattleReplayScreen";
 import NotificationsScreen from "../screens/NotificationsScreen";
+import SettingsScreen from "../screens/SettingsScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 // EXPERIMENTAL: pannable map home — remove with screens/KingdomMapScreen.js
 import KingdomMapScreen from "../screens/KingdomMapScreen";
+import UniversalTopBar from "../components/UniversalTopBarV3";
 
 import { colors } from "../theme";
 
@@ -33,7 +35,10 @@ const screenOptions = {
 function MainTabs() {
   return (
     <Tab.Navigator
-      screenOptions={screenOptions}
+      // The 5 game-hub screens (Home/Kingdom/Army/War/Magic) draw their own
+      // title inside GameHubShell's scene art — the default nav header was
+      // just a wasted plain-color bar duplicating that title above it.
+      screenOptions={{ ...screenOptions, headerShown: false }}
       tabBar={(props) => <CustomTabBar {...props} />}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
@@ -45,10 +50,18 @@ function MainTabs() {
   );
 }
 
+function universalHeader({ navigation }) {
+  return <UniversalTopBar navigation={navigation} />;
+}
+
 export default function MainNavigator() {
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
-      <RootStack.Screen name="MainTabs" component={MainTabs} />
+      <RootStack.Screen
+        name="MainTabs"
+        component={MainTabs}
+        options={{ headerShown: true, header: universalHeader, headerTransparent: true }}
+      />
       <RootStack.Screen
         name="AttackSetup"
         component={AttackSetupScreen}
@@ -79,11 +92,16 @@ export default function MainNavigator() {
         component={ProfileScreen}
         options={{ ...screenOptions, headerShown: true, title: "Profile" }}
       />
-      {/* EXPERIMENTAL — immersive map home (no header, full screen) */}
+      <RootStack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{ ...screenOptions, headerShown: true, title: "Settings" }}
+      />
+      {/* EXPERIMENTAL — immersive map home */}
       <RootStack.Screen
         name="KingdomMap"
         component={KingdomMapScreen}
-        options={{ headerShown: false, animation: "fade" }}
+        options={{ headerShown: true, header: universalHeader, headerTransparent: true, animation: "fade" }}
       />
     </RootStack.Navigator>
   );

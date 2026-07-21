@@ -4,6 +4,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import { LoadingState, EmptyState } from "../components/ui";
+import { useDrawer } from "../components/GameHubShell";
+import { CompactShell, StatStrip, CompactNote } from "../components/DrawerCompact";
 import { colors, alpha, elementColors } from "../theme";
 
 function levelMeta(level) {
@@ -57,6 +59,8 @@ function SettlementCard({ s, onAttack }) {
 
 export default function BarbariansScreen({ navigation }) {
   const { showAlert } = useModal();
+  const drawer = useDrawer();
+  const expanded = drawer ? drawer.expanded : true;
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -79,6 +83,40 @@ export default function BarbariansScreen({ navigation }) {
   }
 
   const settlements = data.settlements || [];
+
+  // Collapsed drawer: camp counts + the easiest camp that's ready to hit,
+  // attackable in one tap. The full camp list lives above.
+  if (!expanded) {
+    const ready = settlements.filter((s) => !s.on_cooldown);
+    const easiest = ready.length > 0 ? [...ready].sort((a, b) => (a.level || 0) - (b.level || 0))[0] : null;
+    return (
+      <CompactShell hint="Pull up for all camps">
+        <StatStrip
+          items={[
+            { value: `${settlements.length}`, label: "Camps" },
+            { value: `${ready.length}`, label: "Attackable", color: ready.length > 0 ? colors.success : colors.muted },
+          ]}
+        />
+        {easiest ? (
+          <View style={styles.compactCamp}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.compactCampName} numberOfLines={1}>
+                Lv{easiest.level} {easiest.name}
+              </Text>
+              <Text style={styles.compactCampMeta} numberOfLines={1}>
+                {easiest.element} · <Text style={{ color: levelMeta(easiest.level).color }}>{levelMeta(easiest.level).label}</Text> · ⚡ {easiest.power_target}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.compactAttackBtn} activeOpacity={0.85} onPress={() => handleAttack(easiest)}>
+              <Text style={styles.compactAttackTxt}>⚔️ Attack</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <CompactNote>All camps are rebuilding — check back soon.</CompactNote>
+        )}
+      </CompactShell>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -108,6 +146,27 @@ export default function BarbariansScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
+  // Collapsed-drawer layout
+  compactCamp: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.card,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  compactCampName: { color: colors.text, fontSize: 12, fontWeight: "800", textTransform: "capitalize" },
+  compactCampMeta: { color: colors.muted, fontSize: 10, marginTop: 1, textTransform: "capitalize" },
+  compactAttackBtn: {
+    backgroundColor: colors.danger,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  compactAttackTxt: { color: colors.white, fontSize: 11, fontWeight: "800" },
   sectionLabel: {
     color: colors.muted,
     fontSize: 11,

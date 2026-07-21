@@ -13,11 +13,13 @@ import Slider from "@react-native-community/slider";
 import { useFocusEffect } from "@react-navigation/native";
 import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
-import { ArtPlaceholder, SubTabs, FadeSlideIn } from "../components/ui";
-import { affinityCrest, spellImage } from "../assets";
+import { ArtPlaceholder, FadeSlideIn, LoadingState, ProgressBar } from "../components/ui";
+import { affinityCrest, spellImage, sceneImage, submenuIcon } from "../assets";
 import { useAuth } from "../context/AuthContext";
 import LoadingButton from "../components/LoadingButton";
 import { colors } from "../theme";
+import GameHubShell, { DrawerModeSwitch } from "../components/GameHubShell";
+import { CompactShell, StatStrip, CompactNote } from "../components/DrawerCompact";
 
 const AFFINITY_META = {
   general: { name: "General", emoji: "📜", color: colors.textDim },
@@ -190,6 +192,11 @@ export default function SpellsScreen({ route }) {
     }
   }
 
+  // Mirrors backend Spells::CalculateEffect, including the +15% affinity
+  // synergy for casting spells of your own color.
+  const NATIVE_SPELL_BONUS = 1.15;
+  const isNativeSpell = (spell) => !!spell.affinity && spell.affinity === (user?.color || "");
+
   function previewEffect(spell, amount) {
     const scaling = spell.configuration?.scaling;
     if (!scaling) return null;
@@ -207,6 +214,7 @@ export default function SpellsScreen({ route }) {
       value = baseMag * Math.log2((amount / baseCost) + 1);
       value = Math.round(value * 100) / 100;
     }
+    if (isNativeSpell(spell)) value = Math.round(value * NATIVE_SPELL_BONUS * 100) / 100;
     if (attr === "duration") {
       const hrs = value / 3600;
       return hrs >= 24 ? `${(hrs / 24).toFixed(1)} days` : `${hrs.toFixed(1)} hours`;
@@ -484,9 +492,129 @@ export default function SpellsScreen({ route }) {
     );
   }
 
+  // Collapsed-drawer layouts: per tab, the essential status + primary
+  // action. The school grids, spell lists, and detail cards live in the
+  // expanded drawer.
+  function renderCompactMagic() {
+    if (tab === "research") {
+      if (!spellsData) return <LoadingState />;
+      const aff = selectedAffinity || spellsData.user_affinity || "general";
+      const affData = spellsData.affinities?.[aff] || {};
+      const target = affData.target;
+      const affMeta = AFFINITY_META[aff] || { name: aff, emoji: "✨", color: colors.muted };
+      return (
+        <CompactShell hint="Pull up for schools & learned spells">
+          <StatStrip
+            items={[
+              { value: `🔮 ${spellsData.current_mana}`, label: "Mana", color: colors.accent },
+              { value: `${affMeta.emoji} ${affMeta.name}`, label: "School", color: affMeta.color },
+              { value: `${(affData.learned || []).length}`, label: "Learned" },
+            ]}
+          />
+          {target ? (
+            <>
+              <View style={styles.compactResearchRow}>
+                <Text style={styles.compactResearchName} numberOfLines={1}>{target.name}</Text>
+                <Text style={styles.compactResearchMeta}>
+                  {target.research_progress}/{target.research_cost} 🔮
+                </Text>
+              </View>
+              <ProgressBar
+                percent={Math.round((target.research_progress / Math.max(1, target.research_cost)) * 100)}
+                color={affMeta.color}
+                height={5}
+              />
+              <LoadingButton style={[styles.compactMagicBtn, { backgroundColor: affMeta.color }]} onPress={() => handleResearch(target)}>
+                <Text style={styles.compactMagicBtnTxt}>Research</Text>
+              </LoadingButton>
+            </>
+          ) : affData.mastered ? (
+            <CompactNote color={affMeta.color}>{affMeta.emoji} All {affMeta.name} spells mastered!</CompactNote>
+          ) : (
+            <LoadingButton style={[styles.compactMagicBtn, { backgroundColor: affMeta.color }]} onPress={() => handleRoll(aff)}>
+              <Text style={styles.compactMagicBtnTxt}>🎲 Research a New Spell</Text>
+            </LoadingButton>
+          )}
+        </CompactShell>
+      );
+    }
+
+    if (tab === "cast") {
+      if (!castingData) return <LoadingState />;
+      const spells = castingData.spells || [];
+      const schools = new Set(spells.map((s) => s.affinity || "general")).size;
+      return (
+        <CompactShell hint="Pull up to choose a spell">
+          <StatStrip
+            items={[
+              { value: `🔮 ${castingData.current_mana}`, label: "Mana", color: colors.accent },
+              { value: `💰 ${castingData.current_gold}`, label: "Gold", color: colors.gold },
+              { value: `✨ ${castingData.magic_power}`, label: "Magic power" },
+            ]}
+          />
+          <CompactNote>
+            {spells.length === 0
+              ? "No spells learned yet — research some first"
+              : `${spells.length} spell${spells.length > 1 ? "s" : ""} ready across ${schools} school${schools > 1 ? "s" : ""}`}
+          </CompactNote>
+        </CompactShell>
+      );
+    }
+
+    if (!activeData) return <LoadingState />;
+    const act = activeData.active_spells || [];
+    const sus = activeData.sustained_spells || [];
+    const soonest = act.reduce(
+      (min, s) => (min == null || new Date(s.expires_at) < new Date(min.expires_at) ? s : min),
+      null
+    );
+    return (
+      <CompactShell hint="Pull up to inspect & dispel">
+        <StatStrip
+          items={[
+            { value: `${act.length}`, label: "Enchantments", color: act.length > 0 ? colors.accent : colors.muted },
+            { value: `${sus.length}`, label: "Sustained", color: sus.length > 0 ? colors.info : colors.muted },
+            {
+              value: soonest ? new Date(soonest.expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—",
+              label: "Next expiry",
+            },
+          ]}
+        />
+        {soonest ? (
+          <CompactNote>Expiring first: {soonest.spell_name} ×{soonest.stack_count}</CompactNote>
+        ) : (
+          act.length === 0 && sus.length === 0 && <CompactNote>No magic in motion — cast something!</CompactNote>
+        )}
+      </CompactShell>
+    );
+  }
+
+  const magicScenes = {
+    research: { eyebrow: "Arcane Library", title: "Master New Magic", subtitle: "Invest mana and uncover the secrets of every school." },
+    cast: { eyebrow: "Casting Chamber", title: "Shape the Realm", subtitle: "Choose a learned spell and focus its power." },
+    active: { eyebrow: "Enchantments", title: "Magic in Motion", subtitle: "Inspect the spells currently changing your kingdom." },
+  };
+  const magicScene = magicScenes[tab] || magicScenes.research;
+
   return (
-    <View style={styles.container}>
+    <GameHubShell
+      source={sceneImage("magic_sanctum")}
+      section="Magic"
+      title={magicScene.title}
+      subtitle={magicScene.subtitle}
+      tabs={[
+        { key: "research", iconSource: submenuIcon("magic-research"), label: "Research" },
+        { key: "cast", iconSource: submenuIcon("magic-cast"), label: "Cast" },
+        { key: "active", iconSource: submenuIcon("magic-active"), label: "Active" },
+      ]}
+      active={tab}
+      onChange={setTab}
+      drawerTitle={magicScene.eyebrow}
+    >
     <FadeSlideIn key={tab} style={{ flex: 1 }}>
+    <DrawerModeSwitch
+      compact={renderCompactMagic()}
+      expanded={
     <ScrollView
       style={{ flex: 1 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadData(); setRefreshing(false); }} />}
@@ -534,6 +662,10 @@ export default function SpellsScreen({ route }) {
           )}
         </>
       )}
+    </ScrollView>
+      }
+    />
+    </FadeSlideIn>
 
       {/* Research Slider Modal */}
       {researchModal && (
@@ -633,6 +765,9 @@ export default function SpellsScreen({ route }) {
                     {castSliderValue > castModal.minCost && basePreview && (
                       <Text style={styles.effectPreviewBonus}>Base: {basePreview}</Text>
                     )}
+                    {isNativeSpell(castModal.spell) && (
+                      <Text style={styles.effectPreviewBonus}>★ Your affinity — +15% potency included</Text>
+                    )}
                   </View>
                 );
               })()}
@@ -678,23 +813,17 @@ export default function SpellsScreen({ route }) {
           </View>
         </Modal>
       )}
-    </ScrollView>
-    </FadeSlideIn>
-
-    <SubTabs
-      tabs={[
-        { key: "research", icon: "📖", label: "Research" },
-        { key: "cast", icon: "✨", label: "Cast" },
-        { key: "active", icon: "🌀", label: "Active" },
-      ]}
-      active={tab}
-      onChange={setTab}
-    />
-    </View>
+    </GameHubShell>
   );
 }
 
 const styles = StyleSheet.create({
+  // Collapsed-drawer layout
+  compactResearchRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  compactResearchName: { flex: 1, color: colors.text, fontSize: 12, fontWeight: "800" },
+  compactResearchMeta: { color: colors.muted, fontSize: 11, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  compactMagicBtn: { borderRadius: 9, paddingVertical: 7, alignItems: "center" },
+  compactMagicBtnTxt: { color: colors.white, fontSize: 12, fontWeight: "800" },
   container: { flex: 1, backgroundColor: colors.bg },
   tabs: { flexDirection: "row", backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border },
   tab: { flex: 1, paddingVertical: 14, alignItems: "center" },

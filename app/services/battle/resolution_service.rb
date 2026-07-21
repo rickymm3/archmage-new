@@ -1,3 +1,5 @@
+require "ostruct"
+
 module Battle
   class ResolutionService
     def initialize(attacker_id:, defender_id:, unit_allocations:, hero_allocations: {})
@@ -27,6 +29,7 @@ module Battle
 
       # Apply active attack spell bonuses to attacker
       attacker_stacks = apply_active_spell_bonuses(@attacker, attacker_stacks, 'attack')
+      Battle::AffinityBonus.apply!(@attacker, attacker_stacks)
 
       ActiveRecord::Base.transaction do
         # 2. Prepare Defender Stacks
@@ -39,6 +42,7 @@ module Battle
 
         # Apply active defense spell bonuses to defender
         defender_stacks = apply_active_spell_bonuses(@defender, defender_stacks, 'defense')
+        Battle::AffinityBonus.apply!(@defender, defender_stacks)
         
         # 3. Calculate Battle
         calculator = Battle::CalculatorService.new(

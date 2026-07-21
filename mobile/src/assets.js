@@ -11,6 +11,10 @@
 // dark/empty floor (UI overlays), key detail within central 80% width.
 const SCENES = {
   barracks: require("../assets/scenes/barracks.jpg"),
+  army_command: require("../assets/scenes/army_command.png"),
+  army_command_v2: require("../assets/scenes/army_command_v2.png"),
+  war_camp: require("../assets/scenes/war_camp.png"),
+  magic_sanctum: require("../assets/scenes/magic_sanctum.png"),
 };
 
 export function sceneImage(key) {
@@ -20,8 +24,26 @@ export function sceneImage(key) {
 export const ui = {
   logo: require("../assets/ui/logo.png"),
   // Kingdom map background (KingdomMapScreen). Currently a daytime green
+  gameNav: require("../assets/ui/generated/game-nav.png"),
+  gameHud: require("../assets/ui/generated/game-hud.png"),
+  gameSubmenuTile: require("../assets/ui/generated/game-submenu-tile.png"),
+  gameTitlePlaque: require("../assets/ui/generated/game-title-plaque.png"),
   // clearing — mismatched against the twilight purple/gold theme used
+  universalHudV2Rail: require("../assets/ui/universal-hud-v2/final/resource-rail.png"),
+  universalHudV2PowerCrest: require("../assets/ui/universal-hud-v2/final/power-crest.png"),
+  universalHudV2Settings: require("../assets/ui/universal-hud-v2/final/settings-button.png"),
+  universalHudV2GoldIcon: require("../assets/ui/universal-hud-v2/final/gold-icon.png"),
+  universalHudV2ManaIcon: require("../assets/ui/universal-hud-v2/final/mana-icon.png"),
+  universalHudV2LandIcon: require("../assets/ui/universal-hud-v2/final/land-icon.png"),
   // everywhere else (kingdom_banner.png, expedition_map.png). No code
+  universalHudV3StatRail: require("../assets/ui/universal-hud-v3/final/stat-rail.png"),
+  universalHudV3PowerShield: require("../assets/ui/universal-hud-v3/final/power-shield.png"),
+  universalHudV3AvatarFrame: require("../assets/ui/universal-hud-v3/final/avatar-frame.png"),
+  universalHudV3Settings: require("../assets/ui/universal-hud-v3/final/settings-button.png"),
+  universalHudV3TitlePlaque: require("../assets/ui/universal-hud-v3/final/title-plaque.png"),
+  // V4 is one finished rail with built-in end caps, so the right edge
+  // remains intentional instead of looking like clipped, stretched chrome.
+  universalHudV4StatRail: require("../assets/ui/universal-hud-v4/final/stat-rail.png"),
   // change needed to replace it: overwrite this same file with new art.
   townPanorama: require("../assets/ui/town_panorama.png"),
   // Fixed kingdom map scene with all 6 buildings painted directly into the
@@ -62,6 +84,36 @@ export const ui = {
 
 // Structures: three growth tiers each.
 //
+
+const SUBMENU_ICONS = {
+  "home-overview": require("../assets/ui/submenu-icons/final/home-overview.png"),
+  "home-tax": require("../assets/ui/submenu-icons/final/home-tax.png"),
+  "home-mana": require("../assets/ui/submenu-icons/final/home-mana.png"),
+  "kingdom-keep": require("../assets/ui/submenu-icons/final/kingdom-keep.png"),
+  "kingdom-barracks": require("../assets/ui/submenu-icons/final/kingdom-barracks.png"),
+  "kingdom-bank": require("../assets/ui/submenu-icons/final/kingdom-bank.png"),
+  "kingdom-core": require("../assets/ui/submenu-icons/final/kingdom-core.png"),
+  "kingdom-altar": require("../assets/ui/submenu-icons/final/kingdom-altar.png"),
+  "kingdom-farm": require("../assets/ui/submenu-icons/final/kingdom-farm.png"),
+  "kingdom-camp": require("../assets/ui/submenu-icons/final/kingdom-camp.png"),
+  "kingdom-market": require("../assets/ui/submenu-icons/final/kingdom-market.png"),
+  "army-overview": require("../assets/ui/submenu-icons/final/army-overview.png"),
+  "army-units": require("../assets/ui/submenu-icons/final/army-units.png"),
+  "army-defense": require("../assets/ui/submenu-icons/final/army-defense.png"),
+  "army-recruit": require("../assets/ui/submenu-icons/final/army-recruit.png"),
+  "army-gear": require("../assets/ui/submenu-icons/final/army-gear.png"),
+  "war-attack": require("../assets/ui/submenu-icons/final/war-attack.png"),
+  "war-explore": require("../assets/ui/submenu-icons/final/war-explore.png"),
+  "war-barbarians": require("../assets/ui/submenu-icons/final/war-barbarians.png"),
+  "war-rankings": require("../assets/ui/submenu-icons/final/war-rankings.png"),
+  "magic-research": require("../assets/ui/submenu-icons/final/magic-research.png"),
+  "magic-cast": require("../assets/ui/submenu-icons/final/magic-cast.png"),
+  "magic-active": require("../assets/ui/submenu-icons/final/magic-active.png"),
+};
+
+export function submenuIcon(key) {
+  return key ? SUBMENU_ICONS[key] : undefined;
+}
 // TODO once art arrives — two KingdomMapScreen buildings have no real art
 // yet and fall back to an emoji glyph (🏆 / 🛒). Drop the files at these
 // exact paths, then add ONE line each to the STRUCTURES map below

@@ -5,6 +5,8 @@ import * as api from "../services/api";
 import { useModal } from "../context/ModalContext";
 import LoadingButton from "../components/LoadingButton";
 import { LoadingState, EmptyState, ArtPlaceholder } from "../components/ui";
+import { useDrawer } from "../components/GameHubShell";
+import { CompactShell, StatStrip, CompactNote } from "../components/DrawerCompact";
 import { colors, alpha, rarityColors } from "../theme";
 
 const SLOT_ORDER = ["weapon", "armor", "accessory"];
@@ -36,6 +38,8 @@ function useEffectText(effect) {
 
 export default function InventoryScreen() {
   const { showAlert, showConfirm } = useModal();
+  const drawer = useDrawer();
+  const expanded = drawer ? drawer.expanded : true;
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -88,6 +92,28 @@ export default function InventoryScreen() {
 
   if (!data) {
     return <View style={styles.container}><LoadingState /></View>;
+  }
+
+  // Collapsed drawer: loadout at a glance — what's in each slot, how much
+  // sits in the bag. Equipping/using happens above.
+  if (!expanded) {
+    const equippedCount = SLOT_ORDER.filter((slot) => data.equipped[slot]).length;
+    const loadout = SLOT_ORDER.map((slot) => {
+      const ui = data.equipped[slot];
+      return `${TYPE_EMOJI[slot]} ${ui ? ui.item.name : "—"}`;
+    }).join("   ");
+    return (
+      <CompactShell hint="Pull up to manage gear">
+        <StatStrip
+          items={[
+            { value: `${equippedCount}/${SLOT_ORDER.length}`, label: "Equipped", color: equippedCount > 0 ? colors.success : colors.muted },
+            { value: `${data.inventory.length}`, label: "In bag" },
+            { value: `💰 ${Number(data.gold).toLocaleString()}`, label: "Gold", color: colors.gold },
+          ]}
+        />
+        <CompactNote>{loadout}</CompactNote>
+      </CompactShell>
+    );
   }
 
   return (

@@ -1,5 +1,6 @@
 // Central design tokens for the whole app.
 // Every screen should pull colors/spacing/type from here — never hardcode hex values.
+import { Platform } from "react-native";
 
 export const colors = {
   // Surfaces
@@ -33,6 +34,15 @@ export const colors = {
 
 // Tint helper: alpha("#2ecc71", "33") -> "#2ecc7133"
 export const alpha = (hex, aa) => `${hex}${aa}`;
+
+// Spread into a conventional full-screen container's style to keep its
+// content a centered phone-width column when the web frame widens out.
+// Screens with full-bleed scene art (GameHubShell, the kingdom map) handle
+// this themselves so the art can span the whole frame; this is for plain
+// stacked-card screens (settings, auth, battle reports, …) that would
+// otherwise stretch edge to edge. No-op on native.
+export const webColumn =
+  Platform.OS === "web" ? { maxWidth: 480, width: "100%", alignSelf: "center" } : {};
 
 export const spacing = {
   xs: 4,

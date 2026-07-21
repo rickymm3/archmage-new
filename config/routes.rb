@@ -93,6 +93,12 @@ Rails.application.routes.draw do
       get    "auth/me",       to: "auth#me"
       patch  "auth/kingdom_name", to: "auth#update_kingdom_name"
 
+      # First-time, server-authoritative game walkthrough
+      resource :tutorial, only: [:show], controller: :tutorial do
+        post :advance
+        post :skip
+      end
+
       # Dashboard (consolidated home screen)
       get "dashboard", to: "dashboard#show"
 

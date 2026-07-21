@@ -1,3 +1,5 @@
+require "ostruct"
+
 module Barbarians
   class AttackService
     def initialize(user:, settlement_id:, unit_allocations:)
@@ -80,7 +82,7 @@ module Barbarians
       end
       return nil if stacks.empty?
 
-      Battle::EquipmentBonus.apply!(@user, stacks)
+      Battle::AffinityBonus.apply!(@user, Battle::EquipmentBonus.apply!(@user, stacks))
     end
 
     def build_defender_stacks(settlement)
@@ -124,20 +126,25 @@ module Barbarians
     end
 
     def roll_loot(settlement)
-      weights = settlement.rarity_weights
-      roll = rand(weights.values.sum)
-      cumulative = 0
-      rarity = weights.find { |_, w| (cumulative += w) > roll }&.first || :common
+      item = nil
+      if rand < 0.25
+        weights = settlement.rarity_weights
+        roll = rand(weights.values.sum)
+        cumulative = 0
+        rarity = weights.find { |_, w| (cumulative += w) > roll }&.first || :common
+        candidates = Item.where(rarity: rarity)
+        candidates = Item.where(rarity: :common) if candidates.empty?
+        item = candidates.sample
+      end
 
-      candidates = Item.where(rarity: rarity)
-      candidates = Item.where(rarity: :common) if candidates.empty?
-      item = candidates.sample
       gold = (settlement.level * 40 * rand(0.8..1.3)).round
-      { item: item, gold: gold }
+      max_land = [[(settlement.level / 3) + 1, 1].max, 4].min
+      land = rand < 0.35 ? rand(1..max_land) : 0
+      { item: item, gold: gold, land: land }
     end
 
     def grant_loot!(loot)
-      @user.grant_resources!('gold' => loot[:gold])
+      @user.grant_resources!('gold' => loot[:gold], 'land' => loot[:land])
       if loot[:item]
         ui = @user.user_items.find_or_create_by(item: loot[:item])
         ui.increment!(:quantity, 1)
@@ -150,12 +157,13 @@ module Barbarians
           user: @user,
           title: "Victory: #{@settlement.name} Sacked!",
           content: "You defeated #{@settlement.name} (Lv.#{@settlement.level}) and looted #{loot[:gold]} gold" \
+                   "#{loot[:land].to_i.positive? ? ", #{loot[:land]} land" : ''}" \
                    "#{loot[:item] ? " and a #{loot[:item].name}" : ''}.",
           category: "barbarian",
           data: {
             settlement_id: @settlement.id, winner: 'attacker', log: result.log, events: result.events, verdict: result.verdict,
             attacker_army: result.attacker_army.to_summary, defender_army: result.defender_army.to_summary,
-            loot: { gold: loot[:gold], item_name: loot[:item]&.name, item_rarity: loot[:item]&.rarity }
+            loot: { gold: loot[:gold], land: loot[:land], item_name: loot[:item]&.name, item_rarity: loot[:item]&.rarity }
           }
         )
       else
