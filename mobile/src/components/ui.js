@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import HScroll from "./HScroll";
+import { useTutorialRegistry } from "./TutorialTarget";
 import { colors, spacing, radius, type, alpha } from "../theme";
 
 const NATIVE_DRIVER = Platform.OS !== "web";
@@ -121,7 +122,10 @@ export function ProgressBar({ percent, color = colors.accent, height = 6, style 
 
 // Touchable that springs down on press — the single biggest "this is a
 // game, not a webpage" signal. Drop-in for TouchableOpacity.
-export function PressableScale({ children, style, containerStyle, onPress, disabled, scaleTo = 0.94, ...rest }) {
+export const PressableScale = React.forwardRef(function PressableScale(
+  { children, style, containerStyle, onPress, disabled, scaleTo = 0.94, ...rest },
+  ref
+) {
   const scale = useRef(new Animated.Value(1)).current;
 
   const pressIn = () =>
@@ -131,6 +135,7 @@ export function PressableScale({ children, style, containerStyle, onPress, disab
 
   return (
     <Pressable
+      ref={ref}
       style={containerStyle}
       onPress={onPress}
       onPressIn={pressIn}
@@ -141,7 +146,7 @@ export function PressableScale({ children, style, containerStyle, onPress, disab
       <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
     </Pressable>
   );
-}
+});
 
 // Content that fades + slides up on mount. Key it by the active sub-tab
 // so every section switch replays the entrance.
@@ -205,6 +210,7 @@ export function PrimaryButton({ label, onPress, color = colors.accent, disabled,
 // the main tab bar — switches sub-views without pushing new screens.
 
 export function SubTabs({ tabs, active, onChange }) {
+  const registry = useTutorialRegistry();
   const isScrollable = tabs.length > 8;
   const isDense = tabs.length > 5 && tabs.length <= 8;
   const usesQuarterSlots = !isScrollable && tabs.length < 5;
@@ -213,6 +219,7 @@ export function SubTabs({ tabs, active, onChange }) {
         return (
           <PressableScale
             key={t.key}
+            ref={registry ? registry.refFor(`subtab:${t.key}`) : undefined}
             containerStyle={isScrollable ? styles.scrollTabSlot : usesQuarterSlots ? styles.quarterTabSlot : { flex: 1 }}
             style={[styles.subTab, isDense && styles.subTabDense, isActive && styles.subTabActive]}
             onPress={() => onChange(t.key)}

@@ -6,6 +6,7 @@ import AuthStack from "./src/navigation/AuthStack";
 import MainTabs from "./src/navigation/MainTabs";
 import DeviceFrame from "./src/components/DeviceFrame";
 import { FlyEffectsProvider } from "./src/components/FlyEffects";
+import { TutorialTargetProvider } from "./src/components/TutorialTarget";
 import TutorialOverlay from "./src/components/TutorialOverlay";
 import { ActivityIndicator, View, Platform } from "react-native";
 
@@ -61,11 +62,13 @@ export default function App() {
       <FlyEffectsProvider>
         <AuthProvider>
           <ModalProvider>
-            <NavigationContainer ref={navigationRef} theme={navTheme}>
-              <StatusBar style="light" />
-              <Root />
-            </NavigationContainer>
-            <TutorialOverlay navigationRef={navigationRef} />
+            <TutorialTargetProvider>
+              <NavigationContainer ref={navigationRef} theme={navTheme}>
+                <StatusBar style="light" />
+                <Root />
+              </NavigationContainer>
+              <TutorialOverlay navigationRef={navigationRef} />
+            </TutorialTargetProvider>
           </ModalProvider>
         </AuthProvider>
       </FlyEffectsProvider>

@@ -16,6 +16,7 @@
 import React, { useState } from "react";
 import { View, Image, TouchableOpacity, StyleSheet, Platform } from "react-native";
 import { ui as art } from "../assets";
+import { useTutorialRegistry } from "../components/TutorialTarget";
 import { colors, alpha } from "../theme";
 
 export const TAB_NAMES = ["Home", "Kingdom", "Army", "War", "Magic"];
@@ -27,7 +28,7 @@ export const TAB_NAMES = ["Home", "Kingdom", "Army", "War", "Magic"];
 // slab the source art's own proportions would otherwise give it.
 const BAR_ASPECT = 1955 / 521;
 
-function TabSlot({ name, isActive, onPress }) {
+function TabSlot({ isActive, onPress }) {
   return (
     <TouchableOpacity style={styles.slotTouchable} onPress={onPress} activeOpacity={0.75}>
       {isActive && <View style={styles.activeGlow} pointerEvents="none" />}
@@ -35,8 +36,9 @@ function TabSlot({ name, isActive, onPress }) {
   );
 }
 
-export function TabBarVisual({ names = TAB_NAMES, activeIndex, onPress }) {
+export function TabBarVisual({ names = TAB_NAMES, activeIndex, onPress, registerTargets = false }) {
   const [containerWidth, setContainerWidth] = useState(0);
+  const registry = useTutorialRegistry();
   const barWidth = Math.min(containerWidth || 360, 520);
   const barHeight = Math.min(124, Math.max(86, barWidth / BAR_ASPECT));
 
@@ -46,7 +48,16 @@ export function TabBarVisual({ names = TAB_NAMES, activeIndex, onPress }) {
         <Image source={art.gameNav} style={styles.barImg} resizeMode="stretch" />
         <View style={styles.slotsRow}>
           {names.map((name, i) => (
-            <TabSlot key={name} name={name} isActive={activeIndex === i} onPress={() => onPress(name, i)} />
+            // Plain View wrapper carries the tutorial target ref — a host
+            // View reliably supports measureInWindow for the spotlight.
+            <View
+              key={name}
+              ref={registerTargets && registry ? registry.refFor(`tab:${name}`) : undefined}
+              collapsable={false}
+              style={styles.slot}
+            >
+              <TabSlot isActive={activeIndex === i} onPress={() => onPress(name, i)} />
+            </View>
           ))}
         </View>
       </View>
@@ -59,6 +70,7 @@ export default function CustomTabBar({ state, navigation }) {
     <TabBarVisual
       names={state.routes.map((r) => r.name)}
       activeIndex={state.index}
+      registerTargets
       onPress={(name, i) => {
         const route = state.routes[i];
         const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
@@ -85,6 +97,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: "1.8%",
   },
+  slot: { flex: 1 },
   slotTouchable: { flex: 1, alignItems: "center", justifyContent: "center" },
   activeGlow: {
     position: "absolute",
